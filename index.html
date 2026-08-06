@@ -31,7 +31,7 @@
   gtag('config', 'G-59Y2CYW544');
 </script>
 
-<meta name="generator" content="Hugo 0.93.2 with theme even" />
+<meta name="generator" content="Hugo 0.164.0 with theme even" />
 
 
 <link rel="canonical" href="/" />
@@ -45,19 +45,24 @@
 
 <script async src="//busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
 
-<link href="/sass/main.min.b5a744db6de49a86cadafb3b70f555ab443f83c307a483402259e94726b045ff.css" rel="stylesheet">
+<link href="/sass/main.min.52d539dfadc86246e6ba9a98b4b3a7268cddea9db8ace7933730de9afef2c275.css" rel="stylesheet">
 
 
 
-<meta property="og:title" content="HLDay" />
-<meta property="og:description" content="HLDay personal blog site" />
-<meta property="og:type" content="website" />
-<meta property="og:url" content="/" />
+<meta property="og:url" content="/">
+	<meta property="og:site_name" content="HLDay">
+	<meta property="og:title" content="HLDay">
+	<meta property="og:description" content="HLDay personal blog site">
+	<meta property="og:locale" content="en">
+	<meta property="og:type" content="website">
 
-<meta itemprop="name" content="HLDay">
-<meta itemprop="description" content="HLDay personal blog site"><meta name="twitter:card" content="summary"/>
-<meta name="twitter:title" content="HLDay"/>
-<meta name="twitter:description" content="HLDay personal blog site"/>
+	<meta itemprop="name" content="HLDay">
+	<meta itemprop="description" content="HLDay personal blog site">
+	<meta itemprop="datePublished" content="2026-08-06T10:00:00+08:00">
+	<meta itemprop="dateModified" content="2026-08-06T10:00:00+08:00">
+	<meta name="twitter:card" content="summary">
+	<meta name="twitter:title" content="HLDay">
+	<meta name="twitter:description" content="HLDay personal blog site">
 
 <!--[if lte IE 9]>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
@@ -138,6 +143,29 @@
           <section id="posts" class="posts">
     <article class="post">
   <header class="post-header">
+    <h1 class="post-title"><a class="post-link" href="/post/golang/sync-lock-source-analysis/">同步和锁：Go 1.26.5 源码分析</a></h1>
+    <div class="post-meta">
+      <span class="post-time"> 2026-08-06 </span>
+      <div class="post-category">
+          <a href="/categories/go/"> go </a>
+          </div>
+        <span class="more-meta"> 6757 words </span>
+        <span class="more-meta"> 14 mins read </span>
+    </div>
+  </header>
+  
+  <div class="post-content">
+    <div class="post-summary">
+      Go 1.26.5 同步原语（Mutex/RWMutex/WaitGroup/Once/Cond/Map/Pool/atomic）源码分析
+    </div>
+    <div class="read-more">
+      <a href="/post/golang/sync-lock-source-analysis/" class="read-more-link">Read more...</a>
+    </div>
+  </div>
+</article>
+
+    <article class="post">
+  <header class="post-header">
     <h1 class="post-title"><a class="post-link" href="/post/linux/private-ip/">No private ipv4 address found</a></h1>
     <div class="post-meta">
       <span class="post-time"> 2023-04-12 </span>
@@ -149,7 +177,64 @@
   
   <div class="post-content">
     <div class="post-summary">
-      最近在启动Consul的时候，Consul只返回一条报错信息 1 No private IPv4 address found 直接看代码 consul/builder.go at main · hashicorp/consul (github.com) 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 func advertiseAddrFunc(opts LoadOpts,
+      <p>最近在启动Consul的时候，Consul只返回一条报错信息</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">No private IPv4 address found
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>直接看代码</p>
+<p><a href="https://github.com/hashicorp/consul/blob/main/agent/config/builder.go#L1156">consul/builder.go at main · hashicorp/consul (github.com)</a></p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt"> 1
+</span><span class="lnt"> 2
+</span><span class="lnt"> 3
+</span><span class="lnt"> 4
+</span><span class="lnt"> 5
+</span><span class="lnt"> 6
+</span><span class="lnt"> 7
+</span><span class="lnt"> 8
+</span><span class="lnt"> 9
+</span><span class="lnt">10
+</span><span class="lnt">11
+</span><span class="lnt">12
+</span><span class="lnt">13
+</span><span class="lnt">14
+</span><span class="lnt">15
+</span><span class="lnt">16
+</span><span class="lnt">17
+</span><span class="lnt">18
+</span><span class="lnt">19
+</span><span class="lnt">20
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-go" data-lang="go"><span class="line"><span class="cl"><span class="kd">func</span><span class="w"> </span><span class="nf">advertiseAddrFunc</span><span class="p">(</span><span class="nx">opts</span><span class="w"> </span><span class="nx">LoadOpts</span><span class="p">,</span><span class="w"> </span><span class="nx">advertiseAddr</span><span class="w"> </span><span class="o">*</span><span class="nx">net</span><span class="p">.</span><span class="nx">IPAddr</span><span class="p">)</span><span class="w"> </span><span class="p">(</span><span class="kt">string</span><span class="p">,</span><span class="w"> </span><span class="kd">func</span><span class="p">()</span><span class="w"> </span><span class="p">([]</span><span class="o">*</span><span class="nx">net</span><span class="p">.</span><span class="nx">IPAddr</span><span class="p">,</span><span class="w"> </span><span class="kt">error</span><span class="p">))</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="k">switch</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="k">case</span><span class="w"> </span><span class="nx">ipaddr</span><span class="p">.</span><span class="nf">IsAnyV4</span><span class="p">(</span><span class="nx">advertiseAddr</span><span class="p">):</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="nx">fn</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">opts</span><span class="p">.</span><span class="nx">getPrivateIPv4</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="k">if</span><span class="w"> </span><span class="nx">fn</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="kc">nil</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">			</span><span class="nx">fn</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nx">ipaddr</span><span class="p">.</span><span class="nx">GetPrivateIPv4</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="k">return</span><span class="w"> </span><span class="s">&#34;private IPv4&#34;</span><span class="p">,</span><span class="w"> </span><span class="nx">fn</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="k">case</span><span class="w"> </span><span class="nx">ipaddr</span><span class="p">.</span><span class="nf">IsAnyV6</span><span class="p">(</span><span class="nx">advertiseAddr</span><span class="p">):</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="nx">fn</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">opts</span><span class="p">.</span><span class="nx">getPublicIPv6</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="k">if</span><span class="w"> </span><span class="nx">fn</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="kc">nil</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">			</span><span class="nx">fn</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nx">ipaddr</span><span class="p">.</span><span class="nx">GetPublicIPv6</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="k">return</span><span class="w"> </span><span class="s">&#34;public IPv6&#34;</span><span class="p">,</span><span class="w"> </span><span class="nx">fn</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="k">default</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="nb">panic</span><span class="p">(</span><span class="s">&#34;unsupported net.IPAddr Type&#34;</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="p">}</span><span class="w">
+</span></span></span></code></pre></td></tr></table>
+</div>
+</div><p>如果没有提供getPrivateIPv4函数，则直接使用<a href="https://github.com/hashicorp/consul/blob/main/ipaddr/detect.go#L14">consul/detect.go at main · hashicorp/consul (github.com)</a></p>
     </div>
     <div class="read-more">
       <a href="/post/linux/private-ip/" class="read-more-link">Read more...</a>
@@ -211,7 +296,7 @@
       <div class="post-category">
           <a href="/categories/linux/"> linux </a>
           </div>
-        <span class="more-meta"> 1058 words </span>
+        <span class="more-meta"> 1102 words </span>
         <span class="more-meta"> 3 mins read </span>
     </div>
   </header>
@@ -222,29 +307,6 @@
     </div>
     <div class="read-more">
       <a href="/post/linux/shell/" class="read-more-link">Read more...</a>
-    </div>
-  </div>
-</article>
-
-    <article class="post">
-  <header class="post-header">
-    <h1 class="post-title"><a class="post-link" href="/post/linux/ubuntu_smartdns_v2ray/">在Ubuntu上安装v2ray和smartdns，并在客户端使用proxy上网</a></h1>
-    <div class="post-meta">
-      <span class="post-time"> 2022-12-21 </span>
-      <div class="post-category">
-          <a href="/categories/linux/"> linux </a>
-          </div>
-        <span class="more-meta"> 1321 words </span>
-        <span class="more-meta"> 3 mins read </span>
-    </div>
-  </header>
-  
-  <div class="post-content">
-    <div class="post-summary">
-      在Ubuntu Server上安装V2ray客户端，并使用smartdns进行科学上网
-    </div>
-    <div class="read-more">
-      <a href="/post/linux/ubuntu_smartdns_v2ray/" class="read-more-link">Read more...</a>
     </div>
   </div>
 </article>
@@ -318,6 +380,52 @@
   </div>
 </article>
 
+    <article class="post">
+  <header class="post-header">
+    <h1 class="post-title"><a class="post-link" href="/post/golang/go-open-editor/">Go调用系统编辑器编辑文件</a></h1>
+    <div class="post-meta">
+      <span class="post-time"> 2022-06-21 </span>
+      <div class="post-category">
+          <a href="/categories/go/"> go </a>
+          </div>
+        <span class="more-meta"> 827 words </span>
+        <span class="more-meta"> 2 mins read </span>
+    </div>
+  </header>
+  
+  <div class="post-content">
+    <div class="post-summary">
+      通过go打开一个编辑器，编辑完成后需要处理修改后的文件
+    </div>
+    <div class="read-more">
+      <a href="/post/golang/go-open-editor/" class="read-more-link">Read more...</a>
+    </div>
+  </div>
+</article>
+
+    <article class="post">
+  <header class="post-header">
+    <h1 class="post-title"><a class="post-link" href="/post/mysql/sql_injection/">SQL注入</a></h1>
+    <div class="post-meta">
+      <span class="post-time"> 2022-06-15 </span>
+      <div class="post-category">
+          <a href="/categories/mysql/"> mysql </a>
+          </div>
+        <span class="more-meta"> 3501 words </span>
+        <span class="more-meta"> 7 mins read </span>
+    </div>
+  </header>
+  
+  <div class="post-content">
+    <div class="post-summary">
+      SQL注入是一种Web安全漏洞，允许攻击者干扰应用程序对其数据库的查询。攻击者能够通过注入SQL获取到一些通常情况下无法获取的敏感数据例如其他用户的数据。大多数场景中，攻击者可以修改或者删除这些敏感数据而导致应用产生其他异常。在某些情况下，攻击者可以升级SQL注入攻击，以损害基础服务器或其他后端基础架构，或执行拒绝服务攻击。
+    </div>
+    <div class="read-more">
+      <a href="/post/mysql/sql_injection/" class="read-more-link">Read more...</a>
+    </div>
+  </div>
+</article>
+
     </section>
   
   <nav class="pagination">
@@ -359,7 +467,7 @@
   <span class="copyright-year">
     &copy; 
     2022 - 
-    2023<span class="heart"><i class="iconfont icon-heart"></i></span><span><a href="/">hlday</a></span>
+    2026<span class="heart"><i class="iconfont icon-heart"></i></span><span><a href="/">hlday</a></span>
   </span>
 </div>
 
@@ -376,7 +484,7 @@
 
 
 
-<script type="text/javascript" src="/js/main.min.bfb94e1fe4773651a6fe907d388ed08d7d6f9628a062d0740d992e1dfb49466e.js"></script>
+<script type="text/javascript" src="/js/main.min.d3d26fe720923eebdba72c7cb26eef946d17ef1a1a7a289857149666ace3dfec.js"></script>
   <script type="text/javascript">
     window.MathJax = {
       tex: {
@@ -385,6 +493,7 @@
     };
   </script>
   <script async src="https://cdn.jsdelivr.net/npm/mathjax@3.0.5/es5/tex-mml-chtml.js" integrity="sha256-HGLuEfFcsUJGhvB8cQ8nr0gai9EucOOaIxFw7qxmd+w=" crossorigin="anonymous"></script>
+
 
 
 

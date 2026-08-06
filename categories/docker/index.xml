@@ -1,20 +1,24 @@
 <?xml version="1.0" encoding="utf-8" standalone="yes"?>
 <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
-  <channel>
-    <title>docker on HLDay</title>
-    <link>/categories/docker/</link>
-    <description>Recent content in docker on HLDay</description>
-    <generator>Hugo -- gohugo.io</generator>
-    <language>en</language>
-    <lastBuildDate>Fri, 27 May 2022 08:55:20 +0800</lastBuildDate><atom:link href="/categories/docker/index.xml" rel="self" type="application/rss+xml" />
-    <item>
-      <title>在树莓派上使用Dockers运行Openwrt并作为主路由器的旁路由</title>
-      <link>/post/linux/openwrt/</link>
-      <pubDate>Fri, 27 May 2022 08:55:20 +0800</pubDate>
-      
-      <guid>/post/linux/openwrt/</guid>
-      <description>在树莓派上直接安装openwrt系统时，使用4G内存时，之后只能占用20%左右，且CPU常年只会占用20%。比较浪费性能。可以考虑采用Docker部署Openwrt的方式，这样既满足要求，也能使用树莓派进行一些其他工作。</description>
-    </item>
-    
-  </channel>
+	<channel>
+		<title>Docker on HLDay</title>
+		<link>/categories/docker/</link>
+		<description>Recent content in Docker on HLDay</description>
+		<generator>Hugo</generator>
+		<language>en</language>
+		
+		
+		
+		
+			<lastBuildDate>Fri, 27 May 2022 08:55:20 +0800</lastBuildDate>
+		
+			<atom:link href="/categories/docker/index.xml" rel="self" type="application/rss+xml" />
+			<item>
+				<title>在树莓派上使用Dockers运行Openwrt并作为主路由器的旁路由</title>
+				<link>/post/linux/openwrt/</link>
+				<pubDate>Fri, 27 May 2022 08:55:20 +0800</pubDate>
+				<guid>/post/linux/openwrt/</guid>
+				<description>在树莓派上直接安装openwrt系统时，使用4G内存时，之后只能占用20%左右，且CPU常年只会占用20%。比较浪费性能。可以考虑采用Docker部署Openwrt的方式，这样既满足要求，也能使用树莓派进行一些其他工作。</description>
+			</item>
+	</channel>
 </rss>

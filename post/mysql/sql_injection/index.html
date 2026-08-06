@@ -31,7 +31,7 @@
   gtag('config', 'G-59Y2CYW544');
 </script>
 
-<meta name="generator" content="Hugo 0.93.2 with theme even" />
+<meta name="generator" content="Hugo 0.164.0 with theme even" />
 
 
 <link rel="canonical" href="/post/mysql/sql_injection/" />
@@ -43,24 +43,30 @@
 
 <script async src="//busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
 
-<link href="/sass/main.min.b5a744db6de49a86cadafb3b70f555ab443f83c307a483402259e94726b045ff.css" rel="stylesheet">
+<link href="/sass/main.min.52d539dfadc86246e6ba9a98b4b3a7268cddea9db8ace7933730de9afef2c275.css" rel="stylesheet">
 
 
 
-<meta property="og:title" content="SQL注入" />
-<meta property="og:description" content="SQL注入是一种Web安全漏洞，允许攻击者干扰应用程序对其数据库的查询。攻击者能够通过注入SQL获取到一些通常情况下无法获取的敏感数据例如其他用户的数据。大多数场景中，攻击者可以修改或者删除这些敏感数据而导致应用产生其他异常。在某些情况下，攻击者可以升级SQL注入攻击，以损害基础服务器或其他后端基础架构，或执行拒绝服务攻击。" />
-<meta property="og:type" content="article" />
-<meta property="og:url" content="/post/mysql/sql_injection/" /><meta property="article:section" content="post" />
-<meta property="article:published_time" content="2022-06-15T11:33:22+08:00" />
-<meta property="article:modified_time" content="2022-06-15T11:33:22+08:00" />
+<meta property="og:url" content="/post/mysql/sql_injection/">
+	<meta property="og:site_name" content="HLDay">
+	<meta property="og:title" content="SQL注入">
+	<meta property="og:description" content="SQL注入是一种Web安全漏洞，允许攻击者干扰应用程序对其数据库的查询。攻击者能够通过注入SQL获取到一些通常情况下无法获取的敏感数据例如其他用户的数据。大多数场景中，攻击者可以修改或者删除这些敏感数据而导致应用产生其他异常。在某些情况下，攻击者可以升级SQL注入攻击，以损害基础服务器或其他后端基础架构，或执行拒绝服务攻击。">
+	<meta property="og:locale" content="en">
+	<meta property="og:type" content="article">
+		<meta property="article:section" content="post">
+		<meta property="article:published_time" content="2022-06-15T11:33:22+08:00">
+		<meta property="article:modified_time" content="2022-06-15T11:33:22+08:00">
+		<meta property="article:tag" content="Mysql">
 
-<meta itemprop="name" content="SQL注入">
-<meta itemprop="description" content="SQL注入是一种Web安全漏洞，允许攻击者干扰应用程序对其数据库的查询。攻击者能够通过注入SQL获取到一些通常情况下无法获取的敏感数据例如其他用户的数据。大多数场景中，攻击者可以修改或者删除这些敏感数据而导致应用产生其他异常。在某些情况下，攻击者可以升级SQL注入攻击，以损害基础服务器或其他后端基础架构，或执行拒绝服务攻击。"><meta itemprop="datePublished" content="2022-06-15T11:33:22+08:00" />
-<meta itemprop="dateModified" content="2022-06-15T11:33:22+08:00" />
-<meta itemprop="wordCount" content="2965">
-<meta itemprop="keywords" content="mysql," /><meta name="twitter:card" content="summary"/>
-<meta name="twitter:title" content="SQL注入"/>
-<meta name="twitter:description" content="SQL注入是一种Web安全漏洞，允许攻击者干扰应用程序对其数据库的查询。攻击者能够通过注入SQL获取到一些通常情况下无法获取的敏感数据例如其他用户的数据。大多数场景中，攻击者可以修改或者删除这些敏感数据而导致应用产生其他异常。在某些情况下，攻击者可以升级SQL注入攻击，以损害基础服务器或其他后端基础架构，或执行拒绝服务攻击。"/>
+	<meta itemprop="name" content="SQL注入">
+	<meta itemprop="description" content="SQL注入是一种Web安全漏洞，允许攻击者干扰应用程序对其数据库的查询。攻击者能够通过注入SQL获取到一些通常情况下无法获取的敏感数据例如其他用户的数据。大多数场景中，攻击者可以修改或者删除这些敏感数据而导致应用产生其他异常。在某些情况下，攻击者可以升级SQL注入攻击，以损害基础服务器或其他后端基础架构，或执行拒绝服务攻击。">
+	<meta itemprop="datePublished" content="2022-06-15T11:33:22+08:00">
+	<meta itemprop="dateModified" content="2022-06-15T11:33:22+08:00">
+	<meta itemprop="wordCount" content="3501">
+	<meta itemprop="keywords" content="Mysql">
+	<meta name="twitter:card" content="summary">
+	<meta name="twitter:title" content="SQL注入">
+	<meta name="twitter:description" content="SQL注入是一种Web安全漏洞，允许攻击者干扰应用程序对其数据库的查询。攻击者能够通过注入SQL获取到一些通常情况下无法获取的敏感数据例如其他用户的数据。大多数场景中，攻击者可以修改或者删除这些敏感数据而导致应用产生其他异常。在某些情况下，攻击者可以升级SQL注入攻击，以损害基础服务器或其他后端基础架构，或执行拒绝服务攻击。">
 
 <!--[if lte IE 9]>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
@@ -148,8 +154,8 @@
         <div class="post-category">
             <a href="/categories/mysql/"> mysql </a>
             </div>
-          <span class="more-meta"> 2965 words </span>
-          <span class="more-meta"> 6 mins read </span>
+          <span class="more-meta"> 3501 words </span>
+          <span class="more-meta"> 7 mins read </span>
         <span id="busuanzi_container_page_pv" class="more-meta"> <span id="busuanzi_value_page_pv"><img src="/img/spinner.svg" alt="spinner.svg"/></span> times read </span>
       </div>
     </header>
@@ -365,9 +371,9 @@
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="o">`</span><span class="n">CHECKSUM</span><span class="o">`</span><span class="w"> </span><span class="nb">bigint</span><span class="p">(</span><span class="mi">21</span><span class="p">)</span><span class="w"> </span><span class="n">unsigned</span><span class="w"> </span><span class="k">DEFAULT</span><span class="w"> </span><span class="k">NULL</span><span class="p">,</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="o">`</span><span class="n">CREATE_OPTIONS</span><span class="o">`</span><span class="w"> </span><span class="nb">varchar</span><span class="p">(</span><span class="mi">255</span><span class="p">)</span><span class="w"> </span><span class="k">DEFAULT</span><span class="w"> </span><span class="k">NULL</span><span class="p">,</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="o">`</span><span class="n">TABLE_COMMENT</span><span class="o">`</span><span class="w"> </span><span class="nb">varchar</span><span class="p">(</span><span class="mi">2048</span><span class="p">)</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="w"> </span><span class="k">DEFAULT</span><span class="w"> </span><span class="s1">&#39;&#39;</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="p">)</span><span class="w"> </span><span class="n">ENGINE</span><span class="o">=</span><span class="n">MEMORY</span><span class="w"> </span><span class="k">DEFAULT</span><span class="w"> </span><span class="n">CHARSET</span><span class="o">=</span><span class="n">utf8</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="p">)</span><span class="w"> </span><span class="n">ENGINE</span><span class="o">=</span><span class="n">MEMORY</span><span class="w"> </span><span class="k">DEFAULT</span><span class="w"> </span><span class="n">CHARSET</span><span class="o">=</span><span class="n">utf8</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="k">CREATE</span><span class="w"> </span><span class="k">TEMPORARY</span><span class="w"> </span><span class="k">TABLE</span><span class="w"> </span><span class="o">`</span><span class="n">COLUMNS</span><span class="o">`</span><span class="w"> </span><span class="p">(</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="k">CREATE</span><span class="w"> </span><span class="k">TEMPORARY</span><span class="w"> </span><span class="k">TABLE</span><span class="w"> </span><span class="o">`</span><span class="n">COLUMNS</span><span class="o">`</span><span class="w"> </span><span class="p">(</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="o">`</span><span class="n">TABLE_CATALOG</span><span class="o">`</span><span class="w"> </span><span class="nb">varchar</span><span class="p">(</span><span class="mi">512</span><span class="p">)</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="w"> </span><span class="k">DEFAULT</span><span class="w"> </span><span class="s1">&#39;&#39;</span><span class="p">,</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="o">`</span><span class="n">TABLE_SCHEMA</span><span class="o">`</span><span class="w"> </span><span class="nb">varchar</span><span class="p">(</span><span class="mi">64</span><span class="p">)</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="w"> </span><span class="k">DEFAULT</span><span class="w"> </span><span class="s1">&#39;&#39;</span><span class="p">,</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="o">`</span><span class="k">TABLE_NAME</span><span class="o">`</span><span class="w"> </span><span class="nb">varchar</span><span class="p">(</span><span class="mi">64</span><span class="p">)</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="w"> </span><span class="k">DEFAULT</span><span class="w"> </span><span class="s1">&#39;&#39;</span><span class="p">,</span><span class="w">
@@ -389,7 +395,7 @@
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="o">`</span><span class="k">PRIVILEGES</span><span class="o">`</span><span class="w"> </span><span class="nb">varchar</span><span class="p">(</span><span class="mi">80</span><span class="p">)</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="w"> </span><span class="k">DEFAULT</span><span class="w"> </span><span class="s1">&#39;&#39;</span><span class="p">,</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="o">`</span><span class="n">COLUMN_COMMENT</span><span class="o">`</span><span class="w"> </span><span class="nb">varchar</span><span class="p">(</span><span class="mi">1024</span><span class="p">)</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="w"> </span><span class="k">DEFAULT</span><span class="w"> </span><span class="s1">&#39;&#39;</span><span class="p">,</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="o">`</span><span class="n">GENERATION_EXPRESSION</span><span class="o">`</span><span class="w"> </span><span class="n">longtext</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="p">)</span><span class="w"> </span><span class="n">ENGINE</span><span class="o">=</span><span class="n">InnoDB</span><span class="w"> </span><span class="k">DEFAULT</span><span class="w"> </span><span class="n">CHARSET</span><span class="o">=</span><span class="n">utf8</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="p">)</span><span class="w"> </span><span class="n">ENGINE</span><span class="o">=</span><span class="n">InnoDB</span><span class="w"> </span><span class="k">DEFAULT</span><span class="w"> </span><span class="n">CHARSET</span><span class="o">=</span><span class="n">utf8</span><span class="w">
 </span></span></span></code></pre></td></tr></table>
 </div>
 </div><p>通过查询上述两个表就可以获取db和table的信息。</p>
@@ -426,8 +432,8 @@
 </span></code></pre></td>
 <td class="lntd">
 <pre tabindex="0" class="chroma"><code class="language-sql" data-lang="sql"><span class="line"><span class="cl"><span class="k">select</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="k">from</span><span class="w"> </span><span class="n">tables</span><span class="w"> </span><span class="k">where</span><span class="w"> </span><span class="n">app</span><span class="o">=</span><span class="s2">&#34;a&#34;</span><span class="w"> </span><span class="k">order</span><span class="w"> </span><span class="k">by</span><span class="w"> </span><span class="mi">1</span><span class="w"> </span><span class="c1">--
-</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="k">select</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="k">from</span><span class="w"> </span><span class="n">tables</span><span class="w"> </span><span class="k">where</span><span class="w"> </span><span class="n">app</span><span class="o">=</span><span class="s2">&#34;a&#34;</span><span class="w"> </span><span class="k">order</span><span class="w"> </span><span class="k">by</span><span class="w"> </span><span class="mi">2</span><span class="w"> </span><span class="c1">--
-</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="k">select</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="k">from</span><span class="w"> </span><span class="n">tables</span><span class="w"> </span><span class="k">where</span><span class="w"> </span><span class="n">app</span><span class="o">=</span><span class="s2">&#34;a&#34;</span><span class="w"> </span><span class="k">order</span><span class="w"> </span><span class="k">by</span><span class="w"> </span><span class="mi">3</span><span class="w"> </span><span class="c1">--
+</span></span></span><span class="line"><span class="cl"><span class="k">select</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="k">from</span><span class="w"> </span><span class="n">tables</span><span class="w"> </span><span class="k">where</span><span class="w"> </span><span class="n">app</span><span class="o">=</span><span class="s2">&#34;a&#34;</span><span class="w"> </span><span class="k">order</span><span class="w"> </span><span class="k">by</span><span class="w"> </span><span class="mi">2</span><span class="w"> </span><span class="c1">--
+</span></span></span><span class="line"><span class="cl"><span class="k">select</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="k">from</span><span class="w"> </span><span class="n">tables</span><span class="w"> </span><span class="k">where</span><span class="w"> </span><span class="n">app</span><span class="o">=</span><span class="s2">&#34;a&#34;</span><span class="w"> </span><span class="k">order</span><span class="w"> </span><span class="k">by</span><span class="w"> </span><span class="mi">3</span><span class="w"> </span><span class="c1">--
 </span></span></span></code></pre></td></tr></table>
 </div>
 </div><p>当index超过实际的列的数量时，数据库会返回错误</p>
@@ -478,7 +484,7 @@
 <td class="lntd">
 <pre tabindex="0" class="chroma"><code class="language-sql" data-lang="sql"><span class="line"><span class="cl"><span class="s1">&#39; UNION SELECT &#39;</span><span class="n">a</span><span class="s1">&#39;,NULL,NULL,NULL--
 </span></span></span><span class="line"><span class="cl"><span class="s1">&#39;</span><span class="w"> </span><span class="k">UNION</span><span class="w"> </span><span class="k">SELECT</span><span class="w"> </span><span class="k">NULL</span><span class="p">,</span><span class="s1">&#39;a&#39;</span><span class="p">,</span><span class="k">NULL</span><span class="p">,</span><span class="k">NULL</span><span class="c1">--
-</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="s1">&#39; UNION SELECT NULL,NULL,&#39;</span><span class="n">a</span><span class="s1">&#39;,NULL--
+</span></span></span><span class="line"><span class="cl"><span class="s1">&#39; UNION SELECT NULL,NULL,&#39;</span><span class="n">a</span><span class="s1">&#39;,NULL--
 </span></span></span><span class="line"><span class="cl"><span class="s1">&#39;</span><span class="w"> </span><span class="k">UNION</span><span class="w"> </span><span class="k">SELECT</span><span class="w"> </span><span class="k">NULL</span><span class="p">,</span><span class="k">NULL</span><span class="p">,</span><span class="k">NULL</span><span class="p">,</span><span class="s1">&#39;a&#39;</span><span class="c1">--
 </span></span></span></code></pre></td></tr></table>
 </div>
@@ -539,7 +545,7 @@
 </span></code></pre></td>
 <td class="lntd">
 <pre tabindex="0" class="chroma"><code class="language-sql" data-lang="sql"><span class="line"><span class="cl"><span class="k">SELECT</span><span class="w"> </span><span class="n">TrackingId</span><span class="w"> </span><span class="k">FROM</span><span class="w"> </span><span class="n">TrackedUsers</span><span class="w"> </span><span class="k">WHERE</span><span class="w"> </span><span class="n">TrackingId</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;u5YD3PapBcR4lN3e7Tj4&#39;</span><span class="w"> </span><span class="k">and</span><span class="w"> </span><span class="s1">&#39;1&#39;</span><span class="o">=</span><span class="s1">&#39;1&#39;</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="k">SELECT</span><span class="w"> </span><span class="n">TrackingId</span><span class="w"> </span><span class="k">FROM</span><span class="w"> </span><span class="n">TrackedUsers</span><span class="w"> </span><span class="k">WHERE</span><span class="w"> </span><span class="n">TrackingId</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;u5YD3PapBcR4lN3e7Tj4&#39;</span><span class="w"> </span><span class="k">and</span><span class="w"> </span><span class="s1">&#39;1&#39;</span><span class="o">=</span><span class="s1">&#39;2&#39;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="k">SELECT</span><span class="w"> </span><span class="n">TrackingId</span><span class="w"> </span><span class="k">FROM</span><span class="w"> </span><span class="n">TrackedUsers</span><span class="w"> </span><span class="k">WHERE</span><span class="w"> </span><span class="n">TrackingId</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;u5YD3PapBcR4lN3e7Tj4&#39;</span><span class="w"> </span><span class="k">and</span><span class="w"> </span><span class="s1">&#39;1&#39;</span><span class="o">=</span><span class="s1">&#39;2&#39;</span><span class="w">
 </span></span></span></code></pre></td></tr></table>
 </div>
 </div><p>第一个注入会正常返回，第二个注入会异常返回，通过这种差异性，我们就可以使用SQL盲注获取数据库的一些关键信息。</p>
@@ -571,7 +577,7 @@
 </span></code></pre></td>
 <td class="lntd">
 <pre tabindex="0" class="chroma"><code class="language-sql" data-lang="sql"><span class="line"><span class="cl"><span class="k">SELECT</span><span class="w"> </span><span class="n">TrackingId</span><span class="w"> </span><span class="k">FROM</span><span class="w"> </span><span class="n">TrackedUsers</span><span class="w"> </span><span class="k">WHERE</span><span class="w"> </span><span class="n">TrackingId</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;u5YD3PapBcR4lN3e7Tj4&#39;</span><span class="w"> </span><span class="k">AND</span><span class="w"> </span><span class="p">(</span><span class="k">SELECT</span><span class="w"> </span><span class="k">CASE</span><span class="w"> </span><span class="k">WHEN</span><span class="w"> </span><span class="p">(</span><span class="mi">1</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span><span class="w"> </span><span class="k">THEN</span><span class="w"> </span><span class="mi">1</span><span class="o">/</span><span class="mi">0</span><span class="w"> </span><span class="k">ELSE</span><span class="w"> </span><span class="s1">&#39;a&#39;</span><span class="w"> </span><span class="k">END</span><span class="p">)</span><span class="o">=</span><span class="s1">&#39;a&#39;</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="k">SELECT</span><span class="w"> </span><span class="n">TrackingId</span><span class="w"> </span><span class="k">FROM</span><span class="w"> </span><span class="n">TrackedUsers</span><span class="w"> </span><span class="k">WHERE</span><span class="w"> </span><span class="n">TrackingId</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;u5YD3PapBcR4lN3e7Tj4&#39;</span><span class="w"> </span><span class="k">AND</span><span class="w"> </span><span class="p">(</span><span class="k">SELECT</span><span class="w"> </span><span class="k">CASE</span><span class="w"> </span><span class="k">WHEN</span><span class="w"> </span><span class="p">(</span><span class="mi">1</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span><span class="w"> </span><span class="k">THEN</span><span class="w"> </span><span class="mi">1</span><span class="o">/</span><span class="mi">0</span><span class="w"> </span><span class="k">ELSE</span><span class="w"> </span><span class="s1">&#39;a&#39;</span><span class="w"> </span><span class="k">END</span><span class="p">)</span><span class="o">=</span><span class="s1">&#39;a&#39;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="k">SELECT</span><span class="w"> </span><span class="n">TrackingId</span><span class="w"> </span><span class="k">FROM</span><span class="w"> </span><span class="n">TrackedUsers</span><span class="w"> </span><span class="k">WHERE</span><span class="w"> </span><span class="n">TrackingId</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;u5YD3PapBcR4lN3e7Tj4&#39;</span><span class="w"> </span><span class="k">AND</span><span class="w"> </span><span class="p">(</span><span class="k">SELECT</span><span class="w"> </span><span class="k">CASE</span><span class="w"> </span><span class="k">WHEN</span><span class="w"> </span><span class="p">(</span><span class="mi">1</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span><span class="w"> </span><span class="k">THEN</span><span class="w"> </span><span class="mi">1</span><span class="o">/</span><span class="mi">0</span><span class="w"> </span><span class="k">ELSE</span><span class="w"> </span><span class="s1">&#39;a&#39;</span><span class="w"> </span><span class="k">END</span><span class="p">)</span><span class="o">=</span><span class="s1">&#39;a&#39;</span><span class="w">
 </span></span></span></code></pre></td></tr></table>
 </div>
 </div><p>上述查询第一条会正常返回，第二条会返回一个除0错误，这样就会导致查询sql异常而导致服务返回一些错误信息。</p>
@@ -594,7 +600,7 @@
 </span></code></pre></td>
 <td class="lntd">
 <pre tabindex="0" class="chroma"><code class="language-sql" data-lang="sql"><span class="line"><span class="cl"><span class="k">SELECT</span><span class="w"> </span><span class="n">TrackingId</span><span class="w"> </span><span class="k">FROM</span><span class="w"> </span><span class="n">TrackedUsers</span><span class="w"> </span><span class="k">WHERE</span><span class="w"> </span><span class="n">TrackingId</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;u5YD3PapBcR4lN3e7Tj4&#39;</span><span class="p">;</span><span class="w"> </span><span class="k">IF</span><span class="w"> </span><span class="p">(</span><span class="mi">1</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span><span class="w"> </span><span class="n">WAITFOR</span><span class="w"> </span><span class="n">DELAY</span><span class="w"> </span><span class="s1">&#39;0:0:10&#39;</span><span class="c1">--
-</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="k">SELECT</span><span class="w"> </span><span class="n">TrackingId</span><span class="w"> </span><span class="k">FROM</span><span class="w"> </span><span class="n">TrackedUsers</span><span class="w"> </span><span class="k">WHERE</span><span class="w"> </span><span class="n">TrackingId</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;u5YD3PapBcR4lN3e7Tj4&#39;</span><span class="p">;</span><span class="w"> </span><span class="k">IF</span><span class="w"> </span><span class="p">(</span><span class="mi">1</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span><span class="w"> </span><span class="n">WAITFOR</span><span class="w"> </span><span class="n">DELAY</span><span class="w"> </span><span class="s1">&#39;0:0:10&#39;</span><span class="c1">--
+</span></span></span><span class="line"><span class="cl"><span class="k">SELECT</span><span class="w"> </span><span class="n">TrackingId</span><span class="w"> </span><span class="k">FROM</span><span class="w"> </span><span class="n">TrackedUsers</span><span class="w"> </span><span class="k">WHERE</span><span class="w"> </span><span class="n">TrackingId</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;u5YD3PapBcR4lN3e7Tj4&#39;</span><span class="p">;</span><span class="w"> </span><span class="k">IF</span><span class="w"> </span><span class="p">(</span><span class="mi">1</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span><span class="w"> </span><span class="n">WAITFOR</span><span class="w"> </span><span class="n">DELAY</span><span class="w"> </span><span class="s1">&#39;0:0:10&#39;</span><span class="c1">--
 </span></span></span></code></pre></td></tr></table>
 </div>
 </div><p>第一个sql不会有时间延迟，而第二个查询会存在10s的时间延迟。所以如果需要获取users表的密码，则可以通过如下注入：</p>
@@ -794,7 +800,7 @@
   <span class="copyright-year">
     &copy; 
     2022 - 
-    2023<span class="heart"><i class="iconfont icon-heart"></i></span><span><a href="/">hlday</a></span>
+    2026<span class="heart"><i class="iconfont icon-heart"></i></span><span><a href="/">hlday</a></span>
   </span>
 </div>
 
@@ -811,7 +817,7 @@
 
 
 
-<script type="text/javascript" src="/js/main.min.bfb94e1fe4773651a6fe907d388ed08d7d6f9628a062d0740d992e1dfb49466e.js"></script>
+<script type="text/javascript" src="/js/main.min.d3d26fe720923eebdba72c7cb26eef946d17ef1a1a7a289857149666ace3dfec.js"></script>
   <script type="text/javascript">
     window.MathJax = {
       tex: {
@@ -820,6 +826,7 @@
     };
   </script>
   <script async src="https://cdn.jsdelivr.net/npm/mathjax@3.0.5/es5/tex-mml-chtml.js" integrity="sha256-HGLuEfFcsUJGhvB8cQ8nr0gai9EucOOaIxFw7qxmd+w=" crossorigin="anonymous"></script>
+
 
 
 

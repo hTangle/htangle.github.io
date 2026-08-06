@@ -1,29 +1,31 @@
 <?xml version="1.0" encoding="utf-8" standalone="yes"?>
 <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
-  <channel>
-    <title>设计模式 on HLDay</title>
-    <link>/tags/%E8%AE%BE%E8%AE%A1%E6%A8%A1%E5%BC%8F/</link>
-    <description>Recent content in 设计模式 on HLDay</description>
-    <generator>Hugo -- gohugo.io</generator>
-    <language>en</language>
-    <lastBuildDate>Sat, 12 Mar 2022 23:18:54 +0800</lastBuildDate><atom:link href="/tags/%E8%AE%BE%E8%AE%A1%E6%A8%A1%E5%BC%8F/index.xml" rel="self" type="application/rss+xml" />
-    <item>
-      <title>设计模式-单例模式</title>
-      <link>/post/design-pattern/singleton/</link>
-      <pubDate>Sat, 12 Mar 2022 23:18:54 +0800</pubDate>
-      
-      <guid>/post/design-pattern/singleton/</guid>
-      <description>单例模式是一种创建型设计模式， 让你能够保证一个类只有一个实例， 并提供一个访问该实例的全局节点。</description>
-    </item>
-    
-    <item>
-      <title>工厂模式</title>
-      <link>/post/design-pattern/factory_pattern/</link>
-      <pubDate>Tue, 08 Mar 2022 15:51:07 +0800</pubDate>
-      
-      <guid>/post/design-pattern/factory_pattern/</guid>
-      <description>工厂模式（Factory Pattern）是 Java 中最常用的设计模式之一。这种类型的设计模式属于创建型模式，它提供了一种创建对象的最佳方式。在工厂模式中，我们在创建对象时不会对客户端暴露创建逻辑，并且是通过使用一个共同的接口来指向新创建的对象。</description>
-    </item>
-    
-  </channel>
+	<channel>
+		<title>设计模式 on HLDay</title>
+		<link>/tags/%E8%AE%BE%E8%AE%A1%E6%A8%A1%E5%BC%8F/</link>
+		<description>Recent content in 设计模式 on HLDay</description>
+		<generator>Hugo</generator>
+		<language>en</language>
+		
+		
+		
+		
+			<lastBuildDate>Sat, 12 Mar 2022 23:18:54 +0800</lastBuildDate>
+		
+			<atom:link href="/tags/%E8%AE%BE%E8%AE%A1%E6%A8%A1%E5%BC%8F/index.xml" rel="self" type="application/rss+xml" />
+			<item>
+				<title>设计模式-单例模式</title>
+				<link>/post/design-pattern/singleton/</link>
+				<pubDate>Sat, 12 Mar 2022 23:18:54 +0800</pubDate>
+				<guid>/post/design-pattern/singleton/</guid>
+				<description>单例模式是一种创建型设计模式， 让你能够保证一个类只有一个实例， 并提供一个访问该实例的全局节点。</description>
+			</item>
+			<item>
+				<title>工厂模式</title>
+				<link>/post/design-pattern/factory_pattern/</link>
+				<pubDate>Tue, 08 Mar 2022 15:51:07 +0800</pubDate>
+				<guid>/post/design-pattern/factory_pattern/</guid>
+				<description>工厂模式（Factory Pattern）是 Java 中最常用的设计模式之一。这种类型的设计模式属于创建型模式，它提供了一种创建对象的最佳方式。在工厂模式中，我们在创建对象时不会对客户端暴露创建逻辑，并且是通过使用一个共同的接口来指向新创建的对象。</description>
+			</item>
+	</channel>
 </rss>

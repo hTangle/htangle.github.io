@@ -31,7 +31,7 @@
   gtag('config', 'G-59Y2CYW544');
 </script>
 
-<meta name="generator" content="Hugo 0.93.2 with theme even" />
+<meta name="generator" content="Hugo 0.164.0 with theme even" />
 
 
 <link rel="canonical" href="/post/mysql/mysql%E5%B8%B8%E8%A7%81%E5%8F%98%E9%87%8F/" />
@@ -43,24 +43,30 @@
 
 <script async src="//busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
 
-<link href="/sass/main.min.b5a744db6de49a86cadafb3b70f555ab443f83c307a483402259e94726b045ff.css" rel="stylesheet">
+<link href="/sass/main.min.52d539dfadc86246e6ba9a98b4b3a7268cddea9db8ace7933730de9afef2c275.css" rel="stylesheet">
 
 
 
-<meta property="og:title" content="MySQL常见变量" />
-<meta property="og:description" content="介绍一些MySQL常见变量，以及如何通过sql查询mysql状况" />
-<meta property="og:type" content="article" />
-<meta property="og:url" content="/post/mysql/mysql%E5%B8%B8%E8%A7%81%E5%8F%98%E9%87%8F/" /><meta property="article:section" content="post" />
-<meta property="article:published_time" content="2022-03-08T18:04:55+08:00" />
-<meta property="article:modified_time" content="2022-03-08T18:04:55+08:00" />
+<meta property="og:url" content="/post/mysql/mysql%E5%B8%B8%E8%A7%81%E5%8F%98%E9%87%8F/">
+	<meta property="og:site_name" content="HLDay">
+	<meta property="og:title" content="MySQL常见变量">
+	<meta property="og:description" content="介绍一些MySQL常见变量，以及如何通过sql查询mysql状况">
+	<meta property="og:locale" content="en">
+	<meta property="og:type" content="article">
+		<meta property="article:section" content="post">
+		<meta property="article:published_time" content="2022-03-08T18:04:55+08:00">
+		<meta property="article:modified_time" content="2022-03-08T18:04:55+08:00">
+		<meta property="article:tag" content="Mysql">
 
-<meta itemprop="name" content="MySQL常见变量">
-<meta itemprop="description" content="介绍一些MySQL常见变量，以及如何通过sql查询mysql状况"><meta itemprop="datePublished" content="2022-03-08T18:04:55+08:00" />
-<meta itemprop="dateModified" content="2022-03-08T18:04:55+08:00" />
-<meta itemprop="wordCount" content="2652">
-<meta itemprop="keywords" content="mysql," /><meta name="twitter:card" content="summary"/>
-<meta name="twitter:title" content="MySQL常见变量"/>
-<meta name="twitter:description" content="介绍一些MySQL常见变量，以及如何通过sql查询mysql状况"/>
+	<meta itemprop="name" content="MySQL常见变量">
+	<meta itemprop="description" content="介绍一些MySQL常见变量，以及如何通过sql查询mysql状况">
+	<meta itemprop="datePublished" content="2022-03-08T18:04:55+08:00">
+	<meta itemprop="dateModified" content="2022-03-08T18:04:55+08:00">
+	<meta itemprop="wordCount" content="2390">
+	<meta itemprop="keywords" content="Mysql">
+	<meta name="twitter:card" content="summary">
+	<meta name="twitter:title" content="MySQL常见变量">
+	<meta name="twitter:description" content="介绍一些MySQL常见变量，以及如何通过sql查询mysql状况">
 
 <!--[if lte IE 9]>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
@@ -148,8 +154,8 @@
         <div class="post-category">
             <a href="/categories/mysql/"> mysql </a>
             </div>
-          <span class="more-meta"> 2652 words </span>
-          <span class="more-meta"> 6 mins read </span>
+          <span class="more-meta"> 2390 words </span>
+          <span class="more-meta"> 5 mins read </span>
         <span id="busuanzi_container_page_pv" class="more-meta"> <span id="busuanzi_value_page_pv"><img src="/img/spinner.svg" alt="spinner.svg"/></span> times read </span>
       </div>
     </header>
@@ -193,9 +199,9 @@
 <pre tabindex="0" class="chroma"><code class="language-sql" data-lang="sql"><span class="line"><span class="cl"><span class="k">select</span><span class="w"> </span><span class="n">round</span><span class="p">((</span><span class="n">P1</span><span class="p">.</span><span class="n">variable_value</span><span class="p">)</span><span class="o">/</span><span class="p">(</span><span class="n">P2</span><span class="p">.</span><span class="n">variable_value</span><span class="p">),</span><span class="w"> </span><span class="mi">4</span><span class="p">)</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="n">connections</span><span class="p">,</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">       </span><span class="n">P1</span><span class="p">.</span><span class="n">variable_value</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="n">threads_connected</span><span class="p">,</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">       </span><span class="n">P2</span><span class="p">.</span><span class="n">variable_value</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="n">max_connections</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="k">from</span><span class="w"> </span><span class="n">performance_schema</span><span class="p">.</span><span class="n">GLOBAL_STATUS</span><span class="w"> </span><span class="n">P1</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="k">from</span><span class="w"> </span><span class="n">performance_schema</span><span class="p">.</span><span class="n">GLOBAL_STATUS</span><span class="w"> </span><span class="n">P1</span><span class="p">,</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">     </span><span class="n">performance_schema</span><span class="p">.</span><span class="n">GLOBAL_VARIABLES</span><span class="w"> </span><span class="n">P2</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="k">WHERE</span><span class="w"> </span><span class="n">P1</span><span class="p">.</span><span class="n">variable_name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;threads_connected&#39;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="k">WHERE</span><span class="w"> </span><span class="n">P1</span><span class="p">.</span><span class="n">variable_name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;threads_connected&#39;</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="k">AND</span><span class="w"> </span><span class="n">P2</span><span class="p">.</span><span class="n">variable_name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;max_connections&#39;</span><span class="p">;</span><span class="w">
 </span></span></span></code></pre></td></tr></table>
 </div>
@@ -215,9 +221,9 @@
 <pre tabindex="0" class="chroma"><code class="language-sql" data-lang="sql"><span class="line"><span class="cl"><span class="k">select</span><span class="w"> </span><span class="n">round</span><span class="p">((</span><span class="n">P1</span><span class="p">.</span><span class="n">variable_value</span><span class="p">)</span><span class="o">/</span><span class="p">(</span><span class="n">P2</span><span class="p">.</span><span class="n">variable_value</span><span class="p">),</span><span class="w"> </span><span class="mi">4</span><span class="p">)</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="n">connections_ever_seen</span><span class="p">,</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">       </span><span class="n">P1</span><span class="p">.</span><span class="n">variable_value</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="n">max_used_connections</span><span class="p">,</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">       </span><span class="n">P2</span><span class="p">.</span><span class="n">variable_value</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="n">max_connections</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="k">from</span><span class="w"> </span><span class="n">performance_schema</span><span class="p">.</span><span class="n">GLOBAL_STATUS</span><span class="w"> </span><span class="n">P1</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="k">from</span><span class="w"> </span><span class="n">performance_schema</span><span class="p">.</span><span class="n">GLOBAL_STATUS</span><span class="w"> </span><span class="n">P1</span><span class="p">,</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">     </span><span class="n">performance_schema</span><span class="p">.</span><span class="n">GLOBAL_VARIABLES</span><span class="w"> </span><span class="n">P2</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="k">WHERE</span><span class="w"> </span><span class="n">P1</span><span class="p">.</span><span class="n">variable_name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;max_used_connections&#39;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="k">WHERE</span><span class="w"> </span><span class="n">P1</span><span class="p">.</span><span class="n">variable_name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;max_used_connections&#39;</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="k">AND</span><span class="w"> </span><span class="n">P2</span><span class="p">.</span><span class="n">variable_name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;max_connections&#39;</span><span class="p">;</span><span class="w">
 </span></span></span></code></pre></td></tr></table>
 </div>
@@ -242,9 +248,9 @@
 </span></code></pre></td>
 <td class="lntd">
 <pre tabindex="0" class="chroma"><code class="language-sql" data-lang="sql"><span class="line"><span class="cl"><span class="k">select</span><span class="w"> </span><span class="n">round</span><span class="p">((</span><span class="n">P2</span><span class="p">.</span><span class="n">variable_value</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="n">P1</span><span class="p">.</span><span class="n">variable_value</span><span class="p">),</span><span class="w"> </span><span class="mi">4</span><span class="p">),</span><span class="w"> </span><span class="n">P2</span><span class="p">.</span><span class="n">variable_value</span><span class="p">,</span><span class="w"> </span><span class="n">P1</span><span class="p">.</span><span class="n">variable_value</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="k">from</span><span class="w"> </span><span class="n">performance_schema</span><span class="p">.</span><span class="n">GLOBAL_STATUS</span><span class="w"> </span><span class="n">P1</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="k">from</span><span class="w"> </span><span class="n">performance_schema</span><span class="p">.</span><span class="n">GLOBAL_STATUS</span><span class="w"> </span><span class="n">P1</span><span class="p">,</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">     </span><span class="n">performance_schema</span><span class="p">.</span><span class="n">GLOBAL_STATUS</span><span class="w"> </span><span class="n">P2</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="k">WHERE</span><span class="w"> </span><span class="n">P1</span><span class="p">.</span><span class="n">variable_name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;Connections&#39;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="k">WHERE</span><span class="w"> </span><span class="n">P1</span><span class="p">.</span><span class="n">variable_name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;Connections&#39;</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="k">AND</span><span class="w"> </span><span class="n">P2</span><span class="p">.</span><span class="n">variable_name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;Threads_created&#39;</span><span class="p">;</span><span class="w">
 </span></span></span></code></pre></td></tr></table>
 </div>
@@ -293,13 +299,13 @@
 </span></span></span><span class="line"><span class="cl"><span class="w">       </span><span class="n">P4</span><span class="p">.</span><span class="n">variable_value</span><span class="w">             </span><span class="k">as</span><span class="w"> </span><span class="n">Handler_read_next</span><span class="p">,</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">       </span><span class="n">P5</span><span class="p">.</span><span class="n">variable_value</span><span class="w">             </span><span class="k">as</span><span class="w"> </span><span class="n">Handler_read_key</span><span class="p">,</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">       </span><span class="n">P6</span><span class="p">.</span><span class="n">variable_value</span><span class="w">             </span><span class="k">as</span><span class="w"> </span><span class="n">Handler_read_prev</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="k">from</span><span class="w"> </span><span class="n">performance_schema</span><span class="p">.</span><span class="n">GLOBAL_STATUS</span><span class="w"> </span><span class="n">P1</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="k">from</span><span class="w"> </span><span class="n">performance_schema</span><span class="p">.</span><span class="n">GLOBAL_STATUS</span><span class="w"> </span><span class="n">P1</span><span class="p">,</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">     </span><span class="n">performance_schema</span><span class="p">.</span><span class="n">GLOBAL_STATUS</span><span class="w"> </span><span class="n">P2</span><span class="p">,</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">     </span><span class="n">performance_schema</span><span class="p">.</span><span class="n">GLOBAL_STATUS</span><span class="w"> </span><span class="n">P3</span><span class="p">,</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">     </span><span class="n">performance_schema</span><span class="p">.</span><span class="n">GLOBAL_STATUS</span><span class="w"> </span><span class="n">P4</span><span class="p">,</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">     </span><span class="n">performance_schema</span><span class="p">.</span><span class="n">GLOBAL_STATUS</span><span class="w"> </span><span class="n">P5</span><span class="p">,</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">     </span><span class="n">performance_schema</span><span class="p">.</span><span class="n">GLOBAL_STATUS</span><span class="w"> </span><span class="n">P6</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="k">WHERE</span><span class="w"> </span><span class="n">P1</span><span class="p">.</span><span class="n">variable_name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;Handler_read_rnd_next&#39;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="k">WHERE</span><span class="w"> </span><span class="n">P1</span><span class="p">.</span><span class="n">variable_name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;Handler_read_rnd_next&#39;</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="k">AND</span><span class="w"> </span><span class="n">P2</span><span class="p">.</span><span class="n">variable_name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;Handler_read_rnd&#39;</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="k">AND</span><span class="w"> </span><span class="n">P3</span><span class="p">.</span><span class="n">variable_name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;Handler_read_first&#39;</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="k">AND</span><span class="w"> </span><span class="n">P4</span><span class="p">.</span><span class="n">variable_name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;Handler_read_next&#39;</span><span class="w">
@@ -317,8 +323,8 @@
 </span></code></pre></td>
 <td class="lntd">
 <pre tabindex="0" class="chroma"><code class="language-sql" data-lang="sql"><span class="line"><span class="cl"><span class="k">select</span><span class="w"> </span><span class="o">*</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="k">from</span><span class="w"> </span><span class="n">performance_schema</span><span class="p">.</span><span class="n">GLOBAL_STATUS</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="k">where</span><span class="w"> </span><span class="n">variable_name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;select_full_join&#39;</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="k">from</span><span class="w"> </span><span class="n">performance_schema</span><span class="p">.</span><span class="n">GLOBAL_STATUS</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="k">where</span><span class="w"> </span><span class="n">variable_name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;select_full_join&#39;</span><span class="p">;</span><span class="w">
 </span></span></span></code></pre></td></tr></table>
 </div>
 </div><p>sort_merge_passes：使用排序的时候需要merge的part的数量，如果较大，可能需要调整sort_buffer_size和read_rnd_buffer_size</p>
@@ -330,8 +336,8 @@
 </span></code></pre></td>
 <td class="lntd">
 <pre tabindex="0" class="chroma"><code class="language-sql" data-lang="sql"><span class="line"><span class="cl"><span class="k">select</span><span class="w"> </span><span class="o">*</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="k">from</span><span class="w"> </span><span class="n">performance_schema</span><span class="p">.</span><span class="n">GLOBAL_STATUS</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="k">where</span><span class="w"> </span><span class="n">variable_name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;sort_merge_passes&#39;</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="k">from</span><span class="w"> </span><span class="n">performance_schema</span><span class="p">.</span><span class="n">GLOBAL_STATUS</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="k">where</span><span class="w"> </span><span class="n">variable_name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;sort_merge_passes&#39;</span><span class="p">;</span><span class="w">
 </span></span></span></code></pre></td></tr></table>
 </div>
 </div><p>sort_scan: 通过扫描表完成排序的数量</p>
@@ -355,10 +361,10 @@
 </span></span></span><span class="line"><span class="cl"><span class="w">       </span><span class="n">P1</span><span class="p">.</span><span class="n">variable_value</span><span class="w">                                                       </span><span class="k">as</span><span class="w"> </span><span class="n">sort_merge_passes</span><span class="p">,</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">       </span><span class="n">P2</span><span class="p">.</span><span class="n">variable_value</span><span class="w">                                                       </span><span class="k">as</span><span class="w"> </span><span class="n">sort_scan</span><span class="p">,</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">       </span><span class="n">P3</span><span class="p">.</span><span class="n">variable_value</span><span class="w">                                                       </span><span class="k">as</span><span class="w"> </span><span class="n">sort_range</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="k">from</span><span class="w"> </span><span class="n">performance_schema</span><span class="p">.</span><span class="n">GLOBAL_STATUS</span><span class="w"> </span><span class="n">P1</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="k">from</span><span class="w"> </span><span class="n">performance_schema</span><span class="p">.</span><span class="n">GLOBAL_STATUS</span><span class="w"> </span><span class="n">P1</span><span class="p">,</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">     </span><span class="n">performance_schema</span><span class="p">.</span><span class="n">GLOBAL_STATUS</span><span class="w"> </span><span class="n">P2</span><span class="p">,</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">     </span><span class="n">performance_schema</span><span class="p">.</span><span class="n">GLOBAL_STATUS</span><span class="w"> </span><span class="n">P3</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="k">WHERE</span><span class="w"> </span><span class="n">P1</span><span class="p">.</span><span class="n">variable_name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;sort_merge_passes&#39;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="k">WHERE</span><span class="w"> </span><span class="n">P1</span><span class="p">.</span><span class="n">variable_name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;sort_merge_passes&#39;</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="k">AND</span><span class="w"> </span><span class="n">P2</span><span class="p">.</span><span class="n">variable_name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;sort_scan&#39;</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="k">AND</span><span class="w"> </span><span class="n">P3</span><span class="p">.</span><span class="n">variable_name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;sort_range&#39;</span><span class="p">;</span><span class="w">
 </span></span></span></code></pre></td></tr></table>
@@ -382,15 +388,15 @@
 </span></code></pre></td>
 <td class="lntd">
 <pre tabindex="0" class="chroma"><code class="language-sql" data-lang="sql"><span class="line"><span class="cl"><span class="k">select</span><span class="w"> </span><span class="n">round</span><span class="p">((</span><span class="mi">1</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">P2</span><span class="p">.</span><span class="n">variable_value</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="n">P1</span><span class="p">.</span><span class="n">variable_value</span><span class="p">),</span><span class="w"> </span><span class="mi">4</span><span class="p">),</span><span class="w"> </span><span class="n">P2</span><span class="p">.</span><span class="n">variable_value</span><span class="p">,</span><span class="w"> </span><span class="n">P1</span><span class="p">.</span><span class="n">variable_value</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="k">from</span><span class="w"> </span><span class="n">performance_schema</span><span class="p">.</span><span class="n">GLOBAL_STATUS</span><span class="w"> </span><span class="n">P1</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="k">from</span><span class="w"> </span><span class="n">performance_schema</span><span class="p">.</span><span class="n">GLOBAL_STATUS</span><span class="w"> </span><span class="n">P1</span><span class="p">,</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">     </span><span class="n">performance_schema</span><span class="p">.</span><span class="n">GLOBAL_STATUS</span><span class="w"> </span><span class="n">P2</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="k">WHERE</span><span class="w"> </span><span class="n">P1</span><span class="p">.</span><span class="n">variable_name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;innodb_buffer_pool_read_requests&#39;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="k">WHERE</span><span class="w"> </span><span class="n">P1</span><span class="p">.</span><span class="n">variable_name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;innodb_buffer_pool_read_requests&#39;</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="k">AND</span><span class="w"> </span><span class="n">P2</span><span class="p">.</span><span class="n">variable_name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;innodb_buffer_pool_reads&#39;</span><span class="p">;</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  
-</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="k">select</span><span class="w"> </span><span class="n">pool_id</span><span class="p">,</span><span class="n">hit_rate</span><span class="p">,</span><span class="n">pages_made_young</span><span class="p">,</span><span class="n">pages_not_made_young</span><span class="w"> </span><span class="k">from</span><span class="w"> </span><span class="n">information_schema</span><span class="p">.</span><span class="n">innodb_buffer_pool_stats</span><span class="err">\</span><span class="k">G</span><span class="p">;</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="o">#</span><span class="w"> </span><span class="err">查询</span><span class="n">lru的状态</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="k">select</span><span class="w"> </span><span class="k">table_name</span><span class="p">,</span><span class="k">space</span><span class="p">,</span><span class="n">page_number</span><span class="p">,</span><span class="n">page_type</span><span class="w"> </span><span class="k">from</span><span class="w"> </span><span class="n">information_schema</span><span class="p">.</span><span class="n">innodb_buffer_page_lru</span><span class="w"> </span><span class="k">where</span><span class="w"> </span><span class="k">space</span><span class="o">=</span><span class="mi">1</span><span class="p">;</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="k">select</span><span class="w"> </span><span class="k">table_name</span><span class="p">,</span><span class="k">space</span><span class="p">,</span><span class="n">page_number</span><span class="p">,</span><span class="n">page_type</span><span class="w"> </span><span class="k">from</span><span class="w"> </span><span class="n">information_schema</span><span class="p">.</span><span class="n">innodb_buffer_page_lru</span><span class="w"> </span><span class="k">where</span><span class="w"> </span><span class="n">oldest_modification</span><span class="o">&gt;</span><span class="mi">0</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="k">select</span><span class="w"> </span><span class="n">pool_id</span><span class="p">,</span><span class="n">hit_rate</span><span class="p">,</span><span class="n">pages_made_young</span><span class="p">,</span><span class="n">pages_not_made_young</span><span class="w"> </span><span class="k">from</span><span class="w"> </span><span class="n">information_schema</span><span class="p">.</span><span class="n">innodb_buffer_pool_stats</span><span class="err">\</span><span class="k">G</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="o">#</span><span class="w"> </span><span class="err">查询</span><span class="n">lru的状态</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="k">select</span><span class="w"> </span><span class="k">table_name</span><span class="p">,</span><span class="k">space</span><span class="p">,</span><span class="n">page_number</span><span class="p">,</span><span class="n">page_type</span><span class="w"> </span><span class="k">from</span><span class="w"> </span><span class="n">information_schema</span><span class="p">.</span><span class="n">innodb_buffer_page_lru</span><span class="w"> </span><span class="k">where</span><span class="w"> </span><span class="k">space</span><span class="o">=</span><span class="mi">1</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="k">select</span><span class="w"> </span><span class="k">table_name</span><span class="p">,</span><span class="k">space</span><span class="p">,</span><span class="n">page_number</span><span class="p">,</span><span class="n">page_type</span><span class="w"> </span><span class="k">from</span><span class="w"> </span><span class="n">information_schema</span><span class="p">.</span><span class="n">innodb_buffer_page_lru</span><span class="w"> </span><span class="k">where</span><span class="w"> </span><span class="n">oldest_modification</span><span class="o">&gt;</span><span class="mi">0</span><span class="p">;</span><span class="w">
 </span></span></span></code></pre></td></tr></table>
 </div>
 </div><p>innodb_buffer_pool_pages_dirty: buffer pool中脏页（dirty page：在内存中更新但是没有还没有写到datafile中的页；clean page：内存中的数据和data file中的数据一致的页）的数量</p>
@@ -410,9 +416,9 @@
 <pre tabindex="0" class="chroma"><code class="language-sql" data-lang="sql"><span class="line"><span class="cl"><span class="k">select</span><span class="w"> </span><span class="n">round</span><span class="p">((</span><span class="n">P1</span><span class="p">.</span><span class="n">variable_value</span><span class="p">)</span><span class="o">/</span><span class="p">(</span><span class="n">P2</span><span class="p">.</span><span class="n">variable_value</span><span class="p">),</span><span class="w"> </span><span class="mi">4</span><span class="p">)</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="n">dirty_page</span><span class="p">,</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">       </span><span class="n">P1</span><span class="p">.</span><span class="n">variable_value</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="n">innodb_buffer_pool_pages_dirty</span><span class="p">,</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">       </span><span class="n">P2</span><span class="p">.</span><span class="n">variable_value</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="n">innodb_buffer_pool_pages_total</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="k">from</span><span class="w"> </span><span class="n">performance_schema</span><span class="p">.</span><span class="n">GLOBAL_STATUS</span><span class="w"> </span><span class="n">P1</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="k">from</span><span class="w"> </span><span class="n">performance_schema</span><span class="p">.</span><span class="n">GLOBAL_STATUS</span><span class="w"> </span><span class="n">P1</span><span class="p">,</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">     </span><span class="n">performance_schema</span><span class="p">.</span><span class="n">GLOBAL_STATUS</span><span class="w"> </span><span class="n">P2</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="k">WHERE</span><span class="w"> </span><span class="n">P1</span><span class="p">.</span><span class="n">variable_name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;innodb_buffer_pool_pages_dirty&#39;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="k">WHERE</span><span class="w"> </span><span class="n">P1</span><span class="p">.</span><span class="n">variable_name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;innodb_buffer_pool_pages_dirty&#39;</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="k">AND</span><span class="w"> </span><span class="n">P2</span><span class="p">.</span><span class="n">variable_name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;innodb_buffer_pool_pages_total&#39;</span><span class="p">;</span><span class="w">
 </span></span></span></code></pre></td></tr></table>
 </div>
@@ -433,9 +439,9 @@
 <pre tabindex="0" class="chroma"><code class="language-sql" data-lang="sql"><span class="line"><span class="cl"><span class="k">select</span><span class="w"> </span><span class="n">round</span><span class="p">((</span><span class="n">P1</span><span class="p">.</span><span class="n">variable_value</span><span class="p">)</span><span class="o">/</span><span class="p">(</span><span class="n">P2</span><span class="p">.</span><span class="n">variable_value</span><span class="p">),</span><span class="w"> </span><span class="mi">4</span><span class="p">)</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="n">dirty_page</span><span class="p">,</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">       </span><span class="n">P1</span><span class="p">.</span><span class="n">variable_value</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="n">innodb_buffer_pool_wait_free</span><span class="p">,</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">       </span><span class="n">P2</span><span class="p">.</span><span class="n">variable_value</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="n">innodb_buffer_pool_write_requests</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="k">from</span><span class="w"> </span><span class="n">performance_schema</span><span class="p">.</span><span class="n">GLOBAL_STATUS</span><span class="w"> </span><span class="n">P1</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="k">from</span><span class="w"> </span><span class="n">performance_schema</span><span class="p">.</span><span class="n">GLOBAL_STATUS</span><span class="w"> </span><span class="n">P1</span><span class="p">,</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">     </span><span class="n">performance_schema</span><span class="p">.</span><span class="n">GLOBAL_STATUS</span><span class="w"> </span><span class="n">P2</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="k">WHERE</span><span class="w"> </span><span class="n">P1</span><span class="p">.</span><span class="n">variable_name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;innodb_buffer_pool_wait_free&#39;</span><span class="w">  </span><span class="k">AND</span><span class="w"> </span><span class="n">P2</span><span class="p">.</span><span class="n">variable_name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;innodb_buffer_pool_write_requests&#39;</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="k">WHERE</span><span class="w"> </span><span class="n">P1</span><span class="p">.</span><span class="n">variable_name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;innodb_buffer_pool_wait_free&#39;</span><span class="w">  </span><span class="k">AND</span><span class="w"> </span><span class="n">P2</span><span class="p">.</span><span class="n">variable_name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;innodb_buffer_pool_write_requests&#39;</span><span class="p">;</span><span class="w">
 </span></span></span></code></pre></td></tr></table>
 </div>
 </div><p>这个数据太大则表明innodb_buffer_pool_size太小。小于1一般是正常数据</p>
@@ -455,9 +461,9 @@
 <pre tabindex="0" class="chroma"><code class="language-sql" data-lang="sql"><span class="line"><span class="cl"><span class="k">select</span><span class="w"> </span><span class="n">round</span><span class="p">((</span><span class="n">P1</span><span class="p">.</span><span class="n">variable_value</span><span class="p">)</span><span class="o">/</span><span class="p">(</span><span class="n">P2</span><span class="p">.</span><span class="n">variable_value</span><span class="p">),</span><span class="w"> </span><span class="mi">4</span><span class="p">)</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="n">redolog_wait</span><span class="p">,</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">       </span><span class="n">P1</span><span class="p">.</span><span class="n">variable_value</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="n">innodb_log_waits</span><span class="p">,</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">       </span><span class="n">P2</span><span class="p">.</span><span class="n">variable_value</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="n">innodb_log_writes</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="k">from</span><span class="w"> </span><span class="n">performance_schema</span><span class="p">.</span><span class="n">GLOBAL_STATUS</span><span class="w"> </span><span class="n">P1</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="k">from</span><span class="w"> </span><span class="n">performance_schema</span><span class="p">.</span><span class="n">GLOBAL_STATUS</span><span class="w"> </span><span class="n">P1</span><span class="p">,</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">     </span><span class="n">performance_schema</span><span class="p">.</span><span class="n">GLOBAL_STATUS</span><span class="w"> </span><span class="n">P2</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="k">WHERE</span><span class="w"> </span><span class="n">P1</span><span class="p">.</span><span class="n">variable_name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;innodb_log_waits&#39;</span><span class="w">  </span><span class="k">AND</span><span class="w"> </span><span class="n">P2</span><span class="p">.</span><span class="n">variable_name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;innodb_log_writes&#39;</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="k">WHERE</span><span class="w"> </span><span class="n">P1</span><span class="p">.</span><span class="n">variable_name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;innodb_log_waits&#39;</span><span class="w">  </span><span class="k">AND</span><span class="w"> </span><span class="n">P2</span><span class="p">.</span><span class="n">variable_name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;innodb_log_writes&#39;</span><span class="p">;</span><span class="w">
 </span></span></span></code></pre></td></tr></table>
 </div>
 </div><p>如果这个数值大于1，则需要调整innodb_log_buffer_size</p>
@@ -476,9 +482,9 @@
 <pre tabindex="0" class="chroma"><code class="language-sql" data-lang="sql"><span class="line"><span class="cl"><span class="k">select</span><span class="w"> </span><span class="n">round</span><span class="p">((</span><span class="n">P1</span><span class="p">.</span><span class="n">variable_value</span><span class="p">)</span><span class="o">/</span><span class="p">(</span><span class="n">P2</span><span class="p">.</span><span class="n">variable_value</span><span class="p">),</span><span class="w"> </span><span class="mi">4</span><span class="p">)</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="n">table_cache_usage</span><span class="p">,</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">       </span><span class="n">P1</span><span class="p">.</span><span class="n">variable_value</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="n">opened_tables</span><span class="p">,</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">       </span><span class="n">P2</span><span class="p">.</span><span class="n">variable_value</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="n">table_open_cache</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="k">from</span><span class="w"> </span><span class="n">performance_schema</span><span class="p">.</span><span class="n">GLOBAL_STATUS</span><span class="w"> </span><span class="n">P1</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="k">from</span><span class="w"> </span><span class="n">performance_schema</span><span class="p">.</span><span class="n">GLOBAL_STATUS</span><span class="w"> </span><span class="n">P1</span><span class="p">,</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">     </span><span class="n">performance_schema</span><span class="p">.</span><span class="n">GLOBAL_VARIABLES</span><span class="w"> </span><span class="n">P2</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="k">WHERE</span><span class="w"> </span><span class="n">P1</span><span class="p">.</span><span class="n">variable_name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;opened_tables&#39;</span><span class="w">  </span><span class="k">AND</span><span class="w"> </span><span class="n">P2</span><span class="p">.</span><span class="n">variable_name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;table_open_cache&#39;</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="k">WHERE</span><span class="w"> </span><span class="n">P1</span><span class="p">.</span><span class="n">variable_name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;opened_tables&#39;</span><span class="w">  </span><span class="k">AND</span><span class="w"> </span><span class="n">P2</span><span class="p">.</span><span class="n">variable_name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;table_open_cache&#39;</span><span class="p">;</span><span class="w">
 </span></span></span></code></pre></td></tr></table>
 </div>
 </div><p>小于1需要调整table_open_cache</p>
@@ -499,9 +505,9 @@
 <pre tabindex="0" class="chroma"><code class="language-sql" data-lang="sql"><span class="line"><span class="cl"><span class="k">select</span><span class="w"> </span><span class="n">round</span><span class="p">((</span><span class="n">P1</span><span class="p">.</span><span class="n">variable_value</span><span class="p">)</span><span class="o">/</span><span class="p">(</span><span class="n">P2</span><span class="p">.</span><span class="n">variable_value</span><span class="p">),</span><span class="w"> </span><span class="mi">4</span><span class="p">)</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="n">tmp_table_disk_usage</span><span class="p">,</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">       </span><span class="n">P1</span><span class="p">.</span><span class="n">variable_value</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="n">Created_tmp_disk_tables</span><span class="p">,</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">       </span><span class="n">P2</span><span class="p">.</span><span class="n">variable_value</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="n">Created_tmp_tables</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="k">from</span><span class="w"> </span><span class="n">performance_schema</span><span class="p">.</span><span class="n">GLOBAL_STATUS</span><span class="w"> </span><span class="n">P1</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="k">from</span><span class="w"> </span><span class="n">performance_schema</span><span class="p">.</span><span class="n">GLOBAL_STATUS</span><span class="w"> </span><span class="n">P1</span><span class="p">,</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">     </span><span class="n">performance_schema</span><span class="p">.</span><span class="n">GLOBAL_STATUS</span><span class="w"> </span><span class="n">P2</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w"></span><span class="k">WHERE</span><span class="w"> </span><span class="n">P1</span><span class="p">.</span><span class="n">variable_name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;Created_tmp_disk_tables&#39;</span><span class="w">  </span><span class="k">AND</span><span class="w"> </span><span class="n">P2</span><span class="p">.</span><span class="n">variable_name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;Created_tmp_tables&#39;</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="k">WHERE</span><span class="w"> </span><span class="n">P1</span><span class="p">.</span><span class="n">variable_name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;Created_tmp_disk_tables&#39;</span><span class="w">  </span><span class="k">AND</span><span class="w"> </span><span class="n">P2</span><span class="p">.</span><span class="n">variable_name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;Created_tmp_tables&#39;</span><span class="p">;</span><span class="w">
 </span></span></span></code></pre></td></tr></table>
 </div>
 </div><h2 id="一些sql">一些SQL</h2>
@@ -697,7 +703,7 @@
   <span class="copyright-year">
     &copy; 
     2022 - 
-    2023<span class="heart"><i class="iconfont icon-heart"></i></span><span><a href="/">hlday</a></span>
+    2026<span class="heart"><i class="iconfont icon-heart"></i></span><span><a href="/">hlday</a></span>
   </span>
 </div>
 
@@ -714,7 +720,7 @@
 
 
 
-<script type="text/javascript" src="/js/main.min.bfb94e1fe4773651a6fe907d388ed08d7d6f9628a062d0740d992e1dfb49466e.js"></script>
+<script type="text/javascript" src="/js/main.min.d3d26fe720923eebdba72c7cb26eef946d17ef1a1a7a289857149666ace3dfec.js"></script>
   <script type="text/javascript">
     window.MathJax = {
       tex: {
@@ -723,6 +729,7 @@
     };
   </script>
   <script async src="https://cdn.jsdelivr.net/npm/mathjax@3.0.5/es5/tex-mml-chtml.js" integrity="sha256-HGLuEfFcsUJGhvB8cQ8nr0gai9EucOOaIxFw7qxmd+w=" crossorigin="anonymous"></script>
+
 
 
 

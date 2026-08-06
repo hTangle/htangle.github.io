@@ -31,7 +31,7 @@
   gtag('config', 'G-59Y2CYW544');
 </script>
 
-<meta name="generator" content="Hugo 0.93.2 with theme even" />
+<meta name="generator" content="Hugo 0.164.0 with theme even" />
 
 
 <link rel="canonical" href="/post/golang/gmp/" />
@@ -43,24 +43,30 @@
 
 <script async src="//busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
 
-<link href="/sass/main.min.b5a744db6de49a86cadafb3b70f555ab443f83c307a483402259e94726b045ff.css" rel="stylesheet">
+<link href="/sass/main.min.52d539dfadc86246e6ba9a98b4b3a7268cddea9db8ace7933730de9afef2c275.css" rel="stylesheet">
 
 
 
-<meta property="og:title" content="GMP调度原理" />
-<meta property="og:description" content="Goroutine 调度器过程及原理" />
-<meta property="og:type" content="article" />
-<meta property="og:url" content="/post/golang/gmp/" /><meta property="article:section" content="post" />
-<meta property="article:published_time" content="2022-03-09T20:59:22+08:00" />
-<meta property="article:modified_time" content="2022-03-09T20:59:22+08:00" />
+<meta property="og:url" content="/post/golang/gmp/">
+	<meta property="og:site_name" content="HLDay">
+	<meta property="og:title" content="GMP调度原理">
+	<meta property="og:description" content="Goroutine 调度器过程及原理">
+	<meta property="og:locale" content="en">
+	<meta property="og:type" content="article">
+		<meta property="article:section" content="post">
+		<meta property="article:published_time" content="2022-03-09T20:59:22+08:00">
+		<meta property="article:modified_time" content="2022-03-09T20:59:22+08:00">
+		<meta property="article:tag" content="Go">
 
-<meta itemprop="name" content="GMP调度原理">
-<meta itemprop="description" content="Goroutine 调度器过程及原理"><meta itemprop="datePublished" content="2022-03-09T20:59:22+08:00" />
-<meta itemprop="dateModified" content="2022-03-09T20:59:22+08:00" />
-<meta itemprop="wordCount" content="11573">
-<meta itemprop="keywords" content="go," /><meta name="twitter:card" content="summary"/>
-<meta name="twitter:title" content="GMP调度原理"/>
-<meta name="twitter:description" content="Goroutine 调度器过程及原理"/>
+	<meta itemprop="name" content="GMP调度原理">
+	<meta itemprop="description" content="Goroutine 调度器过程及原理">
+	<meta itemprop="datePublished" content="2022-03-09T20:59:22+08:00">
+	<meta itemprop="dateModified" content="2022-03-09T20:59:22+08:00">
+	<meta itemprop="wordCount" content="11542">
+	<meta itemprop="keywords" content="Go">
+	<meta name="twitter:card" content="summary">
+	<meta name="twitter:title" content="GMP调度原理">
+	<meta name="twitter:description" content="Goroutine 调度器过程及原理">
 
 <!--[if lte IE 9]>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
@@ -148,7 +154,7 @@
         <div class="post-category">
             <a href="/categories/go/"> go </a>
             </div>
-          <span class="more-meta"> 11573 words </span>
+          <span class="more-meta"> 11542 words </span>
           <span class="more-meta"> 24 mins read </span>
         <span id="busuanzi_container_page_pv" class="more-meta"> <span id="busuanzi_value_page_pv"><img src="/img/spinner.svg" alt="spinner.svg"/></span> times read </span>
       </div>
@@ -255,74 +261,74 @@
 </span><span class="lnt">19
 </span></code></pre></td>
 <td class="lntd">
-<pre tabindex="0" class="chroma"><code class="language-go" data-lang="go"><span class="line"><span class="cl"><span class="kd">type</span> <span class="nx">g</span> <span class="kd">struct</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">        <span class="nx">stack</span>       <span class="nx">stack</span>
-</span></span><span class="line"><span class="cl">        <span class="nx">stackguard0</span> <span class="kt">uintptr</span>
-</span></span><span class="line"><span class="cl">        <span class="nx">preempt</span>       <span class="kt">bool</span> <span class="c1">// 抢占信号
-</span></span></span><span class="line"><span class="cl"><span class="c1"></span>        <span class="nx">preemptStop</span>   <span class="kt">bool</span> <span class="c1">// 抢占时将状态修改成 `_Gpreempted`
-</span></span></span><span class="line"><span class="cl"><span class="c1"></span>        <span class="nx">preemptShrink</span> <span class="kt">bool</span> <span class="c1">// 在同步安全点收缩栈
-</span></span></span><span class="line"><span class="cl"><span class="c1"></span>        <span class="nx">_panic</span>       <span class="o">*</span><span class="nx">_panic</span> <span class="c1">// 最内侧的 panic 结构体
-</span></span></span><span class="line"><span class="cl"><span class="c1"></span>        <span class="nx">_defer</span>       <span class="o">*</span><span class="nx">_defer</span> <span class="c1">// 最内侧的延迟函数结构体
-</span></span></span><span class="line"><span class="cl"><span class="c1"></span>        <span class="nx">m</span>              <span class="o">*</span><span class="nx">m</span>  <span class="c1">// 当前 Goroutine 占用的线程，可能为空；
-</span></span></span><span class="line"><span class="cl"><span class="c1"></span>        <span class="nx">sched</span>          <span class="nx">gobuf</span> <span class="c1">// 存储 Goroutine 的调度相关的数据；
-</span></span></span><span class="line"><span class="cl"><span class="c1"></span>        <span class="nx">atomicstatus</span>   <span class="kt">uint32</span> <span class="c1">//Goroutine 的状态；
-</span></span></span><span class="line"><span class="cl"><span class="c1"></span>        <span class="nx">goid</span>           <span class="kt">int64</span>
-</span></span><span class="line"><span class="cl"><span class="p">}</span>
-</span></span><span class="line"><span class="cl"><span class="kd">type</span> <span class="nx">gobuf</span> <span class="kd">struct</span> <span class="p">{</span> <span class="c1">//在调度器保存或者恢复上下文的时候用到，其中的栈指针和程序计数器会用来存储或者恢复寄存器中的值，改变程序即将执行的代码。
-</span></span></span><span class="line"><span class="cl"><span class="c1"></span>        <span class="nx">sp</span>   <span class="kt">uintptr</span> <span class="c1">//栈指针
-</span></span></span><span class="line"><span class="cl"><span class="c1"></span>        <span class="nx">pc</span>   <span class="kt">uintptr</span> <span class="c1">//程序计数器；
-</span></span></span><span class="line"><span class="cl"><span class="c1"></span>        <span class="nx">g</span>    <span class="nx">guintptr</span> <span class="c1">// 持有 runtime.gobuf 的 Goroutine；
-</span></span></span><span class="line"><span class="cl"><span class="c1"></span>        <span class="nx">ret</span>  <span class="nx">sys</span><span class="p">.</span><span class="nx">Uintreg</span> <span class="c1">// 系统调用的返回值；
-</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="p">}</span>
-</span></span></code></pre></td></tr></table>
+<pre tabindex="0" class="chroma"><code class="language-go" data-lang="go"><span class="line"><span class="cl"><span class="kd">type</span><span class="w"> </span><span class="nx">g</span><span class="w"> </span><span class="kd">struct</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="nx">stack</span><span class="w">       </span><span class="nx">stack</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="nx">stackguard0</span><span class="w"> </span><span class="kt">uintptr</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="nx">preempt</span><span class="w">       </span><span class="kt">bool</span><span class="w"> </span><span class="c1">// 抢占信号</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="nx">preemptStop</span><span class="w">   </span><span class="kt">bool</span><span class="w"> </span><span class="c1">// 抢占时将状态修改成 `_Gpreempted`</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="nx">preemptShrink</span><span class="w"> </span><span class="kt">bool</span><span class="w"> </span><span class="c1">// 在同步安全点收缩栈</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="nx">_panic</span><span class="w">       </span><span class="o">*</span><span class="nx">_panic</span><span class="w"> </span><span class="c1">// 最内侧的 panic 结构体</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="nx">_defer</span><span class="w">       </span><span class="o">*</span><span class="nx">_defer</span><span class="w"> </span><span class="c1">// 最内侧的延迟函数结构体</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="nx">m</span><span class="w">              </span><span class="o">*</span><span class="nx">m</span><span class="w">  </span><span class="c1">// 当前 Goroutine 占用的线程，可能为空；</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="nx">sched</span><span class="w">          </span><span class="nx">gobuf</span><span class="w"> </span><span class="c1">// 存储 Goroutine 的调度相关的数据；</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="nx">atomicstatus</span><span class="w">   </span><span class="kt">uint32</span><span class="w"> </span><span class="cp">//Goroutine 的状态；</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="nx">goid</span><span class="w">           </span><span class="kt">int64</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="kd">type</span><span class="w"> </span><span class="nx">gobuf</span><span class="w"> </span><span class="kd">struct</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="cp">//在调度器保存或者恢复上下文的时候用到，其中的栈指针和程序计数器会用来存储或者恢复寄存器中的值，改变程序即将执行的代码。</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="nx">sp</span><span class="w">   </span><span class="kt">uintptr</span><span class="w"> </span><span class="cp">//栈指针</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="nx">pc</span><span class="w">   </span><span class="kt">uintptr</span><span class="w"> </span><span class="cp">//程序计数器；</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="nx">g</span><span class="w">    </span><span class="nx">guintptr</span><span class="w"> </span><span class="c1">// 持有 runtime.gobuf 的 Goroutine；</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="nx">ret</span><span class="w">  </span><span class="nx">sys</span><span class="p">.</span><span class="nx">Uintreg</span><span class="w"> </span><span class="c1">// 系统调用的返回值；</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="p">}</span><span class="w">
+</span></span></span></code></pre></td></tr></table>
 </div>
 </div><p>其中 <code>stack</code> 字段描述了当前 Goroutine 的栈内存范围 [stack.lo, stack.hi)，另一个字段 <code>stackguard0</code> 可以用于调度器抢占式调度。除了 <code>stackguard0</code> 之外，Goroutine 中还包含另外三个与抢占密切相关的字段：preempt、preemptStop、preemptShrink</p>
 <p>结构体 <a href="https://draveness.me/golang/tree/runtime.g"><code>runtime.g</code></a> 的 <code>atomicstatus</code> 字段存储了当前 Goroutine 的状态。除了几个已经不被使用的以及与 GC 相关的状态之外，Goroutine 可能处于以下 9 种状态：</p>
 <table>
-<thead>
-<tr>
-<th>状态</th>
-<th>描述</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>_Gidle</code></td>
-<td>刚刚被分配并且还没有被初始化</td>
-</tr>
-<tr>
-<td><code>_Grunnable</code></td>
-<td>没有执行代码，没有栈的所有权，存储在运行队列中</td>
-</tr>
-<tr>
-<td><code>_Grunning</code></td>
-<td>可以执行代码，拥有栈的所有权，被赋予了内核线程 M 和处理器 P</td>
-</tr>
-<tr>
-<td><code>_Gsyscall</code></td>
-<td>正在执行系统调用，拥有栈的所有权，没有执行用户代码，被赋予了内核线程 M 但是不在运行队列上</td>
-</tr>
-<tr>
-<td><code>_Gwaiting</code></td>
-<td>由于运行时而被阻塞，没有执行用户代码并且不在运行队列上，但是可能存在于 Channel 的等待队列上</td>
-</tr>
-<tr>
-<td><code>_Gdead</code></td>
-<td>没有被使用，没有执行代码，可能有分配的栈</td>
-</tr>
-<tr>
-<td><code>_Gcopystack</code></td>
-<td>栈正在被拷贝，没有执行代码，不在运行队列上</td>
-</tr>
-<tr>
-<td><code>_Gpreempted</code></td>
-<td>由于抢占而被阻塞，没有执行用户代码并且不在运行队列上，等待唤醒</td>
-</tr>
-<tr>
-<td><code>_Gscan</code></td>
-<td>GC 正在扫描栈空间，没有执行代码，可以与其他状态同时存在</td>
-</tr>
-</tbody>
+	<thead>
+			<tr>
+					<th>状态</th>
+					<th>描述</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td><code>_Gidle</code></td>
+					<td>刚刚被分配并且还没有被初始化</td>
+			</tr>
+			<tr>
+					<td><code>_Grunnable</code></td>
+					<td>没有执行代码，没有栈的所有权，存储在运行队列中</td>
+			</tr>
+			<tr>
+					<td><code>_Grunning</code></td>
+					<td>可以执行代码，拥有栈的所有权，被赋予了内核线程 M 和处理器 P</td>
+			</tr>
+			<tr>
+					<td><code>_Gsyscall</code></td>
+					<td>正在执行系统调用，拥有栈的所有权，没有执行用户代码，被赋予了内核线程 M 但是不在运行队列上</td>
+			</tr>
+			<tr>
+					<td><code>_Gwaiting</code></td>
+					<td>由于运行时而被阻塞，没有执行用户代码并且不在运行队列上，但是可能存在于 Channel 的等待队列上</td>
+			</tr>
+			<tr>
+					<td><code>_Gdead</code></td>
+					<td>没有被使用，没有执行代码，可能有分配的栈</td>
+			</tr>
+			<tr>
+					<td><code>_Gcopystack</code></td>
+					<td>栈正在被拷贝，没有执行代码，不在运行队列上</td>
+			</tr>
+			<tr>
+					<td><code>_Gpreempted</code></td>
+					<td>由于抢占而被阻塞，没有执行用户代码并且不在运行队列上，等待唤醒</td>
+			</tr>
+			<tr>
+					<td><code>_Gscan</code></td>
+					<td>GC 正在扫描栈空间，没有执行代码，可以与其他状态同时存在</td>
+			</tr>
+	</tbody>
 </table>
 <p>虽然 Goroutine 在运行时中定义的状态非常多而且复杂，但是我们可以将这些不同的状态聚合成三种：等待中、可运行、运行中，运行期间会在这三种状态来回切换：</p>
 <ul>
@@ -345,14 +351,14 @@
 </span><span class="lnt">7
 </span></code></pre></td>
 <td class="lntd">
-<pre tabindex="0" class="chroma"><code class="language-go" data-lang="go"><span class="line"><span class="cl"><span class="kd">type</span> <span class="nx">m</span> <span class="kd">struct</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">        <span class="nx">g0</span>   <span class="o">*</span><span class="nx">g</span>
-</span></span><span class="line"><span class="cl">        <span class="nx">curg</span> <span class="o">*</span><span class="nx">g</span>
-</span></span><span class="line"><span class="cl">        <span class="nx">p</span>             <span class="nx">puintptr</span>
-</span></span><span class="line"><span class="cl">        <span class="nx">nextp</span>         <span class="nx">puintptr</span>
-</span></span><span class="line"><span class="cl">        <span class="nx">oldp</span>          <span class="nx">puintptr</span>
-</span></span><span class="line"><span class="cl"><span class="p">}</span>
-</span></span></code></pre></td></tr></table>
+<pre tabindex="0" class="chroma"><code class="language-go" data-lang="go"><span class="line"><span class="cl"><span class="kd">type</span><span class="w"> </span><span class="nx">m</span><span class="w"> </span><span class="kd">struct</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="nx">g0</span><span class="w">   </span><span class="o">*</span><span class="nx">g</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="nx">curg</span><span class="w"> </span><span class="o">*</span><span class="nx">g</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="nx">p</span><span class="w">             </span><span class="nx">puintptr</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="nx">nextp</span><span class="w">         </span><span class="nx">puintptr</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="nx">oldp</span><span class="w">          </span><span class="nx">puintptr</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="p">}</span><span class="w">
+</span></span></span></code></pre></td></tr></table>
 </div>
 </div><p>其中 g0 是持有调度栈的 Goroutine，<code>curg</code> 是在当前线程上运行的用户 Goroutine，这也是操作系统线程唯一关心的两个 Goroutine。</p>
 <p>g0 是一个运行时中比较特殊的 Goroutine，它会深度参与运行时的调度过程，包括 Goroutine 的创建、大内存分配和 CGO 函数的执行。在后面的小节中，我们会经常看到 g0 的身影。</p>
@@ -374,48 +380,48 @@
 </span><span class="lnt">9
 </span></code></pre></td>
 <td class="lntd">
-<pre tabindex="0" class="chroma"><code class="language-go" data-lang="go"><span class="line"><span class="cl"><span class="kd">type</span> <span class="nx">p</span> <span class="kd">struct</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">        <span class="nx">m</span>           <span class="nx">muintptr</span>
-</span></span><span class="line"><span class="cl">
-</span></span><span class="line"><span class="cl">        <span class="nx">runqhead</span> <span class="kt">uint32</span>
-</span></span><span class="line"><span class="cl">        <span class="nx">runqtail</span> <span class="kt">uint32</span>
-</span></span><span class="line"><span class="cl">        <span class="nx">runq</span>     <span class="p">[</span><span class="mi">256</span><span class="p">]</span><span class="nx">guintptr</span>
-</span></span><span class="line"><span class="cl">        <span class="nx">runnext</span> <span class="nx">guintptr</span>
-</span></span><span class="line"><span class="cl">        <span class="o">...</span>
-</span></span><span class="line"><span class="cl"><span class="p">}</span>
-</span></span></code></pre></td></tr></table>
+<pre tabindex="0" class="chroma"><code class="language-go" data-lang="go"><span class="line"><span class="cl"><span class="kd">type</span><span class="w"> </span><span class="nx">p</span><span class="w"> </span><span class="kd">struct</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="nx">m</span><span class="w">           </span><span class="nx">muintptr</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="nx">runqhead</span><span class="w"> </span><span class="kt">uint32</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="nx">runqtail</span><span class="w"> </span><span class="kt">uint32</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="nx">runq</span><span class="w">     </span><span class="p">[</span><span class="mi">256</span><span class="p">]</span><span class="nx">guintptr</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="nx">runnext</span><span class="w"> </span><span class="nx">guintptr</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="o">...</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="p">}</span><span class="w">
+</span></span></span></code></pre></td></tr></table>
 </div>
 </div><p>反向存储的线程维护着线程与处理器之间的关系，而 <code>runqhead</code>、<code>runqtail</code> 和 <code>runq</code> 三个字段表示处理器持有的运行队列，其中存储着待执行的 Goroutine 列表，<code>runnext</code> 中是线程下一个需要执行的 Goroutine。</p>
 <p><a href="https://draveness.me/golang/tree/runtime.p"><code>runtime.p</code></a> 结构体中的状态 <code>status</code> 字段会是以下五种中的一种：</p>
 <table>
-<thead>
-<tr>
-<th>状态</th>
-<th>描述</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>_Pidle</code></td>
-<td>处理器没有运行用户代码或者调度器，被空闲队列或者改变其状态的结构持有，运行队列为空</td>
-</tr>
-<tr>
-<td><code>_Prunning</code></td>
-<td>被线程 M 持有，并且正在执行用户代码或者调度器</td>
-</tr>
-<tr>
-<td><code>_Psyscall</code></td>
-<td>没有执行用户代码，当前线程陷入系统调用</td>
-</tr>
-<tr>
-<td><code>_Pgcstop</code></td>
-<td>被线程 M 持有，当前处理器由于垃圾回收被停止</td>
-</tr>
-<tr>
-<td><code>_Pdead</code></td>
-<td>当前处理器已经不被使用</td>
-</tr>
-</tbody>
+	<thead>
+			<tr>
+					<th>状态</th>
+					<th>描述</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td><code>_Pidle</code></td>
+					<td>处理器没有运行用户代码或者调度器，被空闲队列或者改变其状态的结构持有，运行队列为空</td>
+			</tr>
+			<tr>
+					<td><code>_Prunning</code></td>
+					<td>被线程 M 持有，并且正在执行用户代码或者调度器</td>
+			</tr>
+			<tr>
+					<td><code>_Psyscall</code></td>
+					<td>没有执行用户代码，当前线程陷入系统调用</td>
+			</tr>
+			<tr>
+					<td><code>_Pgcstop</code></td>
+					<td>被线程 M 持有，当前处理器由于垃圾回收被停止</td>
+			</tr>
+			<tr>
+					<td><code>_Pdead</code></td>
+					<td>当前处理器已经不被使用</td>
+			</tr>
+	</tbody>
 </table>
 <p>通过分析处理器 P 的状态，我们能够对处理器的工作过程有一些简单理解，例如处理器在执行用户代码时会处于 <code>_Prunning</code> 状态，在当前线程执行 I/O 操作时会陷入 <code>_Psyscall</code> 状态。</p>
 <h2 id="原理">原理</h2>
@@ -452,28 +458,28 @@
 <td class="lntd">
 <pre tabindex="0" class="chroma"><code class="language-c" data-lang="c"><span class="line"><span class="cl"><span class="k">static</span> <span class="kt">void</span> <span class="nf">scheduler</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span> <span class="p">{</span>
 </span></span><span class="line"><span class="cl">        <span class="n">G</span><span class="o">*</span> <span class="n">gp</span><span class="p">;</span>
-</span></span><span class="line"><span class="cl">        <span class="n">lock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">sched</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">        <span class="nf">lock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">sched</span><span class="p">);</span>
 </span></span><span class="line"><span class="cl">
-</span></span><span class="line"><span class="cl">        <span class="k">if</span><span class="p">(</span><span class="n">gosave</span><span class="p">(</span><span class="o">&amp;</span><span class="n">m</span><span class="o">-&gt;</span><span class="n">sched</span><span class="p">)){</span>
-</span></span><span class="line"><span class="cl">                <span class="n">lock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">sched</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">        <span class="k">if</span><span class="p">(</span><span class="nf">gosave</span><span class="p">(</span><span class="o">&amp;</span><span class="n">m</span><span class="o">-&gt;</span><span class="n">sched</span><span class="p">)){</span>
+</span></span><span class="line"><span class="cl">                <span class="nf">lock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">sched</span><span class="p">);</span>
 </span></span><span class="line"><span class="cl">                <span class="n">gp</span> <span class="o">=</span> <span class="n">m</span><span class="o">-&gt;</span><span class="n">curg</span><span class="p">;</span>
 </span></span><span class="line"><span class="cl">                <span class="k">switch</span><span class="p">(</span><span class="n">gp</span><span class="o">-&gt;</span><span class="n">status</span><span class="p">){</span>
 </span></span><span class="line"><span class="cl">                <span class="k">case</span> <span class="nl">Grunnable</span><span class="p">:</span>
 </span></span><span class="line"><span class="cl">                <span class="k">case</span> <span class="nl">Grunning</span><span class="p">:</span>
 </span></span><span class="line"><span class="cl">                        <span class="n">gp</span><span class="o">-&gt;</span><span class="n">status</span> <span class="o">=</span> <span class="n">Grunnable</span><span class="p">;</span>
-</span></span><span class="line"><span class="cl">                        <span class="n">gput</span><span class="p">(</span><span class="n">gp</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">                        <span class="nf">gput</span><span class="p">(</span><span class="n">gp</span><span class="p">);</span>
 </span></span><span class="line"><span class="cl">                        <span class="k">break</span><span class="p">;</span>
 </span></span><span class="line"><span class="cl">                <span class="p">...</span>
 </span></span><span class="line"><span class="cl">                <span class="p">}</span>
-</span></span><span class="line"><span class="cl">                <span class="n">notewakeup</span><span class="p">(</span><span class="o">&amp;</span><span class="n">gp</span><span class="o">-&gt;</span><span class="n">stopped</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">                <span class="nf">notewakeup</span><span class="p">(</span><span class="o">&amp;</span><span class="n">gp</span><span class="o">-&gt;</span><span class="n">stopped</span><span class="p">);</span>
 </span></span><span class="line"><span class="cl">        <span class="p">}</span>
 </span></span><span class="line"><span class="cl">
-</span></span><span class="line"><span class="cl">        <span class="n">gp</span> <span class="o">=</span> <span class="n">nextgandunlock</span><span class="p">();</span>
-</span></span><span class="line"><span class="cl">        <span class="n">noteclear</span><span class="p">(</span><span class="o">&amp;</span><span class="n">gp</span><span class="o">-&gt;</span><span class="n">stopped</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">        <span class="n">gp</span> <span class="o">=</span> <span class="nf">nextgandunlock</span><span class="p">();</span>
+</span></span><span class="line"><span class="cl">        <span class="nf">noteclear</span><span class="p">(</span><span class="o">&amp;</span><span class="n">gp</span><span class="o">-&gt;</span><span class="n">stopped</span><span class="p">);</span>
 </span></span><span class="line"><span class="cl">        <span class="n">gp</span><span class="o">-&gt;</span><span class="n">status</span> <span class="o">=</span> <span class="n">Grunning</span><span class="p">;</span>
 </span></span><span class="line"><span class="cl">        <span class="n">m</span><span class="o">-&gt;</span><span class="n">curg</span> <span class="o">=</span> <span class="n">gp</span><span class="p">;</span>
 </span></span><span class="line"><span class="cl">        <span class="n">g</span> <span class="o">=</span> <span class="n">gp</span><span class="p">;</span>
-</span></span><span class="line"><span class="cl">        <span class="n">gogo</span><span class="p">(</span><span class="o">&amp;</span><span class="n">gp</span><span class="o">-&gt;</span><span class="n">sched</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">        <span class="nf">gogo</span><span class="p">(</span><span class="o">&amp;</span><span class="n">gp</span><span class="o">-&gt;</span><span class="n">sched</span><span class="p">);</span>
 </span></span><span class="line"><span class="cl"><span class="p">}</span>
 </span></span></code></pre></td></tr></table>
 </div>
@@ -517,28 +523,28 @@
 </span></code></pre></td>
 <td class="lntd">
 <pre tabindex="0" class="chroma"><code class="language-c" data-lang="c"><span class="line"><span class="cl"><span class="k">static</span> <span class="kt">void</span> <span class="nf">schedule</span><span class="p">(</span><span class="n">G</span> <span class="o">*</span><span class="n">gp</span><span class="p">)</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">        <span class="n">schedlock</span><span class="p">();</span>
+</span></span><span class="line"><span class="cl">        <span class="nf">schedlock</span><span class="p">();</span>
 </span></span><span class="line"><span class="cl">        <span class="k">if</span><span class="p">(</span><span class="n">gp</span> <span class="o">!=</span> <span class="n">nil</span><span class="p">)</span> <span class="p">{</span>
 </span></span><span class="line"><span class="cl">                <span class="n">gp</span><span class="o">-&gt;</span><span class="n">m</span> <span class="o">=</span> <span class="n">nil</span><span class="p">;</span>
-</span></span><span class="line"><span class="cl">                <span class="n">uint32</span> <span class="n">v</span> <span class="o">=</span> <span class="n">runtime</span><span class="err">·</span><span class="n">xadd</span><span class="p">(</span><span class="o">&amp;</span><span class="n">runtime</span><span class="err">·</span><span class="n">sched</span><span class="p">.</span><span class="n">atomic</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="o">&lt;&lt;</span><span class="n">mcpuShift</span><span class="p">);</span>
-</span></span><span class="line"><span class="cl">                <span class="k">if</span><span class="p">(</span><span class="n">atomic_mcpu</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="o">&gt;</span> <span class="n">maxgomaxprocs</span><span class="p">)</span>
-</span></span><span class="line"><span class="cl">                        <span class="n">runtime</span><span class="err">·</span><span class="n">throw</span><span class="p">(</span><span class="s">&#34;negative mcpu in scheduler&#34;</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">                <span class="n">uint32</span> <span class="n">v</span> <span class="o">=</span> <span class="n">runtime</span><span class="err">·</span><span class="nf">xadd</span><span class="p">(</span><span class="o">&amp;</span><span class="n">runtime</span><span class="err">·</span><span class="n">sched</span><span class="p">.</span><span class="n">atomic</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="o">&lt;&lt;</span><span class="n">mcpuShift</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">                <span class="k">if</span><span class="p">(</span><span class="nf">atomic_mcpu</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="o">&gt;</span> <span class="n">maxgomaxprocs</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">                        <span class="n">runtime</span><span class="err">·</span><span class="nf">throw</span><span class="p">(</span><span class="s">&#34;negative mcpu in scheduler&#34;</span><span class="p">);</span>
 </span></span><span class="line"><span class="cl">
 </span></span><span class="line"><span class="cl">                <span class="k">switch</span><span class="p">(</span><span class="n">gp</span><span class="o">-&gt;</span><span class="n">status</span><span class="p">){</span>
 </span></span><span class="line"><span class="cl">                <span class="k">case</span> <span class="nl">Grunning</span><span class="p">:</span>
 </span></span><span class="line"><span class="cl">                        <span class="n">gp</span><span class="o">-&gt;</span><span class="n">status</span> <span class="o">=</span> <span class="n">Grunnable</span><span class="p">;</span>
-</span></span><span class="line"><span class="cl">                        <span class="n">gput</span><span class="p">(</span><span class="n">gp</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">                        <span class="nf">gput</span><span class="p">(</span><span class="n">gp</span><span class="p">);</span>
 </span></span><span class="line"><span class="cl">                        <span class="k">break</span><span class="p">;</span>
 </span></span><span class="line"><span class="cl">                <span class="k">case</span> <span class="p">...</span><span class="o">:</span>
 </span></span><span class="line"><span class="cl">                <span class="p">}</span>
 </span></span><span class="line"><span class="cl">        <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
 </span></span><span class="line"><span class="cl">                <span class="p">...</span>
 </span></span><span class="line"><span class="cl">        <span class="p">}</span>
-</span></span><span class="line"><span class="cl">        <span class="n">gp</span> <span class="o">=</span> <span class="n">nextgandunlock</span><span class="p">();</span>
+</span></span><span class="line"><span class="cl">        <span class="n">gp</span> <span class="o">=</span> <span class="nf">nextgandunlock</span><span class="p">();</span>
 </span></span><span class="line"><span class="cl">        <span class="n">gp</span><span class="o">-&gt;</span><span class="n">status</span> <span class="o">=</span> <span class="n">Grunning</span><span class="p">;</span>
 </span></span><span class="line"><span class="cl">        <span class="n">m</span><span class="o">-&gt;</span><span class="n">curg</span> <span class="o">=</span> <span class="n">gp</span><span class="p">;</span>
 </span></span><span class="line"><span class="cl">        <span class="n">gp</span><span class="o">-&gt;</span><span class="n">m</span> <span class="o">=</span> <span class="n">m</span><span class="p">;</span>
-</span></span><span class="line"><span class="cl">        <span class="n">runtime</span><span class="err">·</span><span class="n">gogo</span><span class="p">(</span><span class="o">&amp;</span><span class="n">gp</span><span class="o">-&gt;</span><span class="n">sched</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">        <span class="n">runtime</span><span class="err">·</span><span class="nf">gogo</span><span class="p">(</span><span class="o">&amp;</span><span class="n">gp</span><span class="o">-&gt;</span><span class="n">sched</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
 </span></span><span class="line"><span class="cl"><span class="p">}</span>
 </span></span></code></pre></td></tr></table>
 </div>
@@ -589,23 +595,23 @@
 </span><span class="lnt">16
 </span></code></pre></td>
 <td class="lntd">
-<pre tabindex="0" class="chroma"><code class="language-go" data-lang="go"><span class="line"><span class="cl"><span class="nx">static</span> <span class="nx">void</span> <span class="nf">schedule</span><span class="p">(</span><span class="nx">void</span><span class="p">)</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">    <span class="nx">G</span> <span class="o">*</span><span class="nx">gp</span><span class="p">;</span>
-</span></span><span class="line"><span class="cl"> <span class="nx">top</span><span class="p">:</span>
-</span></span><span class="line"><span class="cl">    <span class="k">if</span><span class="p">(</span><span class="nx">runtime</span><span class="err">·</span><span class="nx">gcwaiting</span><span class="p">)</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">        <span class="nf">gcstopm</span><span class="p">();</span>
-</span></span><span class="line"><span class="cl">        <span class="k">goto</span> <span class="nx">top</span><span class="p">;</span>
-</span></span><span class="line"><span class="cl">    <span class="p">}</span>
-</span></span><span class="line"><span class="cl">
-</span></span><span class="line"><span class="cl">    <span class="nx">gp</span> <span class="p">=</span> <span class="nf">runqget</span><span class="p">(</span><span class="nx">m</span><span class="o">-</span><span class="p">&gt;</span><span class="nx">p</span><span class="p">);</span>
-</span></span><span class="line"><span class="cl">    <span class="k">if</span><span class="p">(</span><span class="nx">gp</span> <span class="o">==</span> <span class="kc">nil</span><span class="p">)</span>
-</span></span><span class="line"><span class="cl">        <span class="nx">gp</span> <span class="p">=</span> <span class="nf">findrunnable</span><span class="p">();</span>
-</span></span><span class="line"><span class="cl">
-</span></span><span class="line"><span class="cl">    <span class="o">...</span>
-</span></span><span class="line"><span class="cl">
-</span></span><span class="line"><span class="cl">    <span class="nf">execute</span><span class="p">(</span><span class="nx">gp</span><span class="p">);</span>
-</span></span><span class="line"><span class="cl"><span class="p">}</span>
-</span></span></code></pre></td></tr></table>
+<pre tabindex="0" class="chroma"><code class="language-go" data-lang="go"><span class="line"><span class="cl"><span class="nx">static</span><span class="w"> </span><span class="nx">void</span><span class="w"> </span><span class="nf">schedule</span><span class="p">(</span><span class="nx">void</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nx">G</span><span class="w"> </span><span class="o">*</span><span class="nx">gp</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w"> </span><span class="nx">top</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="k">if</span><span class="p">(</span><span class="nx">runtime</span><span class="err">·</span><span class="nx">gcwaiting</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="nf">gcstopm</span><span class="p">();</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="k">goto</span><span class="w"> </span><span class="nx">top</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nx">gp</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nf">runqget</span><span class="p">(</span><span class="nx">m</span><span class="o">-</span><span class="p">&gt;</span><span class="nx">p</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="k">if</span><span class="p">(</span><span class="nx">gp</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="kc">nil</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">        </span><span class="nx">gp</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nf">findrunnable</span><span class="p">();</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="o">...</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="nf">execute</span><span class="p">(</span><span class="nx">gp</span><span class="p">);</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="p">}</span><span class="w">
+</span></span></span></code></pre></td></tr></table>
 </div>
 </div><ol>
 <li>如果当前运行时在等待垃圾回收，调用 <code>runtime.gcstopm:779c45a</code> 函数；</li>
@@ -635,24 +641,24 @@
 </span><span class="lnt">17
 </span></code></pre></td>
 <td class="lntd">
-<pre tabindex="0" class="chroma"><code class="language-go" data-lang="go"><span class="line"><span class="cl"><span class="kd">struct</span> <span class="nx">P</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">	<span class="nx">Lock</span><span class="p">;</span>
-</span></span><span class="line"><span class="cl">
-</span></span><span class="line"><span class="cl">	<span class="kt">uint32</span>	<span class="nx">status</span><span class="p">;</span>
-</span></span><span class="line"><span class="cl">	<span class="nx">P</span><span class="o">*</span>	<span class="nx">link</span><span class="p">;</span>
-</span></span><span class="line"><span class="cl">	<span class="kt">uint32</span>	<span class="nx">tick</span><span class="p">;</span>
-</span></span><span class="line"><span class="cl">	<span class="nx">M</span><span class="o">*</span>	<span class="nx">m</span><span class="p">;</span>
-</span></span><span class="line"><span class="cl">	<span class="nx">MCache</span><span class="o">*</span>	<span class="nx">mcache</span><span class="p">;</span>
-</span></span><span class="line"><span class="cl">
-</span></span><span class="line"><span class="cl">	<span class="nx">G</span><span class="o">**</span>	<span class="nx">runq</span><span class="p">;</span>
-</span></span><span class="line"><span class="cl">	<span class="kt">int32</span>	<span class="nx">runqhead</span><span class="p">;</span>
-</span></span><span class="line"><span class="cl">	<span class="kt">int32</span>	<span class="nx">runqtail</span><span class="p">;</span>
-</span></span><span class="line"><span class="cl">	<span class="kt">int32</span>	<span class="nx">runqsize</span><span class="p">;</span>
-</span></span><span class="line"><span class="cl">
-</span></span><span class="line"><span class="cl">	<span class="nx">G</span><span class="o">*</span>	<span class="nx">gfree</span><span class="p">;</span>
-</span></span><span class="line"><span class="cl">	<span class="kt">int32</span>	<span class="nx">gfreecnt</span><span class="p">;</span>
-</span></span><span class="line"><span class="cl"><span class="p">};</span>
-</span></span></code></pre></td></tr></table>
+<pre tabindex="0" class="chroma"><code class="language-go" data-lang="go"><span class="line"><span class="cl"><span class="kd">struct</span><span class="w"> </span><span class="nx">P</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">Lock</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="kt">uint32</span><span class="w">	</span><span class="nx">status</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">P</span><span class="o">*</span><span class="w">	</span><span class="nx">link</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="kt">uint32</span><span class="w">	</span><span class="nx">tick</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">M</span><span class="o">*</span><span class="w">	</span><span class="nx">m</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">MCache</span><span class="o">*</span><span class="w">	</span><span class="nx">mcache</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">G</span><span class="o">**</span><span class="w">	</span><span class="nx">runq</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="kt">int32</span><span class="w">	</span><span class="nx">runqhead</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="kt">int32</span><span class="w">	</span><span class="nx">runqtail</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="kt">int32</span><span class="w">	</span><span class="nx">runqsize</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">G</span><span class="o">*</span><span class="w">	</span><span class="nx">gfree</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="kt">int32</span><span class="w">	</span><span class="nx">gfreecnt</span><span class="p">;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="p">};</span><span class="w">
+</span></span></span></code></pre></td></tr></table>
 </div>
 </div><p>处理器持有一个由可运行的 Goroutine 组成的环形的运行队列 <code>runq</code>，还反向持有一个线程。调度器在调度时会从处理器的队列中选择队列头的 Goroutine 放到线程 M 上执行。</p>
 <p>基于工作窃取的多线程调度器将每一个线程绑定到了独立的 CPU 上，这些线程会被不同处理器管理，不同的处理器通过工作窃取对任务进行再分配实现任务的平衡，也能提升调度器和 Go 语言程序的整体性能。</p>
@@ -784,23 +790,23 @@
 </span><span class="lnt">16
 </span></code></pre></td>
 <td class="lntd">
-<pre tabindex="0" class="chroma"><code class="language-go" data-lang="go"><span class="line"><span class="cl"><span class="kd">func</span> <span class="nf">schedinit</span><span class="p">()</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">	<span class="nx">_g_</span> <span class="o">:=</span> <span class="nf">getg</span><span class="p">()</span>
-</span></span><span class="line"><span class="cl">	<span class="o">...</span>
-</span></span><span class="line"><span class="cl">
-</span></span><span class="line"><span class="cl">	<span class="nx">sched</span><span class="p">.</span><span class="nx">maxmcount</span> <span class="p">=</span> <span class="mi">10000</span>
-</span></span><span class="line"><span class="cl">
-</span></span><span class="line"><span class="cl">	<span class="o">...</span>
-</span></span><span class="line"><span class="cl">	<span class="nx">sched</span><span class="p">.</span><span class="nx">lastpoll</span> <span class="p">=</span> <span class="nb">uint64</span><span class="p">(</span><span class="nf">nanotime</span><span class="p">())</span>
-</span></span><span class="line"><span class="cl">	<span class="nx">procs</span> <span class="o">:=</span> <span class="nx">ncpu</span>
-</span></span><span class="line"><span class="cl">	<span class="k">if</span> <span class="nx">n</span><span class="p">,</span> <span class="nx">ok</span> <span class="o">:=</span> <span class="nf">atoi32</span><span class="p">(</span><span class="nf">gogetenv</span><span class="p">(</span><span class="s">&#34;GOMAXPROCS&#34;</span><span class="p">));</span> <span class="nx">ok</span> <span class="o">&amp;&amp;</span> <span class="nx">n</span> <span class="p">&gt;</span> <span class="mi">0</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">		<span class="nx">procs</span> <span class="p">=</span> <span class="nx">n</span>
-</span></span><span class="line"><span class="cl">	<span class="p">}</span>
-</span></span><span class="line"><span class="cl">	<span class="k">if</span> <span class="nf">procresize</span><span class="p">(</span><span class="nx">procs</span><span class="p">)</span> <span class="o">!=</span> <span class="kc">nil</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">		<span class="nf">throw</span><span class="p">(</span><span class="s">&#34;unknown runnable goroutine during bootstrap&#34;</span><span class="p">)</span>
-</span></span><span class="line"><span class="cl">	<span class="p">}</span>
-</span></span><span class="line"><span class="cl"><span class="p">}</span>
-</span></span></code></pre></td></tr></table>
+<pre tabindex="0" class="chroma"><code class="language-go" data-lang="go"><span class="line"><span class="cl"><span class="kd">func</span><span class="w"> </span><span class="nf">schedinit</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">_g_</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nf">getg</span><span class="p">()</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="o">...</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">sched</span><span class="p">.</span><span class="nx">maxmcount</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="mi">10000</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="o">...</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">sched</span><span class="p">.</span><span class="nx">lastpoll</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nb">uint64</span><span class="p">(</span><span class="nf">nanotime</span><span class="p">())</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">procs</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">ncpu</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="k">if</span><span class="w"> </span><span class="nx">n</span><span class="p">,</span><span class="w"> </span><span class="nx">ok</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nf">atoi32</span><span class="p">(</span><span class="nf">gogetenv</span><span class="p">(</span><span class="s">&#34;GOMAXPROCS&#34;</span><span class="p">));</span><span class="w"> </span><span class="nx">ok</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="nx">n</span><span class="w"> </span><span class="p">&gt;</span><span class="w"> </span><span class="mi">0</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="nx">procs</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nx">n</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="k">if</span><span class="w"> </span><span class="nf">procresize</span><span class="p">(</span><span class="nx">procs</span><span class="p">)</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="kc">nil</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="nf">throw</span><span class="p">(</span><span class="s">&#34;unknown runnable goroutine during bootstrap&#34;</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="p">}</span><span class="w">
+</span></span></span></code></pre></td></tr></table>
 </div>
 </div><p>在调度器初始函数执行的过程中会将 <code>maxmcount</code> 设置成 10000，这也就是一个 Go 语言程序能够创建的最大线程数，虽然最多可以创建 10000 个线程，但是可以同时运行的线程还是由 <code>GOMAXPROCS</code> 变量控制。</p>
 <p>我们从环境变量 <code>GOMAXPROCS</code> 获取了程序能够同时运行的最大处理器数之后就会调用 <a href="https://draveness.me/golang/tree/runtime.procresize"><code>runtime.procresize</code></a> 更新程序中处理器的数量，在这时整个程序不会执行任何用户 Goroutine，调度器也会进入锁定状态，<a href="https://draveness.me/golang/tree/runtime.procresize"><code>runtime.procresize</code></a> 的执行过程如下：</p>
@@ -831,19 +837,19 @@
 </span><span class="lnt">12
 </span></code></pre></td>
 <td class="lntd">
-<pre tabindex="0" class="chroma"><code class="language-go" data-lang="go"><span class="line"><span class="cl"><span class="kd">func</span> <span class="p">(</span><span class="nx">s</span> <span class="o">*</span><span class="nx">state</span><span class="p">)</span> <span class="nf">call</span><span class="p">(</span><span class="nx">n</span> <span class="o">*</span><span class="nx">Node</span><span class="p">,</span> <span class="nx">k</span> <span class="nx">callKind</span><span class="p">)</span> <span class="o">*</span><span class="nx">ssa</span><span class="p">.</span><span class="nx">Value</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">	<span class="k">if</span> <span class="nx">k</span> <span class="o">==</span> <span class="nx">callDeferStack</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">		<span class="o">...</span>
-</span></span><span class="line"><span class="cl">	<span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">		<span class="k">switch</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">		<span class="k">case</span> <span class="nx">k</span> <span class="o">==</span> <span class="nx">callGo</span><span class="p">:</span>
-</span></span><span class="line"><span class="cl">			<span class="nx">call</span> <span class="p">=</span> <span class="nx">s</span><span class="p">.</span><span class="nf">newValue1A</span><span class="p">(</span><span class="nx">ssa</span><span class="p">.</span><span class="nx">OpStaticCall</span><span class="p">,</span> <span class="nx">types</span><span class="p">.</span><span class="nx">TypeMem</span><span class="p">,</span> <span class="nx">newproc</span><span class="p">,</span> <span class="nx">s</span><span class="p">.</span><span class="nf">mem</span><span class="p">())</span>
-</span></span><span class="line"><span class="cl">		<span class="k">default</span><span class="p">:</span>
-</span></span><span class="line"><span class="cl">		<span class="p">}</span>
-</span></span><span class="line"><span class="cl">	<span class="p">}</span>
-</span></span><span class="line"><span class="cl">	<span class="o">...</span>
-</span></span><span class="line"><span class="cl"><span class="p">}</span>
-</span></span></code></pre></td></tr></table>
+<pre tabindex="0" class="chroma"><code class="language-go" data-lang="go"><span class="line"><span class="cl"><span class="kd">func</span><span class="w"> </span><span class="p">(</span><span class="nx">s</span><span class="w"> </span><span class="o">*</span><span class="nx">state</span><span class="p">)</span><span class="w"> </span><span class="nf">call</span><span class="p">(</span><span class="nx">n</span><span class="w"> </span><span class="o">*</span><span class="nx">Node</span><span class="p">,</span><span class="w"> </span><span class="nx">k</span><span class="w"> </span><span class="nx">callKind</span><span class="p">)</span><span class="w"> </span><span class="o">*</span><span class="nx">ssa</span><span class="p">.</span><span class="nx">Value</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="k">if</span><span class="w"> </span><span class="nx">k</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="nx">callDeferStack</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="o">...</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="p">}</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="k">switch</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="k">case</span><span class="w"> </span><span class="nx">k</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="nx">callGo</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">			</span><span class="nx">call</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nx">s</span><span class="p">.</span><span class="nf">newValue1A</span><span class="p">(</span><span class="nx">ssa</span><span class="p">.</span><span class="nx">OpStaticCall</span><span class="p">,</span><span class="w"> </span><span class="nx">types</span><span class="p">.</span><span class="nx">TypeMem</span><span class="p">,</span><span class="w"> </span><span class="nx">newproc</span><span class="p">,</span><span class="w"> </span><span class="nx">s</span><span class="p">.</span><span class="nf">mem</span><span class="p">())</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="k">default</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="o">...</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="p">}</span><span class="w">
+</span></span></span></code></pre></td></tr></table>
 </div>
 </div><p><a href="https://draveness.me/golang/tree/runtime.newproc"><code>runtime.newproc</code></a> 的入参是参数大小和表示函数的指针 <code>funcval</code>，它会获取 Goroutine 以及调用方的程序计数器，然后调用 <a href="https://draveness.me/golang/tree/runtime.newproc1"><code>runtime.newproc1</code></a> 函数获取新的 Goroutine 结构体、将其加入处理器的运行队列并在满足条件时调用 <a href="https://draveness.me/golang/tree/runtime.wakep"><code>runtime.wakep</code></a> 唤醒新的处理执行 Goroutine：</p>
 <div class="highlight"><div class="chroma">
@@ -865,22 +871,22 @@
 </span><span class="lnt">15
 </span></code></pre></td>
 <td class="lntd">
-<pre tabindex="0" class="chroma"><code class="language-go" data-lang="go"><span class="line"><span class="cl"><span class="kd">func</span> <span class="nf">newproc</span><span class="p">(</span><span class="nx">siz</span> <span class="kt">int32</span><span class="p">,</span> <span class="nx">fn</span> <span class="o">*</span><span class="nx">funcval</span><span class="p">)</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">	<span class="nx">argp</span> <span class="o">:=</span> <span class="nf">add</span><span class="p">(</span><span class="nx">unsafe</span><span class="p">.</span><span class="nf">Pointer</span><span class="p">(</span><span class="o">&amp;</span><span class="nx">fn</span><span class="p">),</span> <span class="nx">sys</span><span class="p">.</span><span class="nx">PtrSize</span><span class="p">)</span>
-</span></span><span class="line"><span class="cl">	<span class="nx">gp</span> <span class="o">:=</span> <span class="nf">getg</span><span class="p">()</span>
-</span></span><span class="line"><span class="cl">	<span class="nx">pc</span> <span class="o">:=</span> <span class="nf">getcallerpc</span><span class="p">()</span>
-</span></span><span class="line"><span class="cl">	<span class="nf">systemstack</span><span class="p">(</span><span class="kd">func</span><span class="p">()</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">		<span class="nx">newg</span> <span class="o">:=</span> <span class="nf">newproc1</span><span class="p">(</span><span class="nx">fn</span><span class="p">,</span> <span class="nx">argp</span><span class="p">,</span> <span class="nx">siz</span><span class="p">,</span> <span class="nx">gp</span><span class="p">,</span> <span class="nx">pc</span><span class="p">)</span>
-</span></span><span class="line"><span class="cl">
-</span></span><span class="line"><span class="cl">		<span class="nx">_p_</span> <span class="o">:=</span> <span class="nf">getg</span><span class="p">().</span><span class="nx">m</span><span class="p">.</span><span class="nx">p</span><span class="p">.</span><span class="nf">ptr</span><span class="p">()</span>
-</span></span><span class="line"><span class="cl">		<span class="nf">runqput</span><span class="p">(</span><span class="nx">_p_</span><span class="p">,</span> <span class="nx">newg</span><span class="p">,</span> <span class="kc">true</span><span class="p">)</span>
-</span></span><span class="line"><span class="cl">
-</span></span><span class="line"><span class="cl">		<span class="k">if</span> <span class="nx">mainStarted</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">			<span class="nf">wakep</span><span class="p">()</span>
-</span></span><span class="line"><span class="cl">		<span class="p">}</span>
-</span></span><span class="line"><span class="cl">	<span class="p">})</span>
-</span></span><span class="line"><span class="cl"><span class="p">}</span>
-</span></span></code></pre></td></tr></table>
+<pre tabindex="0" class="chroma"><code class="language-go" data-lang="go"><span class="line"><span class="cl"><span class="kd">func</span><span class="w"> </span><span class="nf">newproc</span><span class="p">(</span><span class="nx">siz</span><span class="w"> </span><span class="kt">int32</span><span class="p">,</span><span class="w"> </span><span class="nx">fn</span><span class="w"> </span><span class="o">*</span><span class="nx">funcval</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">argp</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nf">add</span><span class="p">(</span><span class="nx">unsafe</span><span class="p">.</span><span class="nf">Pointer</span><span class="p">(</span><span class="o">&amp;</span><span class="nx">fn</span><span class="p">),</span><span class="w"> </span><span class="nx">sys</span><span class="p">.</span><span class="nx">PtrSize</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">gp</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nf">getg</span><span class="p">()</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">pc</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nf">getcallerpc</span><span class="p">()</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nf">systemstack</span><span class="p">(</span><span class="kd">func</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="nx">newg</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nf">newproc1</span><span class="p">(</span><span class="nx">fn</span><span class="p">,</span><span class="w"> </span><span class="nx">argp</span><span class="p">,</span><span class="w"> </span><span class="nx">siz</span><span class="p">,</span><span class="w"> </span><span class="nx">gp</span><span class="p">,</span><span class="w"> </span><span class="nx">pc</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="nx">_p_</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nf">getg</span><span class="p">().</span><span class="nx">m</span><span class="p">.</span><span class="nx">p</span><span class="p">.</span><span class="nf">ptr</span><span class="p">()</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="nf">runqput</span><span class="p">(</span><span class="nx">_p_</span><span class="p">,</span><span class="w"> </span><span class="nx">newg</span><span class="p">,</span><span class="w"> </span><span class="kc">true</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="k">if</span><span class="w"> </span><span class="nx">mainStarted</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">			</span><span class="nf">wakep</span><span class="p">()</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="p">})</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="p">}</span><span class="w">
+</span></span></span></code></pre></td></tr></table>
 </div>
 </div><p><a href="https://draveness.me/golang/tree/runtime.newproc1"><code>runtime.newproc1</code></a> 会根据传入参数初始化一个 <code>g</code> 结构体，我们可以将该函数分成以下几个部分介绍它的实现：</p>
 <ol>
@@ -906,20 +912,20 @@
 </span><span class="lnt">13
 </span></code></pre></td>
 <td class="lntd">
-<pre tabindex="0" class="chroma"><code class="language-go" data-lang="go"><span class="line"><span class="cl"><span class="kd">func</span> <span class="nf">newproc1</span><span class="p">(</span><span class="nx">fn</span> <span class="o">*</span><span class="nx">funcval</span><span class="p">,</span> <span class="nx">argp</span> <span class="nx">unsafe</span><span class="p">.</span><span class="nx">Pointer</span><span class="p">,</span> <span class="nx">narg</span> <span class="kt">int32</span><span class="p">,</span> <span class="nx">callergp</span> <span class="o">*</span><span class="nx">g</span><span class="p">,</span> <span class="nx">callerpc</span> <span class="kt">uintptr</span><span class="p">)</span> <span class="o">*</span><span class="nx">g</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">	<span class="nx">_g_</span> <span class="o">:=</span> <span class="nf">getg</span><span class="p">()</span>
-</span></span><span class="line"><span class="cl">	<span class="nx">siz</span> <span class="o">:=</span> <span class="nx">narg</span>
-</span></span><span class="line"><span class="cl">	<span class="nx">siz</span> <span class="p">=</span> <span class="p">(</span><span class="nx">siz</span> <span class="o">+</span> <span class="mi">7</span><span class="p">)</span> <span class="o">&amp;^</span> <span class="mi">7</span>
-</span></span><span class="line"><span class="cl">
-</span></span><span class="line"><span class="cl">	<span class="nx">_p_</span> <span class="o">:=</span> <span class="nx">_g_</span><span class="p">.</span><span class="nx">m</span><span class="p">.</span><span class="nx">p</span><span class="p">.</span><span class="nf">ptr</span><span class="p">()</span>
-</span></span><span class="line"><span class="cl">	<span class="nx">newg</span> <span class="o">:=</span> <span class="nf">gfget</span><span class="p">(</span><span class="nx">_p_</span><span class="p">)</span>
-</span></span><span class="line"><span class="cl">	<span class="k">if</span> <span class="nx">newg</span> <span class="o">==</span> <span class="kc">nil</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">		<span class="nx">newg</span> <span class="p">=</span> <span class="nf">malg</span><span class="p">(</span><span class="nx">_StackMin</span><span class="p">)</span>
-</span></span><span class="line"><span class="cl">		<span class="nf">casgstatus</span><span class="p">(</span><span class="nx">newg</span><span class="p">,</span> <span class="nx">_Gidle</span><span class="p">,</span> <span class="nx">_Gdead</span><span class="p">)</span>
-</span></span><span class="line"><span class="cl">		<span class="nf">allgadd</span><span class="p">(</span><span class="nx">newg</span><span class="p">)</span>
-</span></span><span class="line"><span class="cl">	<span class="p">}</span>
-</span></span><span class="line"><span class="cl">	<span class="o">...</span>
-</span></span></code></pre></td></tr></table>
+<pre tabindex="0" class="chroma"><code class="language-go" data-lang="go"><span class="line"><span class="cl"><span class="kd">func</span><span class="w"> </span><span class="nf">newproc1</span><span class="p">(</span><span class="nx">fn</span><span class="w"> </span><span class="o">*</span><span class="nx">funcval</span><span class="p">,</span><span class="w"> </span><span class="nx">argp</span><span class="w"> </span><span class="nx">unsafe</span><span class="p">.</span><span class="nx">Pointer</span><span class="p">,</span><span class="w"> </span><span class="nx">narg</span><span class="w"> </span><span class="kt">int32</span><span class="p">,</span><span class="w"> </span><span class="nx">callergp</span><span class="w"> </span><span class="o">*</span><span class="nx">g</span><span class="p">,</span><span class="w"> </span><span class="nx">callerpc</span><span class="w"> </span><span class="kt">uintptr</span><span class="p">)</span><span class="w"> </span><span class="o">*</span><span class="nx">g</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">_g_</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nf">getg</span><span class="p">()</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">siz</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">narg</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">siz</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="p">(</span><span class="nx">siz</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">7</span><span class="p">)</span><span class="w"> </span><span class="o">&amp;^</span><span class="w"> </span><span class="mi">7</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">_p_</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">_g_</span><span class="p">.</span><span class="nx">m</span><span class="p">.</span><span class="nx">p</span><span class="p">.</span><span class="nf">ptr</span><span class="p">()</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">newg</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nf">gfget</span><span class="p">(</span><span class="nx">_p_</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="k">if</span><span class="w"> </span><span class="nx">newg</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="kc">nil</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="nx">newg</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nf">malg</span><span class="p">(</span><span class="nx">_StackMin</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="nf">casgstatus</span><span class="p">(</span><span class="nx">newg</span><span class="p">,</span><span class="w"> </span><span class="nx">_Gidle</span><span class="p">,</span><span class="w"> </span><span class="nx">_Gdead</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="nf">allgadd</span><span class="p">(</span><span class="nx">newg</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="o">...</span><span class="w">
+</span></span></span></code></pre></td></tr></table>
 </div>
 </div><p>上述代码会先从处理器的 <code>gFree</code> 列表中查找空闲的 Goroutine，如果不存在空闲的 Goroutine，会通过 <a href="https://draveness.me/golang/tree/runtime.malg"><code>runtime.malg</code></a> 创建一个栈大小足够的新结构体。</p>
 <p>接下来，我们会调用 <a href="https://draveness.me/golang/tree/runtime.memmove"><code>runtime.memmove</code></a> 将 <code>fn</code> 函数的所有参数拷贝到栈上，<code>argp</code> 和 <code>narg</code> 分别是参数的内存空间和大小，我们在该方法中会将参数对应的内存空间整块拷贝到栈上：</p>
@@ -936,16 +942,16 @@
 </span><span class="lnt">9
 </span></code></pre></td>
 <td class="lntd">
-<pre tabindex="0" class="chroma"><code class="language-go" data-lang="go"><span class="line"><span class="cl">	<span class="o">...</span>
-</span></span><span class="line"><span class="cl">	<span class="nx">totalSize</span> <span class="o">:=</span> <span class="mi">4</span><span class="o">*</span><span class="nx">sys</span><span class="p">.</span><span class="nx">RegSize</span> <span class="o">+</span> <span class="nb">uintptr</span><span class="p">(</span><span class="nx">siz</span><span class="p">)</span> <span class="o">+</span> <span class="nx">sys</span><span class="p">.</span><span class="nx">MinFrameSize</span>
-</span></span><span class="line"><span class="cl">	<span class="nx">totalSize</span> <span class="o">+=</span> <span class="o">-</span><span class="nx">totalSize</span> <span class="o">&amp;</span> <span class="p">(</span><span class="nx">sys</span><span class="p">.</span><span class="nx">SpAlign</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
-</span></span><span class="line"><span class="cl">	<span class="nx">sp</span> <span class="o">:=</span> <span class="nx">newg</span><span class="p">.</span><span class="nx">stack</span><span class="p">.</span><span class="nx">hi</span> <span class="o">-</span> <span class="nx">totalSize</span>
-</span></span><span class="line"><span class="cl">	<span class="nx">spArg</span> <span class="o">:=</span> <span class="nx">sp</span>
-</span></span><span class="line"><span class="cl">	<span class="k">if</span> <span class="nx">narg</span> <span class="p">&gt;</span> <span class="mi">0</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">		<span class="nf">memmove</span><span class="p">(</span><span class="nx">unsafe</span><span class="p">.</span><span class="nf">Pointer</span><span class="p">(</span><span class="nx">spArg</span><span class="p">),</span> <span class="nx">argp</span><span class="p">,</span> <span class="nb">uintptr</span><span class="p">(</span><span class="nx">narg</span><span class="p">))</span>
-</span></span><span class="line"><span class="cl">	<span class="p">}</span>
-</span></span><span class="line"><span class="cl">	<span class="o">...</span>
-</span></span></code></pre></td></tr></table>
+<pre tabindex="0" class="chroma"><code class="language-go" data-lang="go"><span class="line"><span class="cl"><span class="w">	</span><span class="o">...</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">totalSize</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="mi">4</span><span class="o">*</span><span class="nx">sys</span><span class="p">.</span><span class="nx">RegSize</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="nb">uintptr</span><span class="p">(</span><span class="nx">siz</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="nx">sys</span><span class="p">.</span><span class="nx">MinFrameSize</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">totalSize</span><span class="w"> </span><span class="o">+=</span><span class="w"> </span><span class="o">-</span><span class="nx">totalSize</span><span class="w"> </span><span class="o">&amp;</span><span class="w"> </span><span class="p">(</span><span class="nx">sys</span><span class="p">.</span><span class="nx">SpAlign</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="mi">1</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">sp</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">newg</span><span class="p">.</span><span class="nx">stack</span><span class="p">.</span><span class="nx">hi</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="nx">totalSize</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">spArg</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">sp</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="k">if</span><span class="w"> </span><span class="nx">narg</span><span class="w"> </span><span class="p">&gt;</span><span class="w"> </span><span class="mi">0</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="nf">memmove</span><span class="p">(</span><span class="nx">unsafe</span><span class="p">.</span><span class="nf">Pointer</span><span class="p">(</span><span class="nx">spArg</span><span class="p">),</span><span class="w"> </span><span class="nx">argp</span><span class="p">,</span><span class="w"> </span><span class="nb">uintptr</span><span class="p">(</span><span class="nx">narg</span><span class="p">))</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="o">...</span><span class="w">
+</span></span></span></code></pre></td></tr></table>
 </div>
 </div><p>拷贝了栈上的参数之后，<a href="https://draveness.me/golang/tree/runtime.newproc1"><code>runtime.newproc1</code></a> 会设置新的 Goroutine 结构体的参数，包括栈指针、程序计数器并更新其状态到 <code>_Grunnable</code> 并返回：</p>
 <div class="highlight"><div class="chroma">
@@ -966,21 +972,21 @@
 </span><span class="lnt">14
 </span></code></pre></td>
 <td class="lntd">
-<pre tabindex="0" class="chroma"><code class="language-go" data-lang="go"><span class="line"><span class="cl">	<span class="o">...</span>
-</span></span><span class="line"><span class="cl">	<span class="nf">memclrNoHeapPointers</span><span class="p">(</span><span class="nx">unsafe</span><span class="p">.</span><span class="nf">Pointer</span><span class="p">(</span><span class="o">&amp;</span><span class="nx">newg</span><span class="p">.</span><span class="nx">sched</span><span class="p">),</span> <span class="nx">unsafe</span><span class="p">.</span><span class="nf">Sizeof</span><span class="p">(</span><span class="nx">newg</span><span class="p">.</span><span class="nx">sched</span><span class="p">))</span>
-</span></span><span class="line"><span class="cl">	<span class="nx">newg</span><span class="p">.</span><span class="nx">sched</span><span class="p">.</span><span class="nx">sp</span> <span class="p">=</span> <span class="nx">sp</span>
-</span></span><span class="line"><span class="cl">	<span class="nx">newg</span><span class="p">.</span><span class="nx">stktopsp</span> <span class="p">=</span> <span class="nx">sp</span>
-</span></span><span class="line"><span class="cl">	<span class="nx">newg</span><span class="p">.</span><span class="nx">sched</span><span class="p">.</span><span class="nx">pc</span> <span class="p">=</span> <span class="nf">funcPC</span><span class="p">(</span><span class="nx">goexit</span><span class="p">)</span> <span class="o">+</span> <span class="nx">sys</span><span class="p">.</span><span class="nx">PCQuantum</span>
-</span></span><span class="line"><span class="cl">	<span class="nx">newg</span><span class="p">.</span><span class="nx">sched</span><span class="p">.</span><span class="nx">g</span> <span class="p">=</span> <span class="nf">guintptr</span><span class="p">(</span><span class="nx">unsafe</span><span class="p">.</span><span class="nf">Pointer</span><span class="p">(</span><span class="nx">newg</span><span class="p">))</span>
-</span></span><span class="line"><span class="cl">	<span class="nf">gostartcallfn</span><span class="p">(</span><span class="o">&amp;</span><span class="nx">newg</span><span class="p">.</span><span class="nx">sched</span><span class="p">,</span> <span class="nx">fn</span><span class="p">)</span>
-</span></span><span class="line"><span class="cl">	<span class="nx">newg</span><span class="p">.</span><span class="nx">gopc</span> <span class="p">=</span> <span class="nx">callerpc</span>
-</span></span><span class="line"><span class="cl">	<span class="nx">newg</span><span class="p">.</span><span class="nx">startpc</span> <span class="p">=</span> <span class="nx">fn</span><span class="p">.</span><span class="nx">fn</span>
-</span></span><span class="line"><span class="cl">	<span class="nf">casgstatus</span><span class="p">(</span><span class="nx">newg</span><span class="p">,</span> <span class="nx">_Gdead</span><span class="p">,</span> <span class="nx">_Grunnable</span><span class="p">)</span>
-</span></span><span class="line"><span class="cl">	<span class="nx">newg</span><span class="p">.</span><span class="nx">goid</span> <span class="p">=</span> <span class="nb">int64</span><span class="p">(</span><span class="nx">_p_</span><span class="p">.</span><span class="nx">goidcache</span><span class="p">)</span>
-</span></span><span class="line"><span class="cl">	<span class="nx">_p_</span><span class="p">.</span><span class="nx">goidcache</span><span class="o">++</span>
-</span></span><span class="line"><span class="cl">	<span class="k">return</span> <span class="nx">newg</span>
-</span></span><span class="line"><span class="cl"><span class="p">}</span>
-</span></span></code></pre></td></tr></table>
+<pre tabindex="0" class="chroma"><code class="language-go" data-lang="go"><span class="line"><span class="cl"><span class="w">	</span><span class="o">...</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nf">memclrNoHeapPointers</span><span class="p">(</span><span class="nx">unsafe</span><span class="p">.</span><span class="nf">Pointer</span><span class="p">(</span><span class="o">&amp;</span><span class="nx">newg</span><span class="p">.</span><span class="nx">sched</span><span class="p">),</span><span class="w"> </span><span class="nx">unsafe</span><span class="p">.</span><span class="nf">Sizeof</span><span class="p">(</span><span class="nx">newg</span><span class="p">.</span><span class="nx">sched</span><span class="p">))</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">newg</span><span class="p">.</span><span class="nx">sched</span><span class="p">.</span><span class="nx">sp</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nx">sp</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">newg</span><span class="p">.</span><span class="nx">stktopsp</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nx">sp</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">newg</span><span class="p">.</span><span class="nx">sched</span><span class="p">.</span><span class="nx">pc</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nf">funcPC</span><span class="p">(</span><span class="nx">goexit</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="nx">sys</span><span class="p">.</span><span class="nx">PCQuantum</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">newg</span><span class="p">.</span><span class="nx">sched</span><span class="p">.</span><span class="nx">g</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nf">guintptr</span><span class="p">(</span><span class="nx">unsafe</span><span class="p">.</span><span class="nf">Pointer</span><span class="p">(</span><span class="nx">newg</span><span class="p">))</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nf">gostartcallfn</span><span class="p">(</span><span class="o">&amp;</span><span class="nx">newg</span><span class="p">.</span><span class="nx">sched</span><span class="p">,</span><span class="w"> </span><span class="nx">fn</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">newg</span><span class="p">.</span><span class="nx">gopc</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nx">callerpc</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">newg</span><span class="p">.</span><span class="nx">startpc</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nx">fn</span><span class="p">.</span><span class="nx">fn</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nf">casgstatus</span><span class="p">(</span><span class="nx">newg</span><span class="p">,</span><span class="w"> </span><span class="nx">_Gdead</span><span class="p">,</span><span class="w"> </span><span class="nx">_Grunnable</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">newg</span><span class="p">.</span><span class="nx">goid</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nb">int64</span><span class="p">(</span><span class="nx">_p_</span><span class="p">.</span><span class="nx">goidcache</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">_p_</span><span class="p">.</span><span class="nx">goidcache</span><span class="o">++</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="k">return</span><span class="w"> </span><span class="nx">newg</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="p">}</span><span class="w">
+</span></span></span></code></pre></td></tr></table>
 </div>
 </div><h3 id="初始化结构体">初始化结构体</h3>
 <p><a href="https://draveness.me/golang/tree/runtime.gfget"><code>runtime.gfget</code></a> 通过两种不同的方式获取新的 <a href="https://draveness.me/golang/tree/runtime.g"><code>runtime.g</code></a>：</p>
@@ -1018,28 +1024,28 @@
 </span><span class="lnt">21
 </span></code></pre></td>
 <td class="lntd">
-<pre tabindex="0" class="chroma"><code class="language-go" data-lang="go"><span class="line"><span class="cl"><span class="kd">func</span> <span class="nf">gfget</span><span class="p">(</span><span class="nx">_p_</span> <span class="o">*</span><span class="nx">p</span><span class="p">)</span> <span class="o">*</span><span class="nx">g</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl"><span class="nx">retry</span><span class="p">:</span>
-</span></span><span class="line"><span class="cl">	<span class="k">if</span> <span class="nx">_p_</span><span class="p">.</span><span class="nx">gFree</span><span class="p">.</span><span class="nf">empty</span><span class="p">()</span> <span class="o">&amp;&amp;</span> <span class="p">(!</span><span class="nx">sched</span><span class="p">.</span><span class="nx">gFree</span><span class="p">.</span><span class="nx">stack</span><span class="p">.</span><span class="nf">empty</span><span class="p">()</span> <span class="o">||</span> <span class="p">!</span><span class="nx">sched</span><span class="p">.</span><span class="nx">gFree</span><span class="p">.</span><span class="nx">noStack</span><span class="p">.</span><span class="nf">empty</span><span class="p">())</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">		<span class="k">for</span> <span class="nx">_p_</span><span class="p">.</span><span class="nx">gFree</span><span class="p">.</span><span class="nx">n</span> <span class="p">&lt;</span> <span class="mi">32</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">			<span class="nx">gp</span> <span class="o">:=</span> <span class="nx">sched</span><span class="p">.</span><span class="nx">gFree</span><span class="p">.</span><span class="nx">stack</span><span class="p">.</span><span class="nf">pop</span><span class="p">()</span>
-</span></span><span class="line"><span class="cl">			<span class="k">if</span> <span class="nx">gp</span> <span class="o">==</span> <span class="kc">nil</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">				<span class="nx">gp</span> <span class="p">=</span> <span class="nx">sched</span><span class="p">.</span><span class="nx">gFree</span><span class="p">.</span><span class="nx">noStack</span><span class="p">.</span><span class="nf">pop</span><span class="p">()</span>
-</span></span><span class="line"><span class="cl">				<span class="k">if</span> <span class="nx">gp</span> <span class="o">==</span> <span class="kc">nil</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">					<span class="k">break</span>
-</span></span><span class="line"><span class="cl">				<span class="p">}</span>
-</span></span><span class="line"><span class="cl">			<span class="p">}</span>
-</span></span><span class="line"><span class="cl">			<span class="nx">_p_</span><span class="p">.</span><span class="nx">gFree</span><span class="p">.</span><span class="nf">push</span><span class="p">(</span><span class="nx">gp</span><span class="p">)</span>
-</span></span><span class="line"><span class="cl">		<span class="p">}</span>
-</span></span><span class="line"><span class="cl">		<span class="k">goto</span> <span class="nx">retry</span>
-</span></span><span class="line"><span class="cl">	<span class="p">}</span>
-</span></span><span class="line"><span class="cl">	<span class="nx">gp</span> <span class="o">:=</span> <span class="nx">_p_</span><span class="p">.</span><span class="nx">gFree</span><span class="p">.</span><span class="nf">pop</span><span class="p">()</span>
-</span></span><span class="line"><span class="cl">	<span class="k">if</span> <span class="nx">gp</span> <span class="o">==</span> <span class="kc">nil</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">		<span class="k">return</span> <span class="kc">nil</span>
-</span></span><span class="line"><span class="cl">	<span class="p">}</span>
-</span></span><span class="line"><span class="cl">	<span class="k">return</span> <span class="nx">gp</span>
-</span></span><span class="line"><span class="cl"><span class="p">}</span>
-</span></span></code></pre></td></tr></table>
+<pre tabindex="0" class="chroma"><code class="language-go" data-lang="go"><span class="line"><span class="cl"><span class="kd">func</span><span class="w"> </span><span class="nf">gfget</span><span class="p">(</span><span class="nx">_p_</span><span class="w"> </span><span class="o">*</span><span class="nx">p</span><span class="p">)</span><span class="w"> </span><span class="o">*</span><span class="nx">g</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="nx">retry</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="k">if</span><span class="w"> </span><span class="nx">_p_</span><span class="p">.</span><span class="nx">gFree</span><span class="p">.</span><span class="nf">empty</span><span class="p">()</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="p">(!</span><span class="nx">sched</span><span class="p">.</span><span class="nx">gFree</span><span class="p">.</span><span class="nx">stack</span><span class="p">.</span><span class="nf">empty</span><span class="p">()</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="p">!</span><span class="nx">sched</span><span class="p">.</span><span class="nx">gFree</span><span class="p">.</span><span class="nx">noStack</span><span class="p">.</span><span class="nf">empty</span><span class="p">())</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="k">for</span><span class="w"> </span><span class="nx">_p_</span><span class="p">.</span><span class="nx">gFree</span><span class="p">.</span><span class="nx">n</span><span class="w"> </span><span class="p">&lt;</span><span class="w"> </span><span class="mi">32</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">			</span><span class="nx">gp</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">sched</span><span class="p">.</span><span class="nx">gFree</span><span class="p">.</span><span class="nx">stack</span><span class="p">.</span><span class="nf">pop</span><span class="p">()</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">			</span><span class="k">if</span><span class="w"> </span><span class="nx">gp</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="kc">nil</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">				</span><span class="nx">gp</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nx">sched</span><span class="p">.</span><span class="nx">gFree</span><span class="p">.</span><span class="nx">noStack</span><span class="p">.</span><span class="nf">pop</span><span class="p">()</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">				</span><span class="k">if</span><span class="w"> </span><span class="nx">gp</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="kc">nil</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">					</span><span class="k">break</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">				</span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">			</span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">			</span><span class="nx">_p_</span><span class="p">.</span><span class="nx">gFree</span><span class="p">.</span><span class="nf">push</span><span class="p">(</span><span class="nx">gp</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="k">goto</span><span class="w"> </span><span class="nx">retry</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">gp</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">_p_</span><span class="p">.</span><span class="nx">gFree</span><span class="p">.</span><span class="nf">pop</span><span class="p">()</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="k">if</span><span class="w"> </span><span class="nx">gp</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="kc">nil</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="k">return</span><span class="w"> </span><span class="kc">nil</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="k">return</span><span class="w"> </span><span class="nx">gp</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="p">}</span><span class="w">
+</span></span></span></code></pre></td></tr></table>
 </div>
 </div><p>当调度器的 <code>gFree</code> 和处理器的 <code>gFree</code> 列表都不存在结构体时，运行时会调用 <a href="https://draveness.me/golang/tree/runtime.malg"><code>runtime.malg</code></a> 初始化新的 <a href="https://draveness.me/golang/tree/runtime.g"><code>runtime.g</code></a> 结构，如果申请的堆栈大小大于 0，这里会通过 <a href="https://draveness.me/golang/tree/runtime.stackalloc"><code>runtime.stackalloc</code></a> 分配 2KB 的栈空间：</p>
 <div class="highlight"><div class="chroma">
@@ -1056,17 +1062,17 @@
 </span><span class="lnt">10
 </span></code></pre></td>
 <td class="lntd">
-<pre tabindex="0" class="chroma"><code class="language-go" data-lang="go"><span class="line"><span class="cl"><span class="kd">func</span> <span class="nf">malg</span><span class="p">(</span><span class="nx">stacksize</span> <span class="kt">int32</span><span class="p">)</span> <span class="o">*</span><span class="nx">g</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">	<span class="nx">newg</span> <span class="o">:=</span> <span class="nb">new</span><span class="p">(</span><span class="nx">g</span><span class="p">)</span>
-</span></span><span class="line"><span class="cl">	<span class="k">if</span> <span class="nx">stacksize</span> <span class="o">&gt;=</span> <span class="mi">0</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">		<span class="nx">stacksize</span> <span class="p">=</span> <span class="nf">round2</span><span class="p">(</span><span class="nx">_StackSystem</span> <span class="o">+</span> <span class="nx">stacksize</span><span class="p">)</span>
-</span></span><span class="line"><span class="cl">		<span class="nx">newg</span><span class="p">.</span><span class="nx">stack</span> <span class="p">=</span> <span class="nf">stackalloc</span><span class="p">(</span><span class="nb">uint32</span><span class="p">(</span><span class="nx">stacksize</span><span class="p">))</span>
-</span></span><span class="line"><span class="cl">		<span class="nx">newg</span><span class="p">.</span><span class="nx">stackguard0</span> <span class="p">=</span> <span class="nx">newg</span><span class="p">.</span><span class="nx">stack</span><span class="p">.</span><span class="nx">lo</span> <span class="o">+</span> <span class="nx">_StackGuard</span>
-</span></span><span class="line"><span class="cl">		<span class="nx">newg</span><span class="p">.</span><span class="nx">stackguard1</span> <span class="p">=</span> <span class="p">^</span><span class="nb">uintptr</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
-</span></span><span class="line"><span class="cl">	<span class="p">}</span>
-</span></span><span class="line"><span class="cl">	<span class="k">return</span> <span class="nx">newg</span>
-</span></span><span class="line"><span class="cl"><span class="p">}</span>
-</span></span></code></pre></td></tr></table>
+<pre tabindex="0" class="chroma"><code class="language-go" data-lang="go"><span class="line"><span class="cl"><span class="kd">func</span><span class="w"> </span><span class="nf">malg</span><span class="p">(</span><span class="nx">stacksize</span><span class="w"> </span><span class="kt">int32</span><span class="p">)</span><span class="w"> </span><span class="o">*</span><span class="nx">g</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">newg</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nb">new</span><span class="p">(</span><span class="nx">g</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="k">if</span><span class="w"> </span><span class="nx">stacksize</span><span class="w"> </span><span class="o">&gt;=</span><span class="w"> </span><span class="mi">0</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="nx">stacksize</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nf">round2</span><span class="p">(</span><span class="nx">_StackSystem</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="nx">stacksize</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="nx">newg</span><span class="p">.</span><span class="nx">stack</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nf">stackalloc</span><span class="p">(</span><span class="nb">uint32</span><span class="p">(</span><span class="nx">stacksize</span><span class="p">))</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="nx">newg</span><span class="p">.</span><span class="nx">stackguard0</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nx">newg</span><span class="p">.</span><span class="nx">stack</span><span class="p">.</span><span class="nx">lo</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="nx">_StackGuard</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="nx">newg</span><span class="p">.</span><span class="nx">stackguard1</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="p">^</span><span class="nb">uintptr</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="k">return</span><span class="w"> </span><span class="nx">newg</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="p">}</span><span class="w">
+</span></span></span></code></pre></td></tr></table>
 </div>
 </div><p><a href="https://draveness.me/golang/tree/runtime.malg"><code>runtime.malg</code></a> 返回的 Goroutine 会存储到全局变量 <code>allgs</code> 中。</p>
 <p>简单总结一下，<a href="https://draveness.me/golang/tree/runtime.newproc1"><code>runtime.newproc1</code></a> 会从处理器或者调度器的缓存中获取新的结构体，也可以调用 <a href="https://draveness.me/golang/tree/runtime.malg"><code>runtime.malg</code></a> 函数创建。</p>
@@ -1101,32 +1107,32 @@
 </span><span class="lnt">25
 </span></code></pre></td>
 <td class="lntd">
-<pre tabindex="0" class="chroma"><code class="language-go" data-lang="go"><span class="line"><span class="cl"><span class="kd">func</span> <span class="nf">runqput</span><span class="p">(</span><span class="nx">_p_</span> <span class="o">*</span><span class="nx">p</span><span class="p">,</span> <span class="nx">gp</span> <span class="o">*</span><span class="nx">g</span><span class="p">,</span> <span class="nx">next</span> <span class="kt">bool</span><span class="p">)</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">	<span class="k">if</span> <span class="nx">next</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">	<span class="nx">retryNext</span><span class="p">:</span>
-</span></span><span class="line"><span class="cl">		<span class="nx">oldnext</span> <span class="o">:=</span> <span class="nx">_p_</span><span class="p">.</span><span class="nx">runnext</span>
-</span></span><span class="line"><span class="cl">		<span class="k">if</span> <span class="p">!</span><span class="nx">_p_</span><span class="p">.</span><span class="nx">runnext</span><span class="p">.</span><span class="nf">cas</span><span class="p">(</span><span class="nx">oldnext</span><span class="p">,</span> <span class="nf">guintptr</span><span class="p">(</span><span class="nx">unsafe</span><span class="p">.</span><span class="nf">Pointer</span><span class="p">(</span><span class="nx">gp</span><span class="p">)))</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">			<span class="k">goto</span> <span class="nx">retryNext</span>
-</span></span><span class="line"><span class="cl">		<span class="p">}</span>
-</span></span><span class="line"><span class="cl">		<span class="k">if</span> <span class="nx">oldnext</span> <span class="o">==</span> <span class="mi">0</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">			<span class="k">return</span>
-</span></span><span class="line"><span class="cl">		<span class="p">}</span>
-</span></span><span class="line"><span class="cl">		<span class="nx">gp</span> <span class="p">=</span> <span class="nx">oldnext</span><span class="p">.</span><span class="nf">ptr</span><span class="p">()</span>
-</span></span><span class="line"><span class="cl">	<span class="p">}</span>
-</span></span><span class="line"><span class="cl"><span class="nx">retry</span><span class="p">:</span>
-</span></span><span class="line"><span class="cl">	<span class="nx">h</span> <span class="o">:=</span> <span class="nx">atomic</span><span class="p">.</span><span class="nf">LoadAcq</span><span class="p">(</span><span class="o">&amp;</span><span class="nx">_p_</span><span class="p">.</span><span class="nx">runqhead</span><span class="p">)</span>
-</span></span><span class="line"><span class="cl">	<span class="nx">t</span> <span class="o">:=</span> <span class="nx">_p_</span><span class="p">.</span><span class="nx">runqtail</span>
-</span></span><span class="line"><span class="cl">	<span class="k">if</span> <span class="nx">t</span><span class="o">-</span><span class="nx">h</span> <span class="p">&lt;</span> <span class="nb">uint32</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="nx">_p_</span><span class="p">.</span><span class="nx">runq</span><span class="p">))</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">		<span class="nx">_p_</span><span class="p">.</span><span class="nx">runq</span><span class="p">[</span><span class="nx">t</span><span class="o">%</span><span class="nb">uint32</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="nx">_p_</span><span class="p">.</span><span class="nx">runq</span><span class="p">))].</span><span class="nf">set</span><span class="p">(</span><span class="nx">gp</span><span class="p">)</span>
-</span></span><span class="line"><span class="cl">		<span class="nx">atomic</span><span class="p">.</span><span class="nf">StoreRel</span><span class="p">(</span><span class="o">&amp;</span><span class="nx">_p_</span><span class="p">.</span><span class="nx">runqtail</span><span class="p">,</span> <span class="nx">t</span><span class="o">+</span><span class="mi">1</span><span class="p">)</span>
-</span></span><span class="line"><span class="cl">		<span class="k">return</span>
-</span></span><span class="line"><span class="cl">	<span class="p">}</span>
-</span></span><span class="line"><span class="cl">	<span class="k">if</span> <span class="nf">runqputslow</span><span class="p">(</span><span class="nx">_p_</span><span class="p">,</span> <span class="nx">gp</span><span class="p">,</span> <span class="nx">h</span><span class="p">,</span> <span class="nx">t</span><span class="p">)</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">		<span class="k">return</span>
-</span></span><span class="line"><span class="cl">	<span class="p">}</span>
-</span></span><span class="line"><span class="cl">	<span class="k">goto</span> <span class="nx">retry</span>
-</span></span><span class="line"><span class="cl"><span class="p">}</span>
-</span></span></code></pre></td></tr></table>
+<pre tabindex="0" class="chroma"><code class="language-go" data-lang="go"><span class="line"><span class="cl"><span class="kd">func</span><span class="w"> </span><span class="nf">runqput</span><span class="p">(</span><span class="nx">_p_</span><span class="w"> </span><span class="o">*</span><span class="nx">p</span><span class="p">,</span><span class="w"> </span><span class="nx">gp</span><span class="w"> </span><span class="o">*</span><span class="nx">g</span><span class="p">,</span><span class="w"> </span><span class="nx">next</span><span class="w"> </span><span class="kt">bool</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="k">if</span><span class="w"> </span><span class="nx">next</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">retryNext</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="nx">oldnext</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">_p_</span><span class="p">.</span><span class="nx">runnext</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="k">if</span><span class="w"> </span><span class="p">!</span><span class="nx">_p_</span><span class="p">.</span><span class="nx">runnext</span><span class="p">.</span><span class="nf">cas</span><span class="p">(</span><span class="nx">oldnext</span><span class="p">,</span><span class="w"> </span><span class="nf">guintptr</span><span class="p">(</span><span class="nx">unsafe</span><span class="p">.</span><span class="nf">Pointer</span><span class="p">(</span><span class="nx">gp</span><span class="p">)))</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">			</span><span class="k">goto</span><span class="w"> </span><span class="nx">retryNext</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="k">if</span><span class="w"> </span><span class="nx">oldnext</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="mi">0</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">			</span><span class="k">return</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="nx">gp</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nx">oldnext</span><span class="p">.</span><span class="nf">ptr</span><span class="p">()</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="nx">retry</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">h</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">atomic</span><span class="p">.</span><span class="nf">LoadAcq</span><span class="p">(</span><span class="o">&amp;</span><span class="nx">_p_</span><span class="p">.</span><span class="nx">runqhead</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">t</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">_p_</span><span class="p">.</span><span class="nx">runqtail</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="k">if</span><span class="w"> </span><span class="nx">t</span><span class="o">-</span><span class="nx">h</span><span class="w"> </span><span class="p">&lt;</span><span class="w"> </span><span class="nb">uint32</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="nx">_p_</span><span class="p">.</span><span class="nx">runq</span><span class="p">))</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="nx">_p_</span><span class="p">.</span><span class="nx">runq</span><span class="p">[</span><span class="nx">t</span><span class="o">%</span><span class="nb">uint32</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="nx">_p_</span><span class="p">.</span><span class="nx">runq</span><span class="p">))].</span><span class="nf">set</span><span class="p">(</span><span class="nx">gp</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="nx">atomic</span><span class="p">.</span><span class="nf">StoreRel</span><span class="p">(</span><span class="o">&amp;</span><span class="nx">_p_</span><span class="p">.</span><span class="nx">runqtail</span><span class="p">,</span><span class="w"> </span><span class="nx">t</span><span class="o">+</span><span class="mi">1</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="k">return</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="k">if</span><span class="w"> </span><span class="nf">runqputslow</span><span class="p">(</span><span class="nx">_p_</span><span class="p">,</span><span class="w"> </span><span class="nx">gp</span><span class="p">,</span><span class="w"> </span><span class="nx">h</span><span class="p">,</span><span class="w"> </span><span class="nx">t</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="k">return</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="k">goto</span><span class="w"> </span><span class="nx">retry</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="p">}</span><span class="w">
+</span></span></span></code></pre></td></tr></table>
 </div>
 </div><ol>
 <li>当 <code>next</code> 为 <code>true</code> 时，将 Goroutine 设置到处理器的 <code>runnext</code> 作为下一个处理器执行的任务；</li>
@@ -1148,12 +1154,12 @@
 </span><span class="lnt">5
 </span></code></pre></td>
 <td class="lntd">
-<pre tabindex="0" class="chroma"><code class="language-go" data-lang="go"><span class="line"><span class="cl">	<span class="o">...</span>
-</span></span><span class="line"><span class="cl">	<span class="nx">newg</span><span class="p">.</span><span class="nx">sched</span><span class="p">.</span><span class="nx">pc</span> <span class="p">=</span> <span class="nf">funcPC</span><span class="p">(</span><span class="nx">goexit</span><span class="p">)</span> <span class="o">+</span> <span class="nx">sys</span><span class="p">.</span><span class="nx">PCQuantum</span>
-</span></span><span class="line"><span class="cl">	<span class="nx">newg</span><span class="p">.</span><span class="nx">sched</span><span class="p">.</span><span class="nx">g</span> <span class="p">=</span> <span class="nf">guintptr</span><span class="p">(</span><span class="nx">unsafe</span><span class="p">.</span><span class="nf">Pointer</span><span class="p">(</span><span class="nx">newg</span><span class="p">))</span>
-</span></span><span class="line"><span class="cl">	<span class="nf">gostartcallfn</span><span class="p">(</span><span class="o">&amp;</span><span class="nx">newg</span><span class="p">.</span><span class="nx">sched</span><span class="p">,</span> <span class="nx">fn</span><span class="p">)</span>
-</span></span><span class="line"><span class="cl">	<span class="o">...</span>
-</span></span></code></pre></td></tr></table>
+<pre tabindex="0" class="chroma"><code class="language-go" data-lang="go"><span class="line"><span class="cl"><span class="w">	</span><span class="o">...</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">newg</span><span class="p">.</span><span class="nx">sched</span><span class="p">.</span><span class="nx">pc</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nf">funcPC</span><span class="p">(</span><span class="nx">goexit</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="nx">sys</span><span class="p">.</span><span class="nx">PCQuantum</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">newg</span><span class="p">.</span><span class="nx">sched</span><span class="p">.</span><span class="nx">g</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nf">guintptr</span><span class="p">(</span><span class="nx">unsafe</span><span class="p">.</span><span class="nf">Pointer</span><span class="p">(</span><span class="nx">newg</span><span class="p">))</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nf">gostartcallfn</span><span class="p">(</span><span class="o">&amp;</span><span class="nx">newg</span><span class="p">.</span><span class="nx">sched</span><span class="p">,</span><span class="w"> </span><span class="nx">fn</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="o">...</span><span class="w">
+</span></span></span></code></pre></td></tr></table>
 </div>
 </div><p>上述调度信息 <code>sched</code> 不是初始化后的 Goroutine 的最终结果，它还需要经过 <a href="https://draveness.me/golang/tree/runtime.gostartcallfn"><code>runtime.gostartcallfn</code></a> 和 <a href="https://draveness.me/golang/tree/runtime.gostartcall"><code>runtime.gostartcall</code></a> 的处理：</p>
 <div class="highlight"><div class="chroma">
@@ -1176,23 +1182,23 @@
 </span><span class="lnt">16
 </span></code></pre></td>
 <td class="lntd">
-<pre tabindex="0" class="chroma"><code class="language-go" data-lang="go"><span class="line"><span class="cl"><span class="kd">func</span> <span class="nf">gostartcallfn</span><span class="p">(</span><span class="nx">gobuf</span> <span class="o">*</span><span class="nx">gobuf</span><span class="p">,</span> <span class="nx">fv</span> <span class="o">*</span><span class="nx">funcval</span><span class="p">)</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">	<span class="nf">gostartcall</span><span class="p">(</span><span class="nx">gobuf</span><span class="p">,</span> <span class="nx">unsafe</span><span class="p">.</span><span class="nf">Pointer</span><span class="p">(</span><span class="nx">fv</span><span class="p">.</span><span class="nx">fn</span><span class="p">),</span> <span class="nx">unsafe</span><span class="p">.</span><span class="nf">Pointer</span><span class="p">(</span><span class="nx">fv</span><span class="p">))</span>
-</span></span><span class="line"><span class="cl"><span class="p">}</span>
-</span></span><span class="line"><span class="cl">
-</span></span><span class="line"><span class="cl"><span class="kd">func</span> <span class="nf">gostartcall</span><span class="p">(</span><span class="nx">buf</span> <span class="o">*</span><span class="nx">gobuf</span><span class="p">,</span> <span class="nx">fn</span><span class="p">,</span> <span class="nx">ctxt</span> <span class="nx">unsafe</span><span class="p">.</span><span class="nx">Pointer</span><span class="p">)</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">	<span class="nx">sp</span> <span class="o">:=</span> <span class="nx">buf</span><span class="p">.</span><span class="nx">sp</span>
-</span></span><span class="line"><span class="cl">	<span class="k">if</span> <span class="nx">sys</span><span class="p">.</span><span class="nx">RegSize</span> <span class="p">&gt;</span> <span class="nx">sys</span><span class="p">.</span><span class="nx">PtrSize</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">		<span class="nx">sp</span> <span class="o">-=</span> <span class="nx">sys</span><span class="p">.</span><span class="nx">PtrSize</span>
-</span></span><span class="line"><span class="cl">		<span class="o">*</span><span class="p">(</span><span class="o">*</span><span class="kt">uintptr</span><span class="p">)(</span><span class="nx">unsafe</span><span class="p">.</span><span class="nf">Pointer</span><span class="p">(</span><span class="nx">sp</span><span class="p">))</span> <span class="p">=</span> <span class="mi">0</span>
-</span></span><span class="line"><span class="cl">	<span class="p">}</span>
-</span></span><span class="line"><span class="cl">	<span class="nx">sp</span> <span class="o">-=</span> <span class="nx">sys</span><span class="p">.</span><span class="nx">PtrSize</span>
-</span></span><span class="line"><span class="cl">	<span class="o">*</span><span class="p">(</span><span class="o">*</span><span class="kt">uintptr</span><span class="p">)(</span><span class="nx">unsafe</span><span class="p">.</span><span class="nf">Pointer</span><span class="p">(</span><span class="nx">sp</span><span class="p">))</span> <span class="p">=</span> <span class="nx">buf</span><span class="p">.</span><span class="nx">pc</span>
-</span></span><span class="line"><span class="cl">	<span class="nx">buf</span><span class="p">.</span><span class="nx">sp</span> <span class="p">=</span> <span class="nx">sp</span>
-</span></span><span class="line"><span class="cl">	<span class="nx">buf</span><span class="p">.</span><span class="nx">pc</span> <span class="p">=</span> <span class="nb">uintptr</span><span class="p">(</span><span class="nx">fn</span><span class="p">)</span>
-</span></span><span class="line"><span class="cl">	<span class="nx">buf</span><span class="p">.</span><span class="nx">ctxt</span> <span class="p">=</span> <span class="nx">ctxt</span>
-</span></span><span class="line"><span class="cl"><span class="p">}</span>
-</span></span></code></pre></td></tr></table>
+<pre tabindex="0" class="chroma"><code class="language-go" data-lang="go"><span class="line"><span class="cl"><span class="kd">func</span><span class="w"> </span><span class="nf">gostartcallfn</span><span class="p">(</span><span class="nx">gobuf</span><span class="w"> </span><span class="o">*</span><span class="nx">gobuf</span><span class="p">,</span><span class="w"> </span><span class="nx">fv</span><span class="w"> </span><span class="o">*</span><span class="nx">funcval</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nf">gostartcall</span><span class="p">(</span><span class="nx">gobuf</span><span class="p">,</span><span class="w"> </span><span class="nx">unsafe</span><span class="p">.</span><span class="nf">Pointer</span><span class="p">(</span><span class="nx">fv</span><span class="p">.</span><span class="nx">fn</span><span class="p">),</span><span class="w"> </span><span class="nx">unsafe</span><span class="p">.</span><span class="nf">Pointer</span><span class="p">(</span><span class="nx">fv</span><span class="p">))</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="kd">func</span><span class="w"> </span><span class="nf">gostartcall</span><span class="p">(</span><span class="nx">buf</span><span class="w"> </span><span class="o">*</span><span class="nx">gobuf</span><span class="p">,</span><span class="w"> </span><span class="nx">fn</span><span class="p">,</span><span class="w"> </span><span class="nx">ctxt</span><span class="w"> </span><span class="nx">unsafe</span><span class="p">.</span><span class="nx">Pointer</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">sp</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">buf</span><span class="p">.</span><span class="nx">sp</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="k">if</span><span class="w"> </span><span class="nx">sys</span><span class="p">.</span><span class="nx">RegSize</span><span class="w"> </span><span class="p">&gt;</span><span class="w"> </span><span class="nx">sys</span><span class="p">.</span><span class="nx">PtrSize</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="nx">sp</span><span class="w"> </span><span class="o">-=</span><span class="w"> </span><span class="nx">sys</span><span class="p">.</span><span class="nx">PtrSize</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="o">*</span><span class="p">(</span><span class="o">*</span><span class="kt">uintptr</span><span class="p">)(</span><span class="nx">unsafe</span><span class="p">.</span><span class="nf">Pointer</span><span class="p">(</span><span class="nx">sp</span><span class="p">))</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="mi">0</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">sp</span><span class="w"> </span><span class="o">-=</span><span class="w"> </span><span class="nx">sys</span><span class="p">.</span><span class="nx">PtrSize</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="o">*</span><span class="p">(</span><span class="o">*</span><span class="kt">uintptr</span><span class="p">)(</span><span class="nx">unsafe</span><span class="p">.</span><span class="nf">Pointer</span><span class="p">(</span><span class="nx">sp</span><span class="p">))</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nx">buf</span><span class="p">.</span><span class="nx">pc</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">buf</span><span class="p">.</span><span class="nx">sp</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nx">sp</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">buf</span><span class="p">.</span><span class="nx">pc</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nb">uintptr</span><span class="p">(</span><span class="nx">fn</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">buf</span><span class="p">.</span><span class="nx">ctxt</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nx">ctxt</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="p">}</span><span class="w">
+</span></span></span></code></pre></td></tr></table>
 </div>
 </div><p>调度信息的 <code>sp</code> 中存储了 <a href="https://draveness.me/golang/tree/runtime.goexit"><code>runtime.goexit</code></a> 函数的程序计数器，而 <code>pc</code> 中存储了传入函数的程序计数器。因为 <code>pc</code> 寄存器的作用就是存储程序接下来运行的位置，所以 <code>pc</code> 的使用比较好理解，但是 <code>sp</code> 中存储的 <a href="https://draveness.me/golang/tree/runtime.goexit"><code>runtime.goexit</code></a> 会让人感到困惑，我们需要配合下面的调度循环来理解它的作用。</p>
 <h2 id="循环调度">循环调度</h2>
@@ -1224,30 +1230,30 @@
 </span><span class="lnt">23
 </span></code></pre></td>
 <td class="lntd">
-<pre tabindex="0" class="chroma"><code class="language-go" data-lang="go"><span class="line"><span class="cl"><span class="kd">func</span> <span class="nf">schedule</span><span class="p">()</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">	<span class="nx">_g_</span> <span class="o">:=</span> <span class="nf">getg</span><span class="p">()</span>
-</span></span><span class="line"><span class="cl">
-</span></span><span class="line"><span class="cl"><span class="nx">top</span><span class="p">:</span>
-</span></span><span class="line"><span class="cl">	<span class="kd">var</span> <span class="nx">gp</span> <span class="o">*</span><span class="nx">g</span>
-</span></span><span class="line"><span class="cl">	<span class="kd">var</span> <span class="nx">inheritTime</span> <span class="kt">bool</span>
-</span></span><span class="line"><span class="cl">
-</span></span><span class="line"><span class="cl">	<span class="k">if</span> <span class="nx">gp</span> <span class="o">==</span> <span class="kc">nil</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">		<span class="k">if</span> <span class="nx">_g_</span><span class="p">.</span><span class="nx">m</span><span class="p">.</span><span class="nx">p</span><span class="p">.</span><span class="nf">ptr</span><span class="p">().</span><span class="nx">schedtick</span><span class="o">%</span><span class="mi">61</span> <span class="o">==</span> <span class="mi">0</span> <span class="o">&amp;&amp;</span> <span class="nx">sched</span><span class="p">.</span><span class="nx">runqsize</span> <span class="p">&gt;</span> <span class="mi">0</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">			<span class="nf">lock</span><span class="p">(</span><span class="o">&amp;</span><span class="nx">sched</span><span class="p">.</span><span class="nx">lock</span><span class="p">)</span>
-</span></span><span class="line"><span class="cl">			<span class="nx">gp</span> <span class="p">=</span> <span class="nf">globrunqget</span><span class="p">(</span><span class="nx">_g_</span><span class="p">.</span><span class="nx">m</span><span class="p">.</span><span class="nx">p</span><span class="p">.</span><span class="nf">ptr</span><span class="p">(),</span> <span class="mi">1</span><span class="p">)</span>
-</span></span><span class="line"><span class="cl">			<span class="nf">unlock</span><span class="p">(</span><span class="o">&amp;</span><span class="nx">sched</span><span class="p">.</span><span class="nx">lock</span><span class="p">)</span>
-</span></span><span class="line"><span class="cl">		<span class="p">}</span>
-</span></span><span class="line"><span class="cl">	<span class="p">}</span>
-</span></span><span class="line"><span class="cl">	<span class="k">if</span> <span class="nx">gp</span> <span class="o">==</span> <span class="kc">nil</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">		<span class="nx">gp</span><span class="p">,</span> <span class="nx">inheritTime</span> <span class="p">=</span> <span class="nf">runqget</span><span class="p">(</span><span class="nx">_g_</span><span class="p">.</span><span class="nx">m</span><span class="p">.</span><span class="nx">p</span><span class="p">.</span><span class="nf">ptr</span><span class="p">())</span>
-</span></span><span class="line"><span class="cl">	<span class="p">}</span>
-</span></span><span class="line"><span class="cl">	<span class="k">if</span> <span class="nx">gp</span> <span class="o">==</span> <span class="kc">nil</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">		<span class="nx">gp</span><span class="p">,</span> <span class="nx">inheritTime</span> <span class="p">=</span> <span class="nf">findrunnable</span><span class="p">()</span>
-</span></span><span class="line"><span class="cl">	<span class="p">}</span>
-</span></span><span class="line"><span class="cl">
-</span></span><span class="line"><span class="cl">	<span class="nf">execute</span><span class="p">(</span><span class="nx">gp</span><span class="p">,</span> <span class="nx">inheritTime</span><span class="p">)</span>
-</span></span><span class="line"><span class="cl"><span class="p">}</span>
-</span></span></code></pre></td></tr></table>
+<pre tabindex="0" class="chroma"><code class="language-go" data-lang="go"><span class="line"><span class="cl"><span class="kd">func</span><span class="w"> </span><span class="nf">schedule</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">_g_</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nf">getg</span><span class="p">()</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="nx">top</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="kd">var</span><span class="w"> </span><span class="nx">gp</span><span class="w"> </span><span class="o">*</span><span class="nx">g</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="kd">var</span><span class="w"> </span><span class="nx">inheritTime</span><span class="w"> </span><span class="kt">bool</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="k">if</span><span class="w"> </span><span class="nx">gp</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="kc">nil</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="k">if</span><span class="w"> </span><span class="nx">_g_</span><span class="p">.</span><span class="nx">m</span><span class="p">.</span><span class="nx">p</span><span class="p">.</span><span class="nf">ptr</span><span class="p">().</span><span class="nx">schedtick</span><span class="o">%</span><span class="mi">61</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="mi">0</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="nx">sched</span><span class="p">.</span><span class="nx">runqsize</span><span class="w"> </span><span class="p">&gt;</span><span class="w"> </span><span class="mi">0</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">			</span><span class="nf">lock</span><span class="p">(</span><span class="o">&amp;</span><span class="nx">sched</span><span class="p">.</span><span class="nx">lock</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">			</span><span class="nx">gp</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nf">globrunqget</span><span class="p">(</span><span class="nx">_g_</span><span class="p">.</span><span class="nx">m</span><span class="p">.</span><span class="nx">p</span><span class="p">.</span><span class="nf">ptr</span><span class="p">(),</span><span class="w"> </span><span class="mi">1</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">			</span><span class="nf">unlock</span><span class="p">(</span><span class="o">&amp;</span><span class="nx">sched</span><span class="p">.</span><span class="nx">lock</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="k">if</span><span class="w"> </span><span class="nx">gp</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="kc">nil</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="nx">gp</span><span class="p">,</span><span class="w"> </span><span class="nx">inheritTime</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nf">runqget</span><span class="p">(</span><span class="nx">_g_</span><span class="p">.</span><span class="nx">m</span><span class="p">.</span><span class="nx">p</span><span class="p">.</span><span class="nf">ptr</span><span class="p">())</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="k">if</span><span class="w"> </span><span class="nx">gp</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="kc">nil</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="nx">gp</span><span class="p">,</span><span class="w"> </span><span class="nx">inheritTime</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nf">findrunnable</span><span class="p">()</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nf">execute</span><span class="p">(</span><span class="nx">gp</span><span class="p">,</span><span class="w"> </span><span class="nx">inheritTime</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="p">}</span><span class="w">
+</span></span></span></code></pre></td></tr></table>
 </div>
 </div><p><a href="https://draveness.me/golang/tree/runtime.schedule"><code>runtime.schedule</code></a> 函数会从下面几个地方查找待执行的 Goroutine：</p>
 <ol>
@@ -1282,22 +1288,22 @@
 </span><span class="lnt">15
 </span></code></pre></td>
 <td class="lntd">
-<pre tabindex="0" class="chroma"><code class="language-go" data-lang="go"><span class="line"><span class="cl"><span class="kd">func</span> <span class="nf">execute</span><span class="p">(</span><span class="nx">gp</span> <span class="o">*</span><span class="nx">g</span><span class="p">,</span> <span class="nx">inheritTime</span> <span class="kt">bool</span><span class="p">)</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">	<span class="nx">_g_</span> <span class="o">:=</span> <span class="nf">getg</span><span class="p">()</span>
-</span></span><span class="line"><span class="cl">
-</span></span><span class="line"><span class="cl">	<span class="nx">_g_</span><span class="p">.</span><span class="nx">m</span><span class="p">.</span><span class="nx">curg</span> <span class="p">=</span> <span class="nx">gp</span>
-</span></span><span class="line"><span class="cl">	<span class="nx">gp</span><span class="p">.</span><span class="nx">m</span> <span class="p">=</span> <span class="nx">_g_</span><span class="p">.</span><span class="nx">m</span>
-</span></span><span class="line"><span class="cl">	<span class="nf">casgstatus</span><span class="p">(</span><span class="nx">gp</span><span class="p">,</span> <span class="nx">_Grunnable</span><span class="p">,</span> <span class="nx">_Grunning</span><span class="p">)</span>
-</span></span><span class="line"><span class="cl">	<span class="nx">gp</span><span class="p">.</span><span class="nx">waitsince</span> <span class="p">=</span> <span class="mi">0</span>
-</span></span><span class="line"><span class="cl">	<span class="nx">gp</span><span class="p">.</span><span class="nx">preempt</span> <span class="p">=</span> <span class="kc">false</span>
-</span></span><span class="line"><span class="cl">	<span class="nx">gp</span><span class="p">.</span><span class="nx">stackguard0</span> <span class="p">=</span> <span class="nx">gp</span><span class="p">.</span><span class="nx">stack</span><span class="p">.</span><span class="nx">lo</span> <span class="o">+</span> <span class="nx">_StackGuard</span>
-</span></span><span class="line"><span class="cl">	<span class="k">if</span> <span class="p">!</span><span class="nx">inheritTime</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">		<span class="nx">_g_</span><span class="p">.</span><span class="nx">m</span><span class="p">.</span><span class="nx">p</span><span class="p">.</span><span class="nf">ptr</span><span class="p">().</span><span class="nx">schedtick</span><span class="o">++</span>
-</span></span><span class="line"><span class="cl">	<span class="p">}</span>
-</span></span><span class="line"><span class="cl">
-</span></span><span class="line"><span class="cl">	<span class="nf">gogo</span><span class="p">(</span><span class="o">&amp;</span><span class="nx">gp</span><span class="p">.</span><span class="nx">sched</span><span class="p">)</span>
-</span></span><span class="line"><span class="cl"><span class="p">}</span>
-</span></span></code></pre></td></tr></table>
+<pre tabindex="0" class="chroma"><code class="language-go" data-lang="go"><span class="line"><span class="cl"><span class="kd">func</span><span class="w"> </span><span class="nf">execute</span><span class="p">(</span><span class="nx">gp</span><span class="w"> </span><span class="o">*</span><span class="nx">g</span><span class="p">,</span><span class="w"> </span><span class="nx">inheritTime</span><span class="w"> </span><span class="kt">bool</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">_g_</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nf">getg</span><span class="p">()</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">_g_</span><span class="p">.</span><span class="nx">m</span><span class="p">.</span><span class="nx">curg</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nx">gp</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">gp</span><span class="p">.</span><span class="nx">m</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nx">_g_</span><span class="p">.</span><span class="nx">m</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nf">casgstatus</span><span class="p">(</span><span class="nx">gp</span><span class="p">,</span><span class="w"> </span><span class="nx">_Grunnable</span><span class="p">,</span><span class="w"> </span><span class="nx">_Grunning</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">gp</span><span class="p">.</span><span class="nx">waitsince</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="mi">0</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">gp</span><span class="p">.</span><span class="nx">preempt</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="kc">false</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">gp</span><span class="p">.</span><span class="nx">stackguard0</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nx">gp</span><span class="p">.</span><span class="nx">stack</span><span class="p">.</span><span class="nx">lo</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="nx">_StackGuard</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="k">if</span><span class="w"> </span><span class="p">!</span><span class="nx">inheritTime</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="nx">_g_</span><span class="p">.</span><span class="nx">m</span><span class="p">.</span><span class="nx">p</span><span class="p">.</span><span class="nf">ptr</span><span class="p">().</span><span class="nx">schedtick</span><span class="o">++</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nf">gogo</span><span class="p">(</span><span class="o">&amp;</span><span class="nx">gp</span><span class="p">.</span><span class="nx">sched</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="p">}</span><span class="w">
+</span></span></span></code></pre></td></tr></table>
 </div>
 </div><p><a href="https://draveness.me/golang/tree/runtime.gogo"><code>runtime.gogo</code></a> 在不同处理器架构上的实现都不同，但是也都大同小异，下面是该函数在 386 架构上的实现：</p>
 <div class="highlight"><div class="chroma">
@@ -1318,20 +1324,20 @@
 </span><span class="lnt">14
 </span></code></pre></td>
 <td class="lntd">
-<pre tabindex="0" class="chroma"><code class="language-go" data-lang="go"><span class="line"><span class="cl"><span class="nx">TEXT</span> <span class="nx">runtime</span><span class="err">·</span><span class="nf">gogo</span><span class="p">(</span><span class="nx">SB</span><span class="p">),</span> <span class="nx">NOSPLIT</span><span class="p">,</span> <span class="err">$</span><span class="mi">8</span><span class="o">-</span><span class="mi">4</span>
-</span></span><span class="line"><span class="cl">	<span class="nx">MOVL</span> <span class="nx">buf</span><span class="o">+</span><span class="mi">0</span><span class="p">(</span><span class="nx">FP</span><span class="p">),</span> <span class="nx">BX</span>     <span class="c1">// 获取调度信息
-</span></span></span><span class="line"><span class="cl"><span class="c1"></span>	<span class="nx">MOVL</span> <span class="nf">gobuf_g</span><span class="p">(</span><span class="nx">BX</span><span class="p">),</span> <span class="nx">DX</span>
-</span></span><span class="line"><span class="cl">	<span class="nx">MOVL</span> <span class="mi">0</span><span class="p">(</span><span class="nx">DX</span><span class="p">),</span> <span class="nx">CX</span>         <span class="c1">// 保证 Goroutine 不为空
-</span></span></span><span class="line"><span class="cl"><span class="c1"></span>	<span class="nf">get_tls</span><span class="p">(</span><span class="nx">CX</span><span class="p">)</span>
-</span></span><span class="line"><span class="cl">	<span class="nx">MOVL</span> <span class="nx">DX</span><span class="p">,</span> <span class="nf">g</span><span class="p">(</span><span class="nx">CX</span><span class="p">)</span>
-</span></span><span class="line"><span class="cl">	<span class="nx">MOVL</span> <span class="nf">gobuf_sp</span><span class="p">(</span><span class="nx">BX</span><span class="p">),</span> <span class="nx">SP</span>  <span class="c1">// 将 runtime.goexit 函数的 PC 恢复到 SP 中
-</span></span></span><span class="line"><span class="cl"><span class="c1"></span>	<span class="nx">MOVL</span> <span class="nf">gobuf_ret</span><span class="p">(</span><span class="nx">BX</span><span class="p">),</span> <span class="nx">AX</span>
-</span></span><span class="line"><span class="cl">	<span class="nx">MOVL</span> <span class="nf">gobuf_ctxt</span><span class="p">(</span><span class="nx">BX</span><span class="p">),</span> <span class="nx">DX</span>
-</span></span><span class="line"><span class="cl">	<span class="nx">MOVL</span> <span class="err">$</span><span class="mi">0</span><span class="p">,</span> <span class="nf">gobuf_sp</span><span class="p">(</span><span class="nx">BX</span><span class="p">)</span>
-</span></span><span class="line"><span class="cl">	<span class="nx">MOVL</span> <span class="err">$</span><span class="mi">0</span><span class="p">,</span> <span class="nf">gobuf_ret</span><span class="p">(</span><span class="nx">BX</span><span class="p">)</span>
-</span></span><span class="line"><span class="cl">	<span class="nx">MOVL</span> <span class="err">$</span><span class="mi">0</span><span class="p">,</span> <span class="nf">gobuf_ctxt</span><span class="p">(</span><span class="nx">BX</span><span class="p">)</span>
-</span></span><span class="line"><span class="cl">	<span class="nx">MOVL</span> <span class="nf">gobuf_pc</span><span class="p">(</span><span class="nx">BX</span><span class="p">),</span> <span class="nx">BX</span>  <span class="c1">// 获取待执行函数的程序计数器
-</span></span></span><span class="line"><span class="cl"><span class="c1"></span>	<span class="nx">JMP</span>  <span class="nx">BX</span>                <span class="c1">// 开始执行
+<pre tabindex="0" class="chroma"><code class="language-go" data-lang="go"><span class="line"><span class="cl"><span class="nx">TEXT</span><span class="w"> </span><span class="nx">runtime</span><span class="err">·</span><span class="nf">gogo</span><span class="p">(</span><span class="nx">SB</span><span class="p">),</span><span class="w"> </span><span class="nx">NOSPLIT</span><span class="p">,</span><span class="w"> </span><span class="err">$</span><span class="mi">8</span><span class="o">-</span><span class="mi">4</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">MOVL</span><span class="w"> </span><span class="nx">buf</span><span class="o">+</span><span class="mi">0</span><span class="p">(</span><span class="nx">FP</span><span class="p">),</span><span class="w"> </span><span class="nx">BX</span><span class="w">     </span><span class="c1">// 获取调度信息</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">MOVL</span><span class="w"> </span><span class="nf">gobuf_g</span><span class="p">(</span><span class="nx">BX</span><span class="p">),</span><span class="w"> </span><span class="nx">DX</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">MOVL</span><span class="w"> </span><span class="mi">0</span><span class="p">(</span><span class="nx">DX</span><span class="p">),</span><span class="w"> </span><span class="nx">CX</span><span class="w">         </span><span class="c1">// 保证 Goroutine 不为空</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nf">get_tls</span><span class="p">(</span><span class="nx">CX</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">MOVL</span><span class="w"> </span><span class="nx">DX</span><span class="p">,</span><span class="w"> </span><span class="nf">g</span><span class="p">(</span><span class="nx">CX</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">MOVL</span><span class="w"> </span><span class="nf">gobuf_sp</span><span class="p">(</span><span class="nx">BX</span><span class="p">),</span><span class="w"> </span><span class="nx">SP</span><span class="w">  </span><span class="c1">// 将 runtime.goexit 函数的 PC 恢复到 SP 中</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">MOVL</span><span class="w"> </span><span class="nf">gobuf_ret</span><span class="p">(</span><span class="nx">BX</span><span class="p">),</span><span class="w"> </span><span class="nx">AX</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">MOVL</span><span class="w"> </span><span class="nf">gobuf_ctxt</span><span class="p">(</span><span class="nx">BX</span><span class="p">),</span><span class="w"> </span><span class="nx">DX</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">MOVL</span><span class="w"> </span><span class="err">$</span><span class="mi">0</span><span class="p">,</span><span class="w"> </span><span class="nf">gobuf_sp</span><span class="p">(</span><span class="nx">BX</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">MOVL</span><span class="w"> </span><span class="err">$</span><span class="mi">0</span><span class="p">,</span><span class="w"> </span><span class="nf">gobuf_ret</span><span class="p">(</span><span class="nx">BX</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">MOVL</span><span class="w"> </span><span class="err">$</span><span class="mi">0</span><span class="p">,</span><span class="w"> </span><span class="nf">gobuf_ctxt</span><span class="p">(</span><span class="nx">BX</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">MOVL</span><span class="w"> </span><span class="nf">gobuf_pc</span><span class="p">(</span><span class="nx">BX</span><span class="p">),</span><span class="w"> </span><span class="nx">BX</span><span class="w">  </span><span class="c1">// 获取待执行函数的程序计数器</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">JMP</span><span class="w">  </span><span class="nx">BX</span><span class="w">                </span><span class="c1">// 开始执行</span><span class="w">
 </span></span></span></code></pre></td></tr></table>
 </div>
 </div><p>它从 <a href="https://draveness.me/golang/tree/runtime.gobuf"><code>runtime.gobuf</code></a> 中取出了 <a href="https://draveness.me/golang/tree/runtime.goexit"><code>runtime.goexit</code></a> 的程序计数器和待执行函数的程序计数器，其中：</p>
@@ -1359,21 +1365,21 @@
 </span><span class="lnt">14
 </span></code></pre></td>
 <td class="lntd">
-<pre tabindex="0" class="chroma"><code class="language-go" data-lang="go"><span class="line"><span class="cl"><span class="kd">func</span> <span class="nf">goexit0</span><span class="p">(</span><span class="nx">gp</span> <span class="o">*</span><span class="nx">g</span><span class="p">)</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">	<span class="nx">_g_</span> <span class="o">:=</span> <span class="nf">getg</span><span class="p">()</span>
-</span></span><span class="line"><span class="cl">
-</span></span><span class="line"><span class="cl">	<span class="nf">casgstatus</span><span class="p">(</span><span class="nx">gp</span><span class="p">,</span> <span class="nx">_Grunning</span><span class="p">,</span> <span class="nx">_Gdead</span><span class="p">)</span>
-</span></span><span class="line"><span class="cl">	<span class="nx">gp</span><span class="p">.</span><span class="nx">m</span> <span class="p">=</span> <span class="kc">nil</span>
-</span></span><span class="line"><span class="cl">	<span class="o">...</span>
-</span></span><span class="line"><span class="cl">	<span class="nx">gp</span><span class="p">.</span><span class="nx">param</span> <span class="p">=</span> <span class="kc">nil</span>
-</span></span><span class="line"><span class="cl">	<span class="nx">gp</span><span class="p">.</span><span class="nx">labels</span> <span class="p">=</span> <span class="kc">nil</span>
-</span></span><span class="line"><span class="cl">	<span class="nx">gp</span><span class="p">.</span><span class="nx">timer</span> <span class="p">=</span> <span class="kc">nil</span>
-</span></span><span class="line"><span class="cl">
-</span></span><span class="line"><span class="cl">	<span class="nf">dropg</span><span class="p">()</span>
-</span></span><span class="line"><span class="cl">	<span class="nf">gfput</span><span class="p">(</span><span class="nx">_g_</span><span class="p">.</span><span class="nx">m</span><span class="p">.</span><span class="nx">p</span><span class="p">.</span><span class="nf">ptr</span><span class="p">(),</span> <span class="nx">gp</span><span class="p">)</span>
-</span></span><span class="line"><span class="cl">	<span class="nf">schedule</span><span class="p">()</span>
-</span></span><span class="line"><span class="cl"><span class="p">}</span>
-</span></span></code></pre></td></tr></table>
+<pre tabindex="0" class="chroma"><code class="language-go" data-lang="go"><span class="line"><span class="cl"><span class="kd">func</span><span class="w"> </span><span class="nf">goexit0</span><span class="p">(</span><span class="nx">gp</span><span class="w"> </span><span class="o">*</span><span class="nx">g</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">_g_</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nf">getg</span><span class="p">()</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nf">casgstatus</span><span class="p">(</span><span class="nx">gp</span><span class="p">,</span><span class="w"> </span><span class="nx">_Grunning</span><span class="p">,</span><span class="w"> </span><span class="nx">_Gdead</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">gp</span><span class="p">.</span><span class="nx">m</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="kc">nil</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="o">...</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">gp</span><span class="p">.</span><span class="nx">param</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="kc">nil</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">gp</span><span class="p">.</span><span class="nx">labels</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="kc">nil</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">gp</span><span class="p">.</span><span class="nx">timer</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="kc">nil</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nf">dropg</span><span class="p">()</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nf">gfput</span><span class="p">(</span><span class="nx">_g_</span><span class="p">.</span><span class="nx">m</span><span class="p">.</span><span class="nx">p</span><span class="p">.</span><span class="nf">ptr</span><span class="p">(),</span><span class="w"> </span><span class="nx">gp</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nf">schedule</span><span class="p">()</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="p">}</span><span class="w">
+</span></span></span></code></pre></td></tr></table>
 </div>
 </div><p>在最后 <a href="https://draveness.me/golang/tree/runtime.goexit0"><code>runtime.goexit0</code></a> 会重新调用 <a href="https://draveness.me/golang/tree/runtime.schedule"><code>runtime.schedule</code></a> 触发新一轮的 Goroutine 调度，Go 语言中的运行时调度循环会从 <a href="https://draveness.me/golang/tree/runtime.schedule"><code>runtime.schedule</code></a> 开始，最终又回到 <a href="https://draveness.me/golang/tree/runtime.schedule"><code>runtime.schedule</code></a>，我们可以认为调度循环永远都不会返回。</p>
 <h2 id="触发调度">触发调度</h2>
@@ -1400,18 +1406,18 @@
 </span><span class="lnt">11
 </span></code></pre></td>
 <td class="lntd">
-<pre tabindex="0" class="chroma"><code class="language-go" data-lang="go"><span class="line"><span class="cl"><span class="kd">func</span> <span class="nf">gopark</span><span class="p">(</span><span class="nx">unlockf</span> <span class="kd">func</span><span class="p">(</span><span class="o">*</span><span class="nx">g</span><span class="p">,</span> <span class="nx">unsafe</span><span class="p">.</span><span class="nx">Pointer</span><span class="p">)</span> <span class="kt">bool</span><span class="p">,</span> <span class="nx">lock</span> <span class="nx">unsafe</span><span class="p">.</span><span class="nx">Pointer</span><span class="p">,</span> <span class="nx">reason</span> <span class="nx">waitReason</span><span class="p">,</span> <span class="nx">traceEv</span> <span class="kt">byte</span><span class="p">,</span> <span class="nx">traceskip</span> <span class="kt">int</span><span class="p">)</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">	<span class="nx">mp</span> <span class="o">:=</span> <span class="nf">acquirem</span><span class="p">()</span>
-</span></span><span class="line"><span class="cl">	<span class="nx">gp</span> <span class="o">:=</span> <span class="nx">mp</span><span class="p">.</span><span class="nx">curg</span>
-</span></span><span class="line"><span class="cl">	<span class="nx">mp</span><span class="p">.</span><span class="nx">waitlock</span> <span class="p">=</span> <span class="nx">lock</span>
-</span></span><span class="line"><span class="cl">	<span class="nx">mp</span><span class="p">.</span><span class="nx">waitunlockf</span> <span class="p">=</span> <span class="nx">unlockf</span>
-</span></span><span class="line"><span class="cl">	<span class="nx">gp</span><span class="p">.</span><span class="nx">waitreason</span> <span class="p">=</span> <span class="nx">reason</span>
-</span></span><span class="line"><span class="cl">	<span class="nx">mp</span><span class="p">.</span><span class="nx">waittraceev</span> <span class="p">=</span> <span class="nx">traceEv</span>
-</span></span><span class="line"><span class="cl">	<span class="nx">mp</span><span class="p">.</span><span class="nx">waittraceskip</span> <span class="p">=</span> <span class="nx">traceskip</span>
-</span></span><span class="line"><span class="cl">	<span class="nf">releasem</span><span class="p">(</span><span class="nx">mp</span><span class="p">)</span>
-</span></span><span class="line"><span class="cl">	<span class="nf">mcall</span><span class="p">(</span><span class="nx">park_m</span><span class="p">)</span>
-</span></span><span class="line"><span class="cl"><span class="p">}</span>
-</span></span></code></pre></td></tr></table>
+<pre tabindex="0" class="chroma"><code class="language-go" data-lang="go"><span class="line"><span class="cl"><span class="kd">func</span><span class="w"> </span><span class="nf">gopark</span><span class="p">(</span><span class="nx">unlockf</span><span class="w"> </span><span class="kd">func</span><span class="p">(</span><span class="o">*</span><span class="nx">g</span><span class="p">,</span><span class="w"> </span><span class="nx">unsafe</span><span class="p">.</span><span class="nx">Pointer</span><span class="p">)</span><span class="w"> </span><span class="kt">bool</span><span class="p">,</span><span class="w"> </span><span class="nx">lock</span><span class="w"> </span><span class="nx">unsafe</span><span class="p">.</span><span class="nx">Pointer</span><span class="p">,</span><span class="w"> </span><span class="nx">reason</span><span class="w"> </span><span class="nx">waitReason</span><span class="p">,</span><span class="w"> </span><span class="nx">traceEv</span><span class="w"> </span><span class="kt">byte</span><span class="p">,</span><span class="w"> </span><span class="nx">traceskip</span><span class="w"> </span><span class="kt">int</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">mp</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nf">acquirem</span><span class="p">()</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">gp</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">mp</span><span class="p">.</span><span class="nx">curg</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">mp</span><span class="p">.</span><span class="nx">waitlock</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nx">lock</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">mp</span><span class="p">.</span><span class="nx">waitunlockf</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nx">unlockf</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">gp</span><span class="p">.</span><span class="nx">waitreason</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nx">reason</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">mp</span><span class="p">.</span><span class="nx">waittraceev</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nx">traceEv</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">mp</span><span class="p">.</span><span class="nx">waittraceskip</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nx">traceskip</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nf">releasem</span><span class="p">(</span><span class="nx">mp</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nf">mcall</span><span class="p">(</span><span class="nx">park_m</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="p">}</span><span class="w">
+</span></span></span></code></pre></td></tr></table>
 </div>
 </div><p>上述会通过 <a href="https://draveness.me/golang/tree/runtime.mcall"><code>runtime.mcall</code></a> 切换到 g0 的栈上调用 <a href="https://draveness.me/golang/tree/runtime.park_m"><code>runtime.park_m</code></a>：</p>
 <div class="highlight"><div class="chroma">
@@ -1426,15 +1432,15 @@
 </span><span class="lnt">8
 </span></code></pre></td>
 <td class="lntd">
-<pre tabindex="0" class="chroma"><code class="language-go" data-lang="go"><span class="line"><span class="cl"><span class="kd">func</span> <span class="nf">park_m</span><span class="p">(</span><span class="nx">gp</span> <span class="o">*</span><span class="nx">g</span><span class="p">)</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">	<span class="nx">_g_</span> <span class="o">:=</span> <span class="nf">getg</span><span class="p">()</span>
-</span></span><span class="line"><span class="cl">
-</span></span><span class="line"><span class="cl">	<span class="nf">casgstatus</span><span class="p">(</span><span class="nx">gp</span><span class="p">,</span> <span class="nx">_Grunning</span><span class="p">,</span> <span class="nx">_Gwaiting</span><span class="p">)</span>
-</span></span><span class="line"><span class="cl">	<span class="nf">dropg</span><span class="p">()</span>
-</span></span><span class="line"><span class="cl">
-</span></span><span class="line"><span class="cl">	<span class="nf">schedule</span><span class="p">()</span>
-</span></span><span class="line"><span class="cl"><span class="p">}</span>
-</span></span></code></pre></td></tr></table>
+<pre tabindex="0" class="chroma"><code class="language-go" data-lang="go"><span class="line"><span class="cl"><span class="kd">func</span><span class="w"> </span><span class="nf">park_m</span><span class="p">(</span><span class="nx">gp</span><span class="w"> </span><span class="o">*</span><span class="nx">g</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">_g_</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nf">getg</span><span class="p">()</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nf">casgstatus</span><span class="p">(</span><span class="nx">gp</span><span class="p">,</span><span class="w"> </span><span class="nx">_Grunning</span><span class="p">,</span><span class="w"> </span><span class="nx">_Gwaiting</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nf">dropg</span><span class="p">()</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nf">schedule</span><span class="p">()</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="p">}</span><span class="w">
+</span></span></span></code></pre></td></tr></table>
 </div>
 </div><p><a href="https://draveness.me/golang/tree/runtime.park_m"><code>runtime.park_m</code></a> 会将当前 Goroutine 的状态从 <code>_Grunning</code> 切换至 <code>_Gwaiting</code>，调用 <a href="https://draveness.me/golang/tree/runtime.dropg"><code>runtime.dropg</code></a> 移除线程和 Goroutine 之间的关联，在这之后就可以调用 <a href="https://draveness.me/golang/tree/runtime.schedule"><code>runtime.schedule</code></a> 触发新一轮的调度了。</p>
 <p>当 Goroutine 等待的特定条件满足后，运行时会调用 <a href="https://draveness.me/golang/tree/runtime.goready"><code>runtime.goready</code></a> 将因为调用 <a href="https://draveness.me/golang/tree/runtime.gopark"><code>runtime.gopark</code></a> 而陷入休眠的 Goroutine 唤醒。</p>
@@ -1457,22 +1463,22 @@
 </span><span class="lnt">15
 </span></code></pre></td>
 <td class="lntd">
-<pre tabindex="0" class="chroma"><code class="language-go" data-lang="go"><span class="line"><span class="cl"><span class="kd">func</span> <span class="nf">goready</span><span class="p">(</span><span class="nx">gp</span> <span class="o">*</span><span class="nx">g</span><span class="p">,</span> <span class="nx">traceskip</span> <span class="kt">int</span><span class="p">)</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">	<span class="nf">systemstack</span><span class="p">(</span><span class="kd">func</span><span class="p">()</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">		<span class="nf">ready</span><span class="p">(</span><span class="nx">gp</span><span class="p">,</span> <span class="nx">traceskip</span><span class="p">,</span> <span class="kc">true</span><span class="p">)</span>
-</span></span><span class="line"><span class="cl">	<span class="p">})</span>
-</span></span><span class="line"><span class="cl"><span class="p">}</span>
-</span></span><span class="line"><span class="cl">
-</span></span><span class="line"><span class="cl"><span class="kd">func</span> <span class="nf">ready</span><span class="p">(</span><span class="nx">gp</span> <span class="o">*</span><span class="nx">g</span><span class="p">,</span> <span class="nx">traceskip</span> <span class="kt">int</span><span class="p">,</span> <span class="nx">next</span> <span class="kt">bool</span><span class="p">)</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">	<span class="nx">_g_</span> <span class="o">:=</span> <span class="nf">getg</span><span class="p">()</span>
-</span></span><span class="line"><span class="cl">
-</span></span><span class="line"><span class="cl">	<span class="nf">casgstatus</span><span class="p">(</span><span class="nx">gp</span><span class="p">,</span> <span class="nx">_Gwaiting</span><span class="p">,</span> <span class="nx">_Grunnable</span><span class="p">)</span>
-</span></span><span class="line"><span class="cl">	<span class="nf">runqput</span><span class="p">(</span><span class="nx">_g_</span><span class="p">.</span><span class="nx">m</span><span class="p">.</span><span class="nx">p</span><span class="p">.</span><span class="nf">ptr</span><span class="p">(),</span> <span class="nx">gp</span><span class="p">,</span> <span class="nx">next</span><span class="p">)</span>
-</span></span><span class="line"><span class="cl">	<span class="k">if</span> <span class="nx">atomic</span><span class="p">.</span><span class="nf">Load</span><span class="p">(</span><span class="o">&amp;</span><span class="nx">sched</span><span class="p">.</span><span class="nx">npidle</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">0</span> <span class="o">&amp;&amp;</span> <span class="nx">atomic</span><span class="p">.</span><span class="nf">Load</span><span class="p">(</span><span class="o">&amp;</span><span class="nx">sched</span><span class="p">.</span><span class="nx">nmspinning</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">		<span class="nf">wakep</span><span class="p">()</span>
-</span></span><span class="line"><span class="cl">	<span class="p">}</span>
-</span></span><span class="line"><span class="cl"><span class="p">}</span>
-</span></span></code></pre></td></tr></table>
+<pre tabindex="0" class="chroma"><code class="language-go" data-lang="go"><span class="line"><span class="cl"><span class="kd">func</span><span class="w"> </span><span class="nf">goready</span><span class="p">(</span><span class="nx">gp</span><span class="w"> </span><span class="o">*</span><span class="nx">g</span><span class="p">,</span><span class="w"> </span><span class="nx">traceskip</span><span class="w"> </span><span class="kt">int</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nf">systemstack</span><span class="p">(</span><span class="kd">func</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="nf">ready</span><span class="p">(</span><span class="nx">gp</span><span class="p">,</span><span class="w"> </span><span class="nx">traceskip</span><span class="p">,</span><span class="w"> </span><span class="kc">true</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="p">})</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="kd">func</span><span class="w"> </span><span class="nf">ready</span><span class="p">(</span><span class="nx">gp</span><span class="w"> </span><span class="o">*</span><span class="nx">g</span><span class="p">,</span><span class="w"> </span><span class="nx">traceskip</span><span class="w"> </span><span class="kt">int</span><span class="p">,</span><span class="w"> </span><span class="nx">next</span><span class="w"> </span><span class="kt">bool</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">_g_</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nf">getg</span><span class="p">()</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nf">casgstatus</span><span class="p">(</span><span class="nx">gp</span><span class="p">,</span><span class="w"> </span><span class="nx">_Gwaiting</span><span class="p">,</span><span class="w"> </span><span class="nx">_Grunnable</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nf">runqput</span><span class="p">(</span><span class="nx">_g_</span><span class="p">.</span><span class="nx">m</span><span class="p">.</span><span class="nx">p</span><span class="p">.</span><span class="nf">ptr</span><span class="p">(),</span><span class="w"> </span><span class="nx">gp</span><span class="p">,</span><span class="w"> </span><span class="nx">next</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="k">if</span><span class="w"> </span><span class="nx">atomic</span><span class="p">.</span><span class="nf">Load</span><span class="p">(</span><span class="o">&amp;</span><span class="nx">sched</span><span class="p">.</span><span class="nx">npidle</span><span class="p">)</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="mi">0</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="nx">atomic</span><span class="p">.</span><span class="nf">Load</span><span class="p">(</span><span class="o">&amp;</span><span class="nx">sched</span><span class="p">.</span><span class="nx">nmspinning</span><span class="p">)</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="mi">0</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="nf">wakep</span><span class="p">()</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="p">}</span><span class="w">
+</span></span></span></code></pre></td></tr></table>
 </div>
 </div><p><a href="https://draveness.me/golang/tree/runtime.ready"><code>runtime.ready</code></a> 会将准备就绪的 Goroutine 的状态切换至 <code>_Grunnable</code> 并将其加入处理器的运行队列中，等待调度器的调度。</p>
 <h3 id="系统调用">系统调用</h3>
@@ -1494,20 +1500,20 @@
 </span><span class="lnt">13
 </span></code></pre></td>
 <td class="lntd">
-<pre tabindex="0" class="chroma"><code class="language-go" data-lang="go"><span class="line"><span class="cl"><span class="err">#</span><span class="nx">define</span> <span class="nx">INVOKE_SYSCALL</span>	<span class="nx">INT</span>	<span class="err">$</span><span class="mh">0x80</span>
-</span></span><span class="line"><span class="cl">
-</span></span><span class="line"><span class="cl"><span class="nx">TEXT</span> <span class="err">·</span><span class="nf">Syscall</span><span class="p">(</span><span class="nx">SB</span><span class="p">),</span><span class="nx">NOSPLIT</span><span class="p">,</span><span class="err">$</span><span class="mi">0</span><span class="o">-</span><span class="mi">28</span>
-</span></span><span class="line"><span class="cl">	<span class="nx">CALL</span>	<span class="nx">runtime</span><span class="err">·</span><span class="nf">entersyscall</span><span class="p">(</span><span class="nx">SB</span><span class="p">)</span>
-</span></span><span class="line"><span class="cl">	<span class="o">...</span>
-</span></span><span class="line"><span class="cl">	<span class="nx">INVOKE_SYSCALL</span>
-</span></span><span class="line"><span class="cl">	<span class="o">...</span>
-</span></span><span class="line"><span class="cl">	<span class="nx">CALL</span>	<span class="nx">runtime</span><span class="err">·</span><span class="nf">exitsyscall</span><span class="p">(</span><span class="nx">SB</span><span class="p">)</span>
-</span></span><span class="line"><span class="cl">	<span class="nx">RET</span>
-</span></span><span class="line"><span class="cl"><span class="nx">ok</span><span class="p">:</span>
-</span></span><span class="line"><span class="cl">	<span class="o">...</span>
-</span></span><span class="line"><span class="cl">	<span class="nx">CALL</span>	<span class="nx">runtime</span><span class="err">·</span><span class="nf">exitsyscall</span><span class="p">(</span><span class="nx">SB</span><span class="p">)</span>
-</span></span><span class="line"><span class="cl">	<span class="nx">RET</span>
-</span></span></code></pre></td></tr></table>
+<pre tabindex="0" class="chroma"><code class="language-go" data-lang="go"><span class="line"><span class="cl"><span class="err">#</span><span class="nx">define</span><span class="w"> </span><span class="nx">INVOKE_SYSCALL</span><span class="w">	</span><span class="nx">INT</span><span class="w">	</span><span class="err">$</span><span class="mh">0x80</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="nx">TEXT</span><span class="w"> </span><span class="err">·</span><span class="nf">Syscall</span><span class="p">(</span><span class="nx">SB</span><span class="p">),</span><span class="nx">NOSPLIT</span><span class="p">,</span><span class="err">$</span><span class="mi">0</span><span class="o">-</span><span class="mi">28</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">CALL</span><span class="w">	</span><span class="nx">runtime</span><span class="err">·</span><span class="nf">entersyscall</span><span class="p">(</span><span class="nx">SB</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="o">...</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">INVOKE_SYSCALL</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="o">...</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">CALL</span><span class="w">	</span><span class="nx">runtime</span><span class="err">·</span><span class="nf">exitsyscall</span><span class="p">(</span><span class="nx">SB</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">RET</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="nx">ok</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="o">...</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">CALL</span><span class="w">	</span><span class="nx">runtime</span><span class="err">·</span><span class="nf">exitsyscall</span><span class="p">(</span><span class="nx">SB</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">RET</span><span class="w">
+</span></span></span></code></pre></td></tr></table>
 </div>
 </div><p>在通过汇编指令 <code>INVOKE_SYSCALL</code> 执行系统调用前后，上述函数会调用运行时的 <a href="https://draveness.me/golang/tree/runtime.entersyscall"><code>runtime.entersyscall</code></a> 和 <a href="https://draveness.me/golang/tree/runtime.exitsyscall"><code>runtime.exitsyscall</code></a>，正是这一层包装能够让我们在陷入系统调用前触发运行时的准备和清理工作。</p>
 <h3 id="协作式调度">协作式调度</h3>
@@ -1534,25 +1540,25 @@
 </span><span class="lnt">18
 </span></code></pre></td>
 <td class="lntd">
-<pre tabindex="0" class="chroma"><code class="language-go" data-lang="go"><span class="line"><span class="cl"><span class="kd">func</span> <span class="nf">Gosched</span><span class="p">()</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">	<span class="nf">checkTimeouts</span><span class="p">()</span>
-</span></span><span class="line"><span class="cl">	<span class="nf">mcall</span><span class="p">(</span><span class="nx">gosched_m</span><span class="p">)</span>
-</span></span><span class="line"><span class="cl"><span class="p">}</span>
-</span></span><span class="line"><span class="cl">
-</span></span><span class="line"><span class="cl"><span class="kd">func</span> <span class="nf">gosched_m</span><span class="p">(</span><span class="nx">gp</span> <span class="o">*</span><span class="nx">g</span><span class="p">)</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">	<span class="nf">goschedImpl</span><span class="p">(</span><span class="nx">gp</span><span class="p">)</span>
-</span></span><span class="line"><span class="cl"><span class="p">}</span>
-</span></span><span class="line"><span class="cl">
-</span></span><span class="line"><span class="cl"><span class="kd">func</span> <span class="nf">goschedImpl</span><span class="p">(</span><span class="nx">gp</span> <span class="o">*</span><span class="nx">g</span><span class="p">)</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">	<span class="nf">casgstatus</span><span class="p">(</span><span class="nx">gp</span><span class="p">,</span> <span class="nx">_Grunning</span><span class="p">,</span> <span class="nx">_Grunnable</span><span class="p">)</span>
-</span></span><span class="line"><span class="cl">	<span class="nf">dropg</span><span class="p">()</span>
-</span></span><span class="line"><span class="cl">	<span class="nf">lock</span><span class="p">(</span><span class="o">&amp;</span><span class="nx">sched</span><span class="p">.</span><span class="nx">lock</span><span class="p">)</span>
-</span></span><span class="line"><span class="cl">	<span class="nf">globrunqput</span><span class="p">(</span><span class="nx">gp</span><span class="p">)</span>
-</span></span><span class="line"><span class="cl">	<span class="nf">unlock</span><span class="p">(</span><span class="o">&amp;</span><span class="nx">sched</span><span class="p">.</span><span class="nx">lock</span><span class="p">)</span>
-</span></span><span class="line"><span class="cl">
-</span></span><span class="line"><span class="cl">	<span class="nf">schedule</span><span class="p">()</span>
-</span></span><span class="line"><span class="cl"><span class="p">}</span>
-</span></span></code></pre></td></tr></table>
+<pre tabindex="0" class="chroma"><code class="language-go" data-lang="go"><span class="line"><span class="cl"><span class="kd">func</span><span class="w"> </span><span class="nf">Gosched</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nf">checkTimeouts</span><span class="p">()</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nf">mcall</span><span class="p">(</span><span class="nx">gosched_m</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="kd">func</span><span class="w"> </span><span class="nf">gosched_m</span><span class="p">(</span><span class="nx">gp</span><span class="w"> </span><span class="o">*</span><span class="nx">g</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nf">goschedImpl</span><span class="p">(</span><span class="nx">gp</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="kd">func</span><span class="w"> </span><span class="nf">goschedImpl</span><span class="p">(</span><span class="nx">gp</span><span class="w"> </span><span class="o">*</span><span class="nx">g</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nf">casgstatus</span><span class="p">(</span><span class="nx">gp</span><span class="p">,</span><span class="w"> </span><span class="nx">_Grunning</span><span class="p">,</span><span class="w"> </span><span class="nx">_Grunnable</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nf">dropg</span><span class="p">()</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nf">lock</span><span class="p">(</span><span class="o">&amp;</span><span class="nx">sched</span><span class="p">.</span><span class="nx">lock</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nf">globrunqput</span><span class="p">(</span><span class="nx">gp</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nf">unlock</span><span class="p">(</span><span class="o">&amp;</span><span class="nx">sched</span><span class="p">.</span><span class="nx">lock</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nf">schedule</span><span class="p">()</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="p">}</span><span class="w">
+</span></span></span></code></pre></td></tr></table>
 </div>
 </div><p>经过连续几次跳转，我们最终在 g0 的栈上调用 <a href="https://draveness.me/golang/tree/runtime.goschedImpl"><code>runtime.goschedImpl</code></a>，运行时会更新 Goroutine 的状态到 <code>_Grunnable</code>，让出当前的处理器并将 Goroutine 重新放回全局队列，在最后，该函数会调用 <a href="https://draveness.me/golang/tree/runtime.schedule"><code>runtime.schedule</code></a> 触发调度。</p>
 
@@ -1736,7 +1742,7 @@
   <span class="copyright-year">
     &copy; 
     2022 - 
-    2023<span class="heart"><i class="iconfont icon-heart"></i></span><span><a href="/">hlday</a></span>
+    2026<span class="heart"><i class="iconfont icon-heart"></i></span><span><a href="/">hlday</a></span>
   </span>
 </div>
 
@@ -1753,7 +1759,7 @@
 
 
 
-<script type="text/javascript" src="/js/main.min.bfb94e1fe4773651a6fe907d388ed08d7d6f9628a062d0740d992e1dfb49466e.js"></script>
+<script type="text/javascript" src="/js/main.min.d3d26fe720923eebdba72c7cb26eef946d17ef1a1a7a289857149666ace3dfec.js"></script>
   <script type="text/javascript">
     window.MathJax = {
       tex: {
@@ -1762,6 +1768,7 @@
     };
   </script>
   <script async src="https://cdn.jsdelivr.net/npm/mathjax@3.0.5/es5/tex-mml-chtml.js" integrity="sha256-HGLuEfFcsUJGhvB8cQ8nr0gai9EucOOaIxFw7qxmd+w=" crossorigin="anonymous"></script>
+
 
 
 

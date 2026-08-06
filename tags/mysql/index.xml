@@ -1,38 +1,38 @@
 <?xml version="1.0" encoding="utf-8" standalone="yes"?>
 <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
-  <channel>
-    <title>mysql on HLDay</title>
-    <link>/tags/mysql/</link>
-    <description>Recent content in mysql on HLDay</description>
-    <generator>Hugo -- gohugo.io</generator>
-    <language>en</language>
-    <lastBuildDate>Wed, 15 Jun 2022 11:33:22 +0800</lastBuildDate><atom:link href="/tags/mysql/index.xml" rel="self" type="application/rss+xml" />
-    <item>
-      <title>SQL注入</title>
-      <link>/post/mysql/sql_injection/</link>
-      <pubDate>Wed, 15 Jun 2022 11:33:22 +0800</pubDate>
-      
-      <guid>/post/mysql/sql_injection/</guid>
-      <description>SQL注入是一种Web安全漏洞，允许攻击者干扰应用程序对其数据库的查询。攻击者能够通过注入SQL获取到一些通常情况下无法获取的敏感数据例如其他用户的数据。大多数场景中，攻击者可以修改或者删除这些敏感数据而导致应用产生其他异常。在某些情况下，攻击者可以升级SQL注入攻击，以损害基础服务器或其他后端基础架构，或执行拒绝服务攻击。</description>
-    </item>
-    
-    <item>
-      <title>MySQL常见变量</title>
-      <link>/post/mysql/mysql%E5%B8%B8%E8%A7%81%E5%8F%98%E9%87%8F/</link>
-      <pubDate>Tue, 08 Mar 2022 18:04:55 +0800</pubDate>
-      
-      <guid>/post/mysql/mysql%E5%B8%B8%E8%A7%81%E5%8F%98%E9%87%8F/</guid>
-      <description>介绍一些MySQL常见变量，以及如何通过sql查询mysql状况</description>
-    </item>
-    
-    <item>
-      <title>MySQL数据复制</title>
-      <link>/post/mysql/mysql%E6%95%B0%E6%8D%AE%E5%A4%8D%E5%88%B6/</link>
-      <pubDate>Tue, 08 Mar 2022 18:04:55 +0800</pubDate>
-      
-      <guid>/post/mysql/mysql%E6%95%B0%E6%8D%AE%E5%A4%8D%E5%88%B6/</guid>
-      <description>MySQL是通用的关系型数据库，一般情况下部署会采用主从模式，主从模式的主库负责数据写入，从库负责数据查询</description>
-    </item>
-    
-  </channel>
+	<channel>
+		<title>Mysql on HLDay</title>
+		<link>/tags/mysql/</link>
+		<description>Recent content in Mysql on HLDay</description>
+		<generator>Hugo</generator>
+		<language>en</language>
+		
+		
+		
+		
+			<lastBuildDate>Wed, 15 Jun 2022 11:33:22 +0800</lastBuildDate>
+		
+			<atom:link href="/tags/mysql/index.xml" rel="self" type="application/rss+xml" />
+			<item>
+				<title>SQL注入</title>
+				<link>/post/mysql/sql_injection/</link>
+				<pubDate>Wed, 15 Jun 2022 11:33:22 +0800</pubDate>
+				<guid>/post/mysql/sql_injection/</guid>
+				<description>SQL注入是一种Web安全漏洞，允许攻击者干扰应用程序对其数据库的查询。攻击者能够通过注入SQL获取到一些通常情况下无法获取的敏感数据例如其他用户的数据。大多数场景中，攻击者可以修改或者删除这些敏感数据而导致应用产生其他异常。在某些情况下，攻击者可以升级SQL注入攻击，以损害基础服务器或其他后端基础架构，或执行拒绝服务攻击。</description>
+			</item>
+			<item>
+				<title>MySQL常见变量</title>
+				<link>/post/mysql/mysql%E5%B8%B8%E8%A7%81%E5%8F%98%E9%87%8F/</link>
+				<pubDate>Tue, 08 Mar 2022 18:04:55 +0800</pubDate>
+				<guid>/post/mysql/mysql%E5%B8%B8%E8%A7%81%E5%8F%98%E9%87%8F/</guid>
+				<description>介绍一些MySQL常见变量，以及如何通过sql查询mysql状况</description>
+			</item>
+			<item>
+				<title>MySQL数据复制</title>
+				<link>/post/mysql/mysql%E6%95%B0%E6%8D%AE%E5%A4%8D%E5%88%B6/</link>
+				<pubDate>Tue, 08 Mar 2022 18:04:55 +0800</pubDate>
+				<guid>/post/mysql/mysql%E6%95%B0%E6%8D%AE%E5%A4%8D%E5%88%B6/</guid>
+				<description>MySQL是通用的关系型数据库，一般情况下部署会采用主从模式，主从模式的主库负责数据写入，从库负责数据查询</description>
+			</item>
+	</channel>
 </rss>

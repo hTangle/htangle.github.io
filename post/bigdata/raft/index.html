@@ -31,7 +31,7 @@
   gtag('config', 'G-59Y2CYW544');
 </script>
 
-<meta name="generator" content="Hugo 0.93.2 with theme even" />
+<meta name="generator" content="Hugo 0.164.0 with theme even" />
 
 
 <link rel="canonical" href="/post/bigdata/raft/" />
@@ -43,24 +43,31 @@
 
 <script async src="//busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
 
-<link href="/sass/main.min.b5a744db6de49a86cadafb3b70f555ab443f83c307a483402259e94726b045ff.css" rel="stylesheet">
+<link href="/sass/main.min.52d539dfadc86246e6ba9a98b4b3a7268cddea9db8ace7933730de9afef2c275.css" rel="stylesheet">
 
 
 
-<meta property="og:title" content="Raft" />
-<meta property="og:description" content="Raft is a consensus algorithm designed as an alternative to the Paxos family of algorithms. It was meant to be more understandable than Paxos by means of separation of logic, but it is also formally proven safe and offers some additional features. Raft offers a generic way to distribute a state machine across a cluster of computing systems, ensuring that each node in the cluster agrees upon the same series of state transitions. It has a number of open-source reference implementations, with full-specification implementations in Go, C&#43;&#43;, Java, and Scala. It is named after Reliable, Replicated, Redundant, And Fault-Tolerant." />
-<meta property="og:type" content="article" />
-<meta property="og:url" content="/post/bigdata/raft/" /><meta property="article:section" content="post" />
-<meta property="article:published_time" content="2022-03-08T14:42:17+08:00" />
-<meta property="article:modified_time" content="2022-03-08T14:42:17+08:00" />
+<meta property="og:url" content="/post/bigdata/raft/">
+	<meta property="og:site_name" content="HLDay">
+	<meta property="og:title" content="Raft">
+	<meta property="og:description" content="Raft is a consensus algorithm designed as an alternative to the Paxos family of algorithms. It was meant to be more understandable than Paxos by means of separation of logic, but it is also formally proven safe and offers some additional features. Raft offers a generic way to distribute a state machine across a cluster of computing systems, ensuring that each node in the cluster agrees upon the same series of state transitions. It has a number of open-source reference implementations, with full-specification implementations in Go, C&#43;&#43;, Java, and Scala. It is named after Reliable, Replicated, Redundant, And Fault-Tolerant.">
+	<meta property="og:locale" content="en">
+	<meta property="og:type" content="article">
+		<meta property="article:section" content="post">
+		<meta property="article:published_time" content="2022-03-08T14:42:17+08:00">
+		<meta property="article:modified_time" content="2022-03-08T14:42:17+08:00">
+		<meta property="article:tag" content="分布式">
+		<meta property="article:tag" content="Go">
 
-<meta itemprop="name" content="Raft">
-<meta itemprop="description" content="Raft is a consensus algorithm designed as an alternative to the Paxos family of algorithms. It was meant to be more understandable than Paxos by means of separation of logic, but it is also formally proven safe and offers some additional features. Raft offers a generic way to distribute a state machine across a cluster of computing systems, ensuring that each node in the cluster agrees upon the same series of state transitions. It has a number of open-source reference implementations, with full-specification implementations in Go, C&#43;&#43;, Java, and Scala. It is named after Reliable, Replicated, Redundant, And Fault-Tolerant."><meta itemprop="datePublished" content="2022-03-08T14:42:17+08:00" />
-<meta itemprop="dateModified" content="2022-03-08T14:42:17+08:00" />
-<meta itemprop="wordCount" content="4121">
-<meta itemprop="keywords" content="分布式,go," /><meta name="twitter:card" content="summary"/>
-<meta name="twitter:title" content="Raft"/>
-<meta name="twitter:description" content="Raft is a consensus algorithm designed as an alternative to the Paxos family of algorithms. It was meant to be more understandable than Paxos by means of separation of logic, but it is also formally proven safe and offers some additional features. Raft offers a generic way to distribute a state machine across a cluster of computing systems, ensuring that each node in the cluster agrees upon the same series of state transitions. It has a number of open-source reference implementations, with full-specification implementations in Go, C&#43;&#43;, Java, and Scala. It is named after Reliable, Replicated, Redundant, And Fault-Tolerant."/>
+	<meta itemprop="name" content="Raft">
+	<meta itemprop="description" content="Raft is a consensus algorithm designed as an alternative to the Paxos family of algorithms. It was meant to be more understandable than Paxos by means of separation of logic, but it is also formally proven safe and offers some additional features. Raft offers a generic way to distribute a state machine across a cluster of computing systems, ensuring that each node in the cluster agrees upon the same series of state transitions. It has a number of open-source reference implementations, with full-specification implementations in Go, C&#43;&#43;, Java, and Scala. It is named after Reliable, Replicated, Redundant, And Fault-Tolerant.">
+	<meta itemprop="datePublished" content="2022-03-08T14:42:17+08:00">
+	<meta itemprop="dateModified" content="2022-03-08T14:42:17+08:00">
+	<meta itemprop="wordCount" content="4121">
+	<meta itemprop="keywords" content="分布式,Go">
+	<meta name="twitter:card" content="summary">
+	<meta name="twitter:title" content="Raft">
+	<meta name="twitter:description" content="Raft is a consensus algorithm designed as an alternative to the Paxos family of algorithms. It was meant to be more understandable than Paxos by means of separation of logic, but it is also formally proven safe and offers some additional features. Raft offers a generic way to distribute a state machine across a cluster of computing systems, ensuring that each node in the cluster agrees upon the same series of state transitions. It has a number of open-source reference implementations, with full-specification implementations in Go, C&#43;&#43;, Java, and Scala. It is named after Reliable, Replicated, Redundant, And Fault-Tolerant.">
 
 <!--[if lte IE 9]>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
@@ -221,29 +228,29 @@
 </span><span class="lnt">22
 </span></code></pre></td>
 <td class="lntd">
-<pre tabindex="0" class="chroma"><code class="language-go" data-lang="go"><span class="line"><span class="cl"><span class="kd">func</span> <span class="p">(</span><span class="nx">r</span> <span class="o">*</span><span class="nx">Raft</span><span class="p">)</span> <span class="nf">run</span><span class="p">()</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">	<span class="k">for</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">		<span class="c1">// Check if we are doing a shutdown
-</span></span></span><span class="line"><span class="cl"><span class="c1"></span>		<span class="k">select</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">		<span class="k">case</span> <span class="o">&lt;-</span><span class="nx">r</span><span class="p">.</span><span class="nx">shutdownCh</span><span class="p">:</span>
-</span></span><span class="line"><span class="cl">			<span class="c1">// Clear the leader to prevent forwarding
-</span></span></span><span class="line"><span class="cl"><span class="c1"></span>			<span class="nx">r</span><span class="p">.</span><span class="nf">setLeader</span><span class="p">(</span><span class="s">&#34;&#34;</span><span class="p">)</span>
-</span></span><span class="line"><span class="cl">			<span class="k">return</span>
-</span></span><span class="line"><span class="cl">		<span class="k">default</span><span class="p">:</span>
-</span></span><span class="line"><span class="cl">		<span class="p">}</span>
-</span></span><span class="line"><span class="cl">
-</span></span><span class="line"><span class="cl">		<span class="c1">// Enter into a sub-FSM
-</span></span></span><span class="line"><span class="cl"><span class="c1"></span>		<span class="k">switch</span> <span class="nx">r</span><span class="p">.</span><span class="nf">getState</span><span class="p">()</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">		<span class="k">case</span> <span class="nx">Follower</span><span class="p">:</span>
-</span></span><span class="line"><span class="cl">			<span class="nx">r</span><span class="p">.</span><span class="nf">runFollower</span><span class="p">()</span>
-</span></span><span class="line"><span class="cl">		<span class="k">case</span> <span class="nx">Candidate</span><span class="p">:</span>
-</span></span><span class="line"><span class="cl">			<span class="nx">r</span><span class="p">.</span><span class="nf">runCandidate</span><span class="p">()</span>
-</span></span><span class="line"><span class="cl">		<span class="k">case</span> <span class="nx">Leader</span><span class="p">:</span>
-</span></span><span class="line"><span class="cl">			<span class="nx">r</span><span class="p">.</span><span class="nf">runLeader</span><span class="p">()</span>
-</span></span><span class="line"><span class="cl">		<span class="p">}</span>
-</span></span><span class="line"><span class="cl">	<span class="p">}</span>
-</span></span><span class="line"><span class="cl"><span class="p">}</span>
-</span></span></code></pre></td></tr></table>
+<pre tabindex="0" class="chroma"><code class="language-go" data-lang="go"><span class="line"><span class="cl"><span class="kd">func</span><span class="w"> </span><span class="p">(</span><span class="nx">r</span><span class="w"> </span><span class="o">*</span><span class="nx">Raft</span><span class="p">)</span><span class="w"> </span><span class="nf">run</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="k">for</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="c1">// Check if we are doing a shutdown</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="k">select</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="k">case</span><span class="w"> </span><span class="o">&lt;-</span><span class="nx">r</span><span class="p">.</span><span class="nx">shutdownCh</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">			</span><span class="c1">// Clear the leader to prevent forwarding</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">			</span><span class="nx">r</span><span class="p">.</span><span class="nf">setLeader</span><span class="p">(</span><span class="s">&#34;&#34;</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">			</span><span class="k">return</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="k">default</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="c1">// Enter into a sub-FSM</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="k">switch</span><span class="w"> </span><span class="nx">r</span><span class="p">.</span><span class="nf">getState</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="k">case</span><span class="w"> </span><span class="nx">Follower</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">			</span><span class="nx">r</span><span class="p">.</span><span class="nf">runFollower</span><span class="p">()</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="k">case</span><span class="w"> </span><span class="nx">Candidate</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">			</span><span class="nx">r</span><span class="p">.</span><span class="nf">runCandidate</span><span class="p">()</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="k">case</span><span class="w"> </span><span class="nx">Leader</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">			</span><span class="nx">r</span><span class="p">.</span><span class="nf">runLeader</span><span class="p">()</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="p">}</span><span class="w">
+</span></span></span></code></pre></td></tr></table>
 </div>
 </div><h4 id="follower">Follower</h4>
 <p>节点处于Follower状态时，会首先初始化一个随机过期时间</p>
@@ -252,8 +259,8 @@
 <pre tabindex="0" class="chroma"><code><span class="lnt">1
 </span></code></pre></td>
 <td class="lntd">
-<pre tabindex="0" class="chroma"><code class="language-go" data-lang="go"><span class="line"><span class="cl"><span class="nx">heartbeatTimer</span> <span class="o">:=</span> <span class="nf">randomTimeout</span><span class="p">(</span><span class="nx">r</span><span class="p">.</span><span class="nx">conf</span><span class="p">.</span><span class="nx">HeartbeatTimeout</span><span class="p">)</span>
-</span></span></code></pre></td></tr></table>
+<pre tabindex="0" class="chroma"><code class="language-go" data-lang="go"><span class="line"><span class="cl"><span class="nx">heartbeatTimer</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nf">randomTimeout</span><span class="p">(</span><span class="nx">r</span><span class="p">.</span><span class="nx">conf</span><span class="p">.</span><span class="nx">HeartbeatTimeout</span><span class="p">)</span><span class="w">
+</span></span></span></code></pre></td></tr></table>
 </div>
 </div><p>如果超过该时间没有和leader成功通信，则该节点会认为leader丢失，并尝试进入Candidate状态。</p>
 <div class="highlight"><div class="chroma">
@@ -293,40 +300,40 @@
 </span><span class="lnt">33
 </span></code></pre></td>
 <td class="lntd">
-<pre tabindex="0" class="chroma"><code class="language-go" data-lang="go"><span class="line"><span class="cl"><span class="k">case</span> <span class="o">&lt;-</span><span class="nx">heartbeatTimer</span><span class="p">:</span>
-</span></span><span class="line"><span class="cl">			<span class="c1">// Restart the heartbeat timer
-</span></span></span><span class="line"><span class="cl"><span class="c1"></span>			<span class="nx">heartbeatTimer</span> <span class="p">=</span> <span class="nf">randomTimeout</span><span class="p">(</span><span class="nx">r</span><span class="p">.</span><span class="nx">conf</span><span class="p">.</span><span class="nx">HeartbeatTimeout</span><span class="p">)</span>
-</span></span><span class="line"><span class="cl">
-</span></span><span class="line"><span class="cl">			<span class="c1">// Check if we have had a successful contact
-</span></span></span><span class="line"><span class="cl"><span class="c1"></span>			<span class="nx">lastContact</span> <span class="o">:=</span> <span class="nx">r</span><span class="p">.</span><span class="nf">LastContact</span><span class="p">()</span>
-</span></span><span class="line"><span class="cl">			<span class="k">if</span> <span class="nx">time</span><span class="p">.</span><span class="nf">Now</span><span class="p">().</span><span class="nf">Sub</span><span class="p">(</span><span class="nx">lastContact</span><span class="p">)</span> <span class="p">&lt;</span> <span class="nx">r</span><span class="p">.</span><span class="nx">conf</span><span class="p">.</span><span class="nx">HeartbeatTimeout</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">				<span class="k">continue</span>
-</span></span><span class="line"><span class="cl">			<span class="p">}</span>
-</span></span><span class="line"><span class="cl">
-</span></span><span class="line"><span class="cl">			<span class="c1">// Heartbeat failed! Transition to the candidate state
-</span></span></span><span class="line"><span class="cl"><span class="c1"></span>			<span class="nx">lastLeader</span> <span class="o">:=</span> <span class="nx">r</span><span class="p">.</span><span class="nf">Leader</span><span class="p">()</span>
-</span></span><span class="line"><span class="cl">			<span class="nx">r</span><span class="p">.</span><span class="nf">setLeader</span><span class="p">(</span><span class="s">&#34;&#34;</span><span class="p">)</span>
-</span></span><span class="line"><span class="cl">
-</span></span><span class="line"><span class="cl">			<span class="k">if</span> <span class="nx">r</span><span class="p">.</span><span class="nx">configurations</span><span class="p">.</span><span class="nx">latestIndex</span> <span class="o">==</span> <span class="mi">0</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">				<span class="nx">r</span><span class="p">.</span><span class="nx">logger</span><span class="p">.</span><span class="nf">Warn</span><span class="p">(</span><span class="s">&#34;no known peers, aborting election&#34;</span><span class="p">)</span>
-</span></span><span class="line"><span class="cl">				<span class="k">if</span> <span class="p">!</span><span class="nx">didWarn</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">					<span class="nx">r</span><span class="p">.</span><span class="nx">logger</span><span class="p">.</span><span class="nf">Warn</span><span class="p">(</span><span class="s">&#34;no known peers, aborting election&#34;</span><span class="p">)</span>
-</span></span><span class="line"><span class="cl">					<span class="nx">didWarn</span> <span class="p">=</span> <span class="kc">true</span>
-</span></span><span class="line"><span class="cl">				<span class="p">}</span>
-</span></span><span class="line"><span class="cl">			<span class="p">}</span> <span class="k">else</span> <span class="k">if</span> <span class="nx">r</span><span class="p">.</span><span class="nx">configurations</span><span class="p">.</span><span class="nx">latestIndex</span> <span class="o">==</span> <span class="nx">r</span><span class="p">.</span><span class="nx">configurations</span><span class="p">.</span><span class="nx">committedIndex</span> <span class="o">&amp;&amp;</span>
-</span></span><span class="line"><span class="cl">				<span class="p">!</span><span class="nf">hasVote</span><span class="p">(</span><span class="nx">r</span><span class="p">.</span><span class="nx">configurations</span><span class="p">.</span><span class="nx">latest</span><span class="p">,</span> <span class="nx">r</span><span class="p">.</span><span class="nx">localID</span><span class="p">)</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">				<span class="nx">r</span><span class="p">.</span><span class="nx">logger</span><span class="p">.</span><span class="nf">Warn</span><span class="p">(</span><span class="s">&#34;not part of stable configuration, aborting election&#34;</span><span class="p">)</span>
-</span></span><span class="line"><span class="cl">				<span class="k">if</span> <span class="p">!</span><span class="nx">didWarn</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">					<span class="nx">r</span><span class="p">.</span><span class="nx">logger</span><span class="p">.</span><span class="nf">Warn</span><span class="p">(</span><span class="s">&#34;not part of stable configuration, aborting election&#34;</span><span class="p">)</span>
-</span></span><span class="line"><span class="cl">					<span class="nx">didWarn</span> <span class="p">=</span> <span class="kc">true</span>
-</span></span><span class="line"><span class="cl">				<span class="p">}</span>
-</span></span><span class="line"><span class="cl">			<span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">				<span class="nx">r</span><span class="p">.</span><span class="nx">logger</span><span class="p">.</span><span class="nf">Warn</span><span class="p">(</span><span class="s">&#34;heartbeat timeout reached, starting election&#34;</span><span class="p">,</span> <span class="s">&#34;last-leader&#34;</span><span class="p">,</span> <span class="nx">lastLeader</span><span class="p">)</span>
-</span></span><span class="line"><span class="cl">				<span class="nx">metrics</span><span class="p">.</span><span class="nf">IncrCounter</span><span class="p">([]</span><span class="kt">string</span><span class="p">{</span><span class="s">&#34;raft&#34;</span><span class="p">,</span> <span class="s">&#34;transition&#34;</span><span class="p">,</span> <span class="s">&#34;heartbeat_timeout&#34;</span><span class="p">},</span> <span class="mi">1</span><span class="p">)</span>
-</span></span><span class="line"><span class="cl">				<span class="nx">r</span><span class="p">.</span><span class="nf">setState</span><span class="p">(</span><span class="nx">Candidate</span><span class="p">)</span>
-</span></span><span class="line"><span class="cl">				<span class="k">return</span>
-</span></span><span class="line"><span class="cl">			<span class="p">}</span>
-</span></span></code></pre></td></tr></table>
+<pre tabindex="0" class="chroma"><code class="language-go" data-lang="go"><span class="line"><span class="cl"><span class="k">case</span><span class="w"> </span><span class="o">&lt;-</span><span class="nx">heartbeatTimer</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">			</span><span class="c1">// Restart the heartbeat timer</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">			</span><span class="nx">heartbeatTimer</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nf">randomTimeout</span><span class="p">(</span><span class="nx">r</span><span class="p">.</span><span class="nx">conf</span><span class="p">.</span><span class="nx">HeartbeatTimeout</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">			</span><span class="c1">// Check if we have had a successful contact</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">			</span><span class="nx">lastContact</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">r</span><span class="p">.</span><span class="nf">LastContact</span><span class="p">()</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">			</span><span class="k">if</span><span class="w"> </span><span class="nx">time</span><span class="p">.</span><span class="nf">Now</span><span class="p">().</span><span class="nf">Sub</span><span class="p">(</span><span class="nx">lastContact</span><span class="p">)</span><span class="w"> </span><span class="p">&lt;</span><span class="w"> </span><span class="nx">r</span><span class="p">.</span><span class="nx">conf</span><span class="p">.</span><span class="nx">HeartbeatTimeout</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">				</span><span class="k">continue</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">			</span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">			</span><span class="c1">// Heartbeat failed! Transition to the candidate state</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">			</span><span class="nx">lastLeader</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">r</span><span class="p">.</span><span class="nf">Leader</span><span class="p">()</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">			</span><span class="nx">r</span><span class="p">.</span><span class="nf">setLeader</span><span class="p">(</span><span class="s">&#34;&#34;</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">			</span><span class="k">if</span><span class="w"> </span><span class="nx">r</span><span class="p">.</span><span class="nx">configurations</span><span class="p">.</span><span class="nx">latestIndex</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="mi">0</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">				</span><span class="nx">r</span><span class="p">.</span><span class="nx">logger</span><span class="p">.</span><span class="nf">Warn</span><span class="p">(</span><span class="s">&#34;no known peers, aborting election&#34;</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">				</span><span class="k">if</span><span class="w"> </span><span class="p">!</span><span class="nx">didWarn</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">					</span><span class="nx">r</span><span class="p">.</span><span class="nx">logger</span><span class="p">.</span><span class="nf">Warn</span><span class="p">(</span><span class="s">&#34;no known peers, aborting election&#34;</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">					</span><span class="nx">didWarn</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="kc">true</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">				</span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">			</span><span class="p">}</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="nx">r</span><span class="p">.</span><span class="nx">configurations</span><span class="p">.</span><span class="nx">latestIndex</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="nx">r</span><span class="p">.</span><span class="nx">configurations</span><span class="p">.</span><span class="nx">committedIndex</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">				</span><span class="p">!</span><span class="nf">hasVote</span><span class="p">(</span><span class="nx">r</span><span class="p">.</span><span class="nx">configurations</span><span class="p">.</span><span class="nx">latest</span><span class="p">,</span><span class="w"> </span><span class="nx">r</span><span class="p">.</span><span class="nx">localID</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">				</span><span class="nx">r</span><span class="p">.</span><span class="nx">logger</span><span class="p">.</span><span class="nf">Warn</span><span class="p">(</span><span class="s">&#34;not part of stable configuration, aborting election&#34;</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">				</span><span class="k">if</span><span class="w"> </span><span class="p">!</span><span class="nx">didWarn</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">					</span><span class="nx">r</span><span class="p">.</span><span class="nx">logger</span><span class="p">.</span><span class="nf">Warn</span><span class="p">(</span><span class="s">&#34;not part of stable configuration, aborting election&#34;</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">					</span><span class="nx">didWarn</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="kc">true</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">				</span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">			</span><span class="p">}</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">				</span><span class="nx">r</span><span class="p">.</span><span class="nx">logger</span><span class="p">.</span><span class="nf">Warn</span><span class="p">(</span><span class="s">&#34;heartbeat timeout reached, starting election&#34;</span><span class="p">,</span><span class="w"> </span><span class="s">&#34;last-leader&#34;</span><span class="p">,</span><span class="w"> </span><span class="nx">lastLeader</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">				</span><span class="nx">metrics</span><span class="p">.</span><span class="nf">IncrCounter</span><span class="p">([]</span><span class="kt">string</span><span class="p">{</span><span class="s">&#34;raft&#34;</span><span class="p">,</span><span class="w"> </span><span class="s">&#34;transition&#34;</span><span class="p">,</span><span class="w"> </span><span class="s">&#34;heartbeat_timeout&#34;</span><span class="p">},</span><span class="w"> </span><span class="mi">1</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">				</span><span class="nx">r</span><span class="p">.</span><span class="nf">setState</span><span class="p">(</span><span class="nx">Candidate</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">				</span><span class="k">return</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">			</span><span class="p">}</span><span class="w">
+</span></span></span></code></pre></td></tr></table>
 </div>
 </div><p>Follower节点会处理一些RPC请求</p>
 <div class="highlight"><div class="chroma">
@@ -354,28 +361,28 @@
 </span><span class="lnt">21
 </span></code></pre></td>
 <td class="lntd">
-<pre tabindex="0" class="chroma"><code class="language-go" data-lang="go"><span class="line"><span class="cl"><span class="kd">func</span> <span class="p">(</span><span class="nx">r</span> <span class="o">*</span><span class="nx">Raft</span><span class="p">)</span> <span class="nf">processRPC</span><span class="p">(</span><span class="nx">rpc</span> <span class="nx">RPC</span><span class="p">)</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">	<span class="k">if</span> <span class="nx">err</span> <span class="o">:=</span> <span class="nx">r</span><span class="p">.</span><span class="nf">checkRPCHeader</span><span class="p">(</span><span class="nx">rpc</span><span class="p">);</span> <span class="nx">err</span> <span class="o">!=</span> <span class="kc">nil</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">		<span class="nx">rpc</span><span class="p">.</span><span class="nf">Respond</span><span class="p">(</span><span class="kc">nil</span><span class="p">,</span> <span class="nx">err</span><span class="p">)</span>
-</span></span><span class="line"><span class="cl">		<span class="k">return</span>
-</span></span><span class="line"><span class="cl">	<span class="p">}</span>
-</span></span><span class="line"><span class="cl">
-</span></span><span class="line"><span class="cl">	<span class="k">switch</span> <span class="nx">cmd</span> <span class="o">:=</span> <span class="nx">rpc</span><span class="p">.</span><span class="nx">Command</span><span class="p">.(</span><span class="kd">type</span><span class="p">)</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">	<span class="k">case</span> <span class="o">*</span><span class="nx">AppendEntriesRequest</span><span class="p">:</span>
-</span></span><span class="line"><span class="cl">		<span class="nx">r</span><span class="p">.</span><span class="nf">appendEntries</span><span class="p">(</span><span class="nx">rpc</span><span class="p">,</span> <span class="nx">cmd</span><span class="p">)</span>
-</span></span><span class="line"><span class="cl">	<span class="k">case</span> <span class="o">*</span><span class="nx">RequestVoteRequest</span><span class="p">:</span>
-</span></span><span class="line"><span class="cl">		<span class="nx">r</span><span class="p">.</span><span class="nf">requestVote</span><span class="p">(</span><span class="nx">rpc</span><span class="p">,</span> <span class="nx">cmd</span><span class="p">)</span>
-</span></span><span class="line"><span class="cl">	<span class="k">case</span> <span class="o">*</span><span class="nx">InstallSnapshotRequest</span><span class="p">:</span>
-</span></span><span class="line"><span class="cl">		<span class="nx">r</span><span class="p">.</span><span class="nf">installSnapshot</span><span class="p">(</span><span class="nx">rpc</span><span class="p">,</span> <span class="nx">cmd</span><span class="p">)</span>
-</span></span><span class="line"><span class="cl">	<span class="k">case</span> <span class="o">*</span><span class="nx">TimeoutNowRequest</span><span class="p">:</span>
-</span></span><span class="line"><span class="cl">		<span class="nx">r</span><span class="p">.</span><span class="nf">timeoutNow</span><span class="p">(</span><span class="nx">rpc</span><span class="p">,</span> <span class="nx">cmd</span><span class="p">)</span>
-</span></span><span class="line"><span class="cl">	<span class="k">default</span><span class="p">:</span>
-</span></span><span class="line"><span class="cl">		<span class="nx">r</span><span class="p">.</span><span class="nx">logger</span><span class="p">.</span><span class="nf">Error</span><span class="p">(</span><span class="s">&#34;got unexpected command&#34;</span><span class="p">,</span>
-</span></span><span class="line"><span class="cl">			<span class="s">&#34;command&#34;</span><span class="p">,</span> <span class="nx">hclog</span><span class="p">.</span><span class="nf">Fmt</span><span class="p">(</span><span class="s">&#34;%#v&#34;</span><span class="p">,</span> <span class="nx">rpc</span><span class="p">.</span><span class="nx">Command</span><span class="p">))</span>
-</span></span><span class="line"><span class="cl">		<span class="nx">rpc</span><span class="p">.</span><span class="nf">Respond</span><span class="p">(</span><span class="kc">nil</span><span class="p">,</span> <span class="nx">fmt</span><span class="p">.</span><span class="nf">Errorf</span><span class="p">(</span><span class="s">&#34;unexpected command&#34;</span><span class="p">))</span>
-</span></span><span class="line"><span class="cl">	<span class="p">}</span>
-</span></span><span class="line"><span class="cl"><span class="p">}</span>
-</span></span></code></pre></td></tr></table>
+<pre tabindex="0" class="chroma"><code class="language-go" data-lang="go"><span class="line"><span class="cl"><span class="kd">func</span><span class="w"> </span><span class="p">(</span><span class="nx">r</span><span class="w"> </span><span class="o">*</span><span class="nx">Raft</span><span class="p">)</span><span class="w"> </span><span class="nf">processRPC</span><span class="p">(</span><span class="nx">rpc</span><span class="w"> </span><span class="nx">RPC</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="k">if</span><span class="w"> </span><span class="nx">err</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">r</span><span class="p">.</span><span class="nf">checkRPCHeader</span><span class="p">(</span><span class="nx">rpc</span><span class="p">);</span><span class="w"> </span><span class="nx">err</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="kc">nil</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="nx">rpc</span><span class="p">.</span><span class="nf">Respond</span><span class="p">(</span><span class="kc">nil</span><span class="p">,</span><span class="w"> </span><span class="nx">err</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="k">return</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="k">switch</span><span class="w"> </span><span class="nx">cmd</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">rpc</span><span class="p">.</span><span class="nx">Command</span><span class="p">.(</span><span class="kd">type</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="k">case</span><span class="w"> </span><span class="o">*</span><span class="nx">AppendEntriesRequest</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="nx">r</span><span class="p">.</span><span class="nf">appendEntries</span><span class="p">(</span><span class="nx">rpc</span><span class="p">,</span><span class="w"> </span><span class="nx">cmd</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="k">case</span><span class="w"> </span><span class="o">*</span><span class="nx">RequestVoteRequest</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="nx">r</span><span class="p">.</span><span class="nf">requestVote</span><span class="p">(</span><span class="nx">rpc</span><span class="p">,</span><span class="w"> </span><span class="nx">cmd</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="k">case</span><span class="w"> </span><span class="o">*</span><span class="nx">InstallSnapshotRequest</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="nx">r</span><span class="p">.</span><span class="nf">installSnapshot</span><span class="p">(</span><span class="nx">rpc</span><span class="p">,</span><span class="w"> </span><span class="nx">cmd</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="k">case</span><span class="w"> </span><span class="o">*</span><span class="nx">TimeoutNowRequest</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="nx">r</span><span class="p">.</span><span class="nf">timeoutNow</span><span class="p">(</span><span class="nx">rpc</span><span class="p">,</span><span class="w"> </span><span class="nx">cmd</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="k">default</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="nx">r</span><span class="p">.</span><span class="nx">logger</span><span class="p">.</span><span class="nf">Error</span><span class="p">(</span><span class="s">&#34;got unexpected command&#34;</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">			</span><span class="s">&#34;command&#34;</span><span class="p">,</span><span class="w"> </span><span class="nx">hclog</span><span class="p">.</span><span class="nf">Fmt</span><span class="p">(</span><span class="s">&#34;%#v&#34;</span><span class="p">,</span><span class="w"> </span><span class="nx">rpc</span><span class="p">.</span><span class="nx">Command</span><span class="p">))</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="nx">rpc</span><span class="p">.</span><span class="nf">Respond</span><span class="p">(</span><span class="kc">nil</span><span class="p">,</span><span class="w"> </span><span class="nx">fmt</span><span class="p">.</span><span class="nf">Errorf</span><span class="p">(</span><span class="s">&#34;unexpected command&#34;</span><span class="p">))</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="p">}</span><span class="w">
+</span></span></span></code></pre></td></tr></table>
 </div>
 </div><p>其中包括RequestVoteRequest，即请求成为leader的选举请求，如果节点发现</p>
 <ol>
@@ -395,10 +402,10 @@
 </span><span class="lnt">3
 </span></code></pre></td>
 <td class="lntd">
-<pre tabindex="0" class="chroma"><code class="language-go" data-lang="go"><span class="line"><span class="cl"><span class="nx">voteCh</span> <span class="o">:=</span> <span class="nx">r</span><span class="p">.</span><span class="nf">electSelf</span><span class="p">()</span>
-</span></span><span class="line"><span class="cl"><span class="nx">electionTimer</span> <span class="o">:=</span> <span class="nf">randomTimeout</span><span class="p">(</span><span class="nx">r</span><span class="p">.</span><span class="nx">conf</span><span class="p">.</span><span class="nx">ElectionTimeout</span><span class="p">)</span>
-</span></span><span class="line"><span class="cl"><span class="nx">votesNeeded</span> <span class="o">:=</span> <span class="nx">r</span><span class="p">.</span><span class="nf">quorumSize</span><span class="p">()</span>
-</span></span></code></pre></td></tr></table>
+<pre tabindex="0" class="chroma"><code class="language-go" data-lang="go"><span class="line"><span class="cl"><span class="nx">voteCh</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">r</span><span class="p">.</span><span class="nf">electSelf</span><span class="p">()</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="nx">electionTimer</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nf">randomTimeout</span><span class="p">(</span><span class="nx">r</span><span class="p">.</span><span class="nx">conf</span><span class="p">.</span><span class="nx">ElectionTimeout</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="nx">votesNeeded</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">r</span><span class="p">.</span><span class="nf">quorumSize</span><span class="p">()</span><span class="w">
+</span></span></span></code></pre></td></tr></table>
 </div>
 </div><p>votesNeeded的计算方式为配置中的最后的所有的节点数/2+1，如果集群中只存在两个活着的节点，则需要的最小投票数量为2</p>
 <div class="highlight"><div class="chroma">
@@ -414,16 +421,16 @@
 </span><span class="lnt">9
 </span></code></pre></td>
 <td class="lntd">
-<pre tabindex="0" class="chroma"><code class="language-go" data-lang="go"><span class="line"><span class="cl"><span class="kd">func</span> <span class="p">(</span><span class="nx">r</span> <span class="o">*</span><span class="nx">Raft</span><span class="p">)</span> <span class="nf">quorumSize</span><span class="p">()</span> <span class="kt">int</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">	<span class="nx">voters</span> <span class="o">:=</span> <span class="mi">0</span>
-</span></span><span class="line"><span class="cl">	<span class="k">for</span> <span class="nx">_</span><span class="p">,</span> <span class="nx">server</span> <span class="o">:=</span> <span class="k">range</span> <span class="nx">r</span><span class="p">.</span><span class="nx">configurations</span><span class="p">.</span><span class="nx">latest</span><span class="p">.</span><span class="nx">Servers</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">		<span class="k">if</span> <span class="nx">server</span><span class="p">.</span><span class="nx">Suffrage</span> <span class="o">==</span> <span class="nx">Voter</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">			<span class="nx">voters</span><span class="o">++</span>
-</span></span><span class="line"><span class="cl">		<span class="p">}</span>
-</span></span><span class="line"><span class="cl">	<span class="p">}</span>
-</span></span><span class="line"><span class="cl">	<span class="k">return</span> <span class="nx">voters</span><span class="o">/</span><span class="mi">2</span> <span class="o">+</span> <span class="mi">1</span>
-</span></span><span class="line"><span class="cl"><span class="p">}</span>
-</span></span></code></pre></td></tr></table>
+<pre tabindex="0" class="chroma"><code class="language-go" data-lang="go"><span class="line"><span class="cl"><span class="kd">func</span><span class="w"> </span><span class="p">(</span><span class="nx">r</span><span class="w"> </span><span class="o">*</span><span class="nx">Raft</span><span class="p">)</span><span class="w"> </span><span class="nf">quorumSize</span><span class="p">()</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">voters</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="mi">0</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="k">for</span><span class="w"> </span><span class="nx">_</span><span class="p">,</span><span class="w"> </span><span class="nx">server</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="k">range</span><span class="w"> </span><span class="nx">r</span><span class="p">.</span><span class="nx">configurations</span><span class="p">.</span><span class="nx">latest</span><span class="p">.</span><span class="nx">Servers</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="k">if</span><span class="w"> </span><span class="nx">server</span><span class="p">.</span><span class="nx">Suffrage</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="nx">Voter</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">			</span><span class="nx">voters</span><span class="o">++</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="k">return</span><span class="w"> </span><span class="nx">voters</span><span class="o">/</span><span class="mi">2</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="p">}</span><span class="w">
+</span></span></span></code></pre></td></tr></table>
 </div>
 </div><p>如果candidate收到rpc的回复，则会：</p>
 <ol>
@@ -466,31 +473,31 @@
 </span><span class="lnt">24
 </span></code></pre></td>
 <td class="lntd">
-<pre tabindex="0" class="chroma"><code class="language-go" data-lang="go"><span class="line"><span class="cl"><span class="kd">func</span> <span class="p">(</span><span class="nx">r</span> <span class="o">*</span><span class="nx">Raft</span><span class="p">)</span> <span class="nf">leaderLoop</span><span class="p">()</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl"><span class="c1">// stepDown is used to track if there is an inflight log that
-</span></span></span><span class="line"><span class="cl"><span class="c1"></span>	<span class="c1">// would cause us to lose leadership (specifically a RemovePeer of
-</span></span></span><span class="line"><span class="cl"><span class="c1"></span>	<span class="c1">// ourselves). If this is the case, we must not allow any logs to
-</span></span></span><span class="line"><span class="cl"><span class="c1"></span>	<span class="c1">// be processed in parallel, otherwise we are basing commit on
-</span></span></span><span class="line"><span class="cl"><span class="c1"></span>	<span class="c1">// only a single peer (ourself) and replicating to an undefined set
-</span></span></span><span class="line"><span class="cl"><span class="c1"></span>	<span class="c1">// of peers.
-</span></span></span><span class="line"><span class="cl"><span class="c1"></span>	<span class="nx">stepDown</span> <span class="o">:=</span> <span class="kc">false</span>
-</span></span><span class="line"><span class="cl">	<span class="nx">lease</span> <span class="o">:=</span> <span class="nx">time</span><span class="p">.</span><span class="nf">After</span><span class="p">(</span><span class="nx">r</span><span class="p">.</span><span class="nx">conf</span><span class="p">.</span><span class="nx">LeaderLeaseTimeout</span><span class="p">)</span>
-</span></span><span class="line"><span class="cl">	<span class="k">for</span> <span class="nx">r</span><span class="p">.</span><span class="nf">getState</span><span class="p">()</span> <span class="o">==</span> <span class="nx">Leader</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">	<span class="k">select</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">		<span class="k">case</span> <span class="nx">rpc</span> <span class="o">:=</span> <span class="o">&lt;-</span><span class="nx">r</span><span class="p">.</span><span class="nx">rpcCh</span><span class="p">:</span>
-</span></span><span class="line"><span class="cl">		<span class="k">case</span> <span class="o">&lt;-</span><span class="nx">r</span><span class="p">.</span><span class="nx">leaderState</span><span class="p">.</span><span class="nx">stepDown</span><span class="p">:</span>
-</span></span><span class="line"><span class="cl">		<span class="k">case</span> <span class="nx">future</span> <span class="o">:=</span> <span class="o">&lt;-</span><span class="nx">r</span><span class="p">.</span><span class="nx">leadershipTransferCh</span><span class="p">:</span>
-</span></span><span class="line"><span class="cl">		<span class="k">case</span> <span class="o">&lt;-</span><span class="nx">r</span><span class="p">.</span><span class="nx">leaderState</span><span class="p">.</span><span class="nx">commitCh</span><span class="p">:</span>
-</span></span><span class="line"><span class="cl">		<span class="k">case</span> <span class="nx">v</span> <span class="o">:=</span> <span class="o">&lt;-</span><span class="nx">r</span><span class="p">.</span><span class="nx">verifyCh</span><span class="p">:</span>
-</span></span><span class="line"><span class="cl">		<span class="k">case</span> <span class="nx">future</span> <span class="o">:=</span> <span class="o">&lt;-</span><span class="nx">r</span><span class="p">.</span><span class="nx">userRestoreCh</span><span class="p">:</span>
-</span></span><span class="line"><span class="cl">		<span class="k">case</span> <span class="nx">future</span> <span class="o">:=</span> <span class="o">&lt;-</span><span class="nx">r</span><span class="p">.</span><span class="nx">configurationsCh</span><span class="p">:</span>
-</span></span><span class="line"><span class="cl">		<span class="k">case</span> <span class="nx">future</span> <span class="o">:=</span> <span class="o">&lt;-</span><span class="nx">r</span><span class="p">.</span><span class="nf">configurationChangeChIfStable</span><span class="p">():</span>
-</span></span><span class="line"><span class="cl">		<span class="k">case</span> <span class="nx">b</span> <span class="o">:=</span> <span class="o">&lt;-</span><span class="nx">r</span><span class="p">.</span><span class="nx">bootstrapCh</span><span class="p">:</span>
-</span></span><span class="line"><span class="cl">		<span class="k">case</span> <span class="nx">newLog</span> <span class="o">:=</span> <span class="o">&lt;-</span><span class="nx">r</span><span class="p">.</span><span class="nx">applyCh</span><span class="p">:</span>
-</span></span><span class="line"><span class="cl">		<span class="k">case</span> <span class="o">&lt;-</span><span class="nx">lease</span><span class="p">:</span>
-</span></span><span class="line"><span class="cl">		<span class="k">case</span> <span class="o">&lt;-</span><span class="nx">r</span><span class="p">.</span><span class="nx">shutdownCh</span><span class="p">:</span>
-</span></span><span class="line"><span class="cl"><span class="p">}</span>
-</span></span></code></pre></td></tr></table>
+<pre tabindex="0" class="chroma"><code class="language-go" data-lang="go"><span class="line"><span class="cl"><span class="kd">func</span><span class="w"> </span><span class="p">(</span><span class="nx">r</span><span class="w"> </span><span class="o">*</span><span class="nx">Raft</span><span class="p">)</span><span class="w"> </span><span class="nf">leaderLoop</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c1">// stepDown is used to track if there is an inflight log that</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="c1">// would cause us to lose leadership (specifically a RemovePeer of</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="c1">// ourselves). If this is the case, we must not allow any logs to</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="c1">// be processed in parallel, otherwise we are basing commit on</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="c1">// only a single peer (ourself) and replicating to an undefined set</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="c1">// of peers.</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">stepDown</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="kc">false</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">lease</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">time</span><span class="p">.</span><span class="nf">After</span><span class="p">(</span><span class="nx">r</span><span class="p">.</span><span class="nx">conf</span><span class="p">.</span><span class="nx">LeaderLeaseTimeout</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="k">for</span><span class="w"> </span><span class="nx">r</span><span class="p">.</span><span class="nf">getState</span><span class="p">()</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="nx">Leader</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="k">select</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="k">case</span><span class="w"> </span><span class="nx">rpc</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="o">&lt;-</span><span class="nx">r</span><span class="p">.</span><span class="nx">rpcCh</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="k">case</span><span class="w"> </span><span class="o">&lt;-</span><span class="nx">r</span><span class="p">.</span><span class="nx">leaderState</span><span class="p">.</span><span class="nx">stepDown</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="k">case</span><span class="w"> </span><span class="nx">future</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="o">&lt;-</span><span class="nx">r</span><span class="p">.</span><span class="nx">leadershipTransferCh</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="k">case</span><span class="w"> </span><span class="o">&lt;-</span><span class="nx">r</span><span class="p">.</span><span class="nx">leaderState</span><span class="p">.</span><span class="nx">commitCh</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="k">case</span><span class="w"> </span><span class="nx">v</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="o">&lt;-</span><span class="nx">r</span><span class="p">.</span><span class="nx">verifyCh</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="k">case</span><span class="w"> </span><span class="nx">future</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="o">&lt;-</span><span class="nx">r</span><span class="p">.</span><span class="nx">userRestoreCh</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="k">case</span><span class="w"> </span><span class="nx">future</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="o">&lt;-</span><span class="nx">r</span><span class="p">.</span><span class="nx">configurationsCh</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="k">case</span><span class="w"> </span><span class="nx">future</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="o">&lt;-</span><span class="nx">r</span><span class="p">.</span><span class="nf">configurationChangeChIfStable</span><span class="p">():</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="k">case</span><span class="w"> </span><span class="nx">b</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="o">&lt;-</span><span class="nx">r</span><span class="p">.</span><span class="nx">bootstrapCh</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="k">case</span><span class="w"> </span><span class="nx">newLog</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="o">&lt;-</span><span class="nx">r</span><span class="p">.</span><span class="nx">applyCh</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="k">case</span><span class="w"> </span><span class="o">&lt;-</span><span class="nx">lease</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="k">case</span><span class="w"> </span><span class="o">&lt;-</span><span class="nx">r</span><span class="p">.</span><span class="nx">shutdownCh</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="p">}</span><span class="w">
+</span></span></span></code></pre></td></tr></table>
 </div>
 </div><p>Leader需要处理各种RPC请求，写入数据，并检测集群的状态等。Leader可能会退化为Follower：</p>
 <ul>
@@ -562,35 +569,35 @@
 </span><span class="lnt">28
 </span></code></pre></td>
 <td class="lntd">
-<pre tabindex="0" class="chroma"><code class="language-go" data-lang="go"><span class="line"><span class="cl"><span class="kd">type</span> <span class="nx">Log</span> <span class="kd">struct</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">	<span class="c1">// Index holds the index of the log entry.
-</span></span></span><span class="line"><span class="cl"><span class="c1"></span>	<span class="nx">Index</span> <span class="kt">uint64</span>
-</span></span><span class="line"><span class="cl">
-</span></span><span class="line"><span class="cl">	<span class="c1">// Term holds the election term of the log entry.
-</span></span></span><span class="line"><span class="cl"><span class="c1"></span>	<span class="nx">Term</span> <span class="kt">uint64</span>
-</span></span><span class="line"><span class="cl">
-</span></span><span class="line"><span class="cl">	<span class="c1">// Type holds the type of the log entry.
-</span></span></span><span class="line"><span class="cl"><span class="c1"></span>	<span class="nx">Type</span> <span class="nx">LogType</span>
-</span></span><span class="line"><span class="cl">
-</span></span><span class="line"><span class="cl">	<span class="c1">// Data holds the log entry&#39;s type-specific data.
-</span></span></span><span class="line"><span class="cl"><span class="c1"></span>	<span class="nx">Data</span> <span class="p">[]</span><span class="kt">byte</span>
-</span></span><span class="line"><span class="cl">
-</span></span><span class="line"><span class="cl">	<span class="c1">// Extensions holds an opaque byte slice of information for middleware. It
-</span></span></span><span class="line"><span class="cl"><span class="c1"></span>	<span class="c1">// is up to the client of the library to properly modify this as it adds
-</span></span></span><span class="line"><span class="cl"><span class="c1"></span>	<span class="c1">// layers and remove those layers when appropriate. This value is a part of
-</span></span></span><span class="line"><span class="cl"><span class="c1"></span>	<span class="c1">// the log, so very large values could cause timing issues.
-</span></span></span><span class="line"><span class="cl"><span class="c1"></span>	<span class="c1">//
-</span></span></span><span class="line"><span class="cl"><span class="c1"></span>	<span class="c1">// N.B. It is _up to the client_ to handle upgrade paths. For instance if
-</span></span></span><span class="line"><span class="cl"><span class="c1"></span>	<span class="c1">// using this with go-raftchunking, the client should ensure that all Raft
-</span></span></span><span class="line"><span class="cl"><span class="c1"></span>	<span class="c1">// peers are using a version that can handle that extension before ever
-</span></span></span><span class="line"><span class="cl"><span class="c1"></span>	<span class="c1">// actually triggering chunking behavior. It is sometimes sufficient to
-</span></span></span><span class="line"><span class="cl"><span class="c1"></span>	<span class="c1">// ensure that non-leaders are upgraded first, then the current leader is
-</span></span></span><span class="line"><span class="cl"><span class="c1"></span>	<span class="c1">// upgraded, but a leader changeover during this process could lead to
-</span></span></span><span class="line"><span class="cl"><span class="c1"></span>	<span class="c1">// trouble, so gating extension behavior via some flag in the client
-</span></span></span><span class="line"><span class="cl"><span class="c1"></span>	<span class="c1">// program is also a good idea.
-</span></span></span><span class="line"><span class="cl"><span class="c1"></span>	<span class="nx">Extensions</span> <span class="p">[]</span><span class="kt">byte</span>
-</span></span><span class="line"><span class="cl"><span class="p">}</span>
-</span></span></code></pre></td></tr></table>
+<pre tabindex="0" class="chroma"><code class="language-go" data-lang="go"><span class="line"><span class="cl"><span class="kd">type</span><span class="w"> </span><span class="nx">Log</span><span class="w"> </span><span class="kd">struct</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="c1">// Index holds the index of the log entry.</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">Index</span><span class="w"> </span><span class="kt">uint64</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="c1">// Term holds the election term of the log entry.</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">Term</span><span class="w"> </span><span class="kt">uint64</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="c1">// Type holds the type of the log entry.</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">Type</span><span class="w"> </span><span class="nx">LogType</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="c1">// Data holds the log entry&#39;s type-specific data.</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">Data</span><span class="w"> </span><span class="p">[]</span><span class="kt">byte</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="c1">// Extensions holds an opaque byte slice of information for middleware. It</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="c1">// is up to the client of the library to properly modify this as it adds</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="c1">// layers and remove those layers when appropriate. This value is a part of</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="c1">// the log, so very large values could cause timing issues.</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="c1">//</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="c1">// N.B. It is _up to the client_ to handle upgrade paths. For instance if</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="c1">// using this with go-raftchunking, the client should ensure that all Raft</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="c1">// peers are using a version that can handle that extension before ever</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="c1">// actually triggering chunking behavior. It is sometimes sufficient to</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="c1">// ensure that non-leaders are upgraded first, then the current leader is</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="c1">// upgraded, but a leader changeover during this process could lead to</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="c1">// trouble, so gating extension behavior via some flag in the client</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="c1">// program is also a good idea.</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">Extensions</span><span class="w"> </span><span class="p">[]</span><span class="kt">byte</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="p">}</span><span class="w">
+</span></span></span></code></pre></td></tr></table>
 </div>
 </div><p>log由index，term，type和data组成</p>
 <h3 id="日志处理流程">日志处理流程</h3>
@@ -746,126 +753,126 @@
 </span><span class="lnt">119
 </span></code></pre></td>
 <td class="lntd">
-<pre tabindex="0" class="chroma"><code class="language-go" data-lang="go"><span class="line"><span class="cl"><span class="kd">func</span> <span class="p">(</span><span class="nx">r</span> <span class="o">*</span><span class="nx">Raft</span><span class="p">)</span> <span class="nf">requestVote</span><span class="p">(</span><span class="nx">rpc</span> <span class="nx">RPC</span><span class="p">,</span> <span class="nx">req</span> <span class="o">*</span><span class="nx">RequestVoteRequest</span><span class="p">)</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">	<span class="k">defer</span> <span class="nx">metrics</span><span class="p">.</span><span class="nf">MeasureSince</span><span class="p">([]</span><span class="kt">string</span><span class="p">{</span><span class="s">&#34;raft&#34;</span><span class="p">,</span> <span class="s">&#34;rpc&#34;</span><span class="p">,</span> <span class="s">&#34;requestVote&#34;</span><span class="p">},</span> <span class="nx">time</span><span class="p">.</span><span class="nf">Now</span><span class="p">())</span>
-</span></span><span class="line"><span class="cl">	<span class="nx">r</span><span class="p">.</span><span class="nf">observe</span><span class="p">(</span><span class="o">*</span><span class="nx">req</span><span class="p">)</span>
-</span></span><span class="line"><span class="cl">
-</span></span><span class="line"><span class="cl">	<span class="c1">// Setup a response
-</span></span></span><span class="line"><span class="cl"><span class="c1"></span>	<span class="nx">resp</span> <span class="o">:=</span> <span class="o">&amp;</span><span class="nx">RequestVoteResponse</span><span class="p">{</span>
-</span></span><span class="line"><span class="cl">		<span class="nx">RPCHeader</span><span class="p">:</span> <span class="nx">r</span><span class="p">.</span><span class="nf">getRPCHeader</span><span class="p">(),</span>
-</span></span><span class="line"><span class="cl">		<span class="nx">Term</span><span class="p">:</span>      <span class="nx">r</span><span class="p">.</span><span class="nf">getCurrentTerm</span><span class="p">(),</span>
-</span></span><span class="line"><span class="cl">		<span class="nx">Granted</span><span class="p">:</span>   <span class="kc">false</span><span class="p">,</span>
-</span></span><span class="line"><span class="cl">	<span class="p">}</span>
-</span></span><span class="line"><span class="cl">	<span class="kd">var</span> <span class="nx">rpcErr</span> <span class="kt">error</span>
-</span></span><span class="line"><span class="cl">	<span class="k">defer</span> <span class="kd">func</span><span class="p">()</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">		<span class="nx">rpc</span><span class="p">.</span><span class="nf">Respond</span><span class="p">(</span><span class="nx">resp</span><span class="p">,</span> <span class="nx">rpcErr</span><span class="p">)</span>
-</span></span><span class="line"><span class="cl">	<span class="p">}()</span>
-</span></span><span class="line"><span class="cl">
-</span></span><span class="line"><span class="cl">	<span class="c1">// Version 0 servers will panic unless the peers is present. It&#39;s only
-</span></span></span><span class="line"><span class="cl"><span class="c1"></span>	<span class="c1">// used on them to produce a warning message.
-</span></span></span><span class="line"><span class="cl"><span class="c1"></span>	<span class="k">if</span> <span class="nx">r</span><span class="p">.</span><span class="nx">protocolVersion</span> <span class="p">&lt;</span> <span class="mi">2</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">		<span class="nx">resp</span><span class="p">.</span><span class="nx">Peers</span> <span class="p">=</span> <span class="nf">encodePeers</span><span class="p">(</span><span class="nx">r</span><span class="p">.</span><span class="nx">configurations</span><span class="p">.</span><span class="nx">latest</span><span class="p">,</span> <span class="nx">r</span><span class="p">.</span><span class="nx">trans</span><span class="p">)</span>
-</span></span><span class="line"><span class="cl">	<span class="p">}</span>
-</span></span><span class="line"><span class="cl">
-</span></span><span class="line"><span class="cl">	<span class="c1">// Check if we have an existing leader [who&#39;s not the candidate] and also
-</span></span></span><span class="line"><span class="cl"><span class="c1"></span>	<span class="c1">// check the LeadershipTransfer flag is set. Usually votes are rejected if
-</span></span></span><span class="line"><span class="cl"><span class="c1"></span>	<span class="c1">// there is a known leader. But if the leader initiated a leadership transfer,
-</span></span></span><span class="line"><span class="cl"><span class="c1"></span>	<span class="c1">// vote!
-</span></span></span><span class="line"><span class="cl"><span class="c1"></span>	<span class="kd">var</span> <span class="nx">candidate</span> <span class="nx">ServerAddress</span>
-</span></span><span class="line"><span class="cl">	<span class="kd">var</span> <span class="nx">candidateBytes</span> <span class="p">[]</span><span class="kt">byte</span>
-</span></span><span class="line"><span class="cl">	<span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="nx">req</span><span class="p">.</span><span class="nx">RPCHeader</span><span class="p">.</span><span class="nx">Addr</span><span class="p">)</span> <span class="p">&gt;</span> <span class="mi">0</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">		<span class="nx">candidate</span> <span class="p">=</span> <span class="nx">r</span><span class="p">.</span><span class="nx">trans</span><span class="p">.</span><span class="nf">DecodePeer</span><span class="p">(</span><span class="nx">req</span><span class="p">.</span><span class="nx">RPCHeader</span><span class="p">.</span><span class="nx">Addr</span><span class="p">)</span>
-</span></span><span class="line"><span class="cl">		<span class="nx">candidateBytes</span> <span class="p">=</span> <span class="nx">req</span><span class="p">.</span><span class="nx">RPCHeader</span><span class="p">.</span><span class="nx">Addr</span>
-</span></span><span class="line"><span class="cl">	<span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">		<span class="nx">candidate</span> <span class="p">=</span> <span class="nx">r</span><span class="p">.</span><span class="nx">trans</span><span class="p">.</span><span class="nf">DecodePeer</span><span class="p">(</span><span class="nx">req</span><span class="p">.</span><span class="nx">Candidate</span><span class="p">)</span>
-</span></span><span class="line"><span class="cl">		<span class="nx">candidateBytes</span> <span class="p">=</span> <span class="nx">req</span><span class="p">.</span><span class="nx">Candidate</span>
-</span></span><span class="line"><span class="cl">	<span class="p">}</span>
-</span></span><span class="line"><span class="cl">
-</span></span><span class="line"><span class="cl">	<span class="c1">// For older raft version ID is not part of the packed message
-</span></span></span><span class="line"><span class="cl"><span class="c1"></span>	<span class="c1">// We assume that the peer is part of the configuration and skip this check
-</span></span></span><span class="line"><span class="cl"><span class="c1"></span>	<span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="nx">req</span><span class="p">.</span><span class="nx">ID</span><span class="p">)</span> <span class="p">&gt;</span> <span class="mi">0</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">		<span class="nx">candidateID</span> <span class="o">:=</span> <span class="nf">ServerID</span><span class="p">(</span><span class="nx">req</span><span class="p">.</span><span class="nx">ID</span><span class="p">)</span>
-</span></span><span class="line"><span class="cl">		<span class="c1">// if the Servers list is empty that mean the cluster is very likely trying to bootstrap,
-</span></span></span><span class="line"><span class="cl"><span class="c1"></span>		<span class="c1">// Grant the vote
-</span></span></span><span class="line"><span class="cl"><span class="c1"></span>		<span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="nx">r</span><span class="p">.</span><span class="nx">configurations</span><span class="p">.</span><span class="nx">latest</span><span class="p">.</span><span class="nx">Servers</span><span class="p">)</span> <span class="p">&gt;</span> <span class="mi">0</span> <span class="o">&amp;&amp;</span> <span class="p">!</span><span class="nf">hasVote</span><span class="p">(</span><span class="nx">r</span><span class="p">.</span><span class="nx">configurations</span><span class="p">.</span><span class="nx">latest</span><span class="p">,</span> <span class="nx">candidateID</span><span class="p">)</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">			<span class="nx">r</span><span class="p">.</span><span class="nx">logger</span><span class="p">.</span><span class="nf">Warn</span><span class="p">(</span><span class="s">&#34;rejecting vote request since node is not a voter&#34;</span><span class="p">,</span>
-</span></span><span class="line"><span class="cl">				<span class="s">&#34;from&#34;</span><span class="p">,</span> <span class="nx">candidate</span><span class="p">)</span>
-</span></span><span class="line"><span class="cl">			<span class="k">return</span>
-</span></span><span class="line"><span class="cl">		<span class="p">}</span>
-</span></span><span class="line"><span class="cl">	<span class="p">}</span>
-</span></span><span class="line"><span class="cl">	<span class="k">if</span> <span class="nx">leaderAddr</span><span class="p">,</span> <span class="nx">leaderID</span> <span class="o">:=</span> <span class="nx">r</span><span class="p">.</span><span class="nf">LeaderWithID</span><span class="p">();</span> <span class="nx">leaderAddr</span> <span class="o">!=</span> <span class="s">&#34;&#34;</span> <span class="o">&amp;&amp;</span> <span class="nx">leaderAddr</span> <span class="o">!=</span> <span class="nx">candidate</span> <span class="o">&amp;&amp;</span> <span class="p">!</span><span class="nx">req</span><span class="p">.</span><span class="nx">LeadershipTransfer</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">		<span class="nx">r</span><span class="p">.</span><span class="nx">logger</span><span class="p">.</span><span class="nf">Warn</span><span class="p">(</span><span class="s">&#34;rejecting vote request since we have a leader&#34;</span><span class="p">,</span>
-</span></span><span class="line"><span class="cl">			<span class="s">&#34;from&#34;</span><span class="p">,</span> <span class="nx">candidate</span><span class="p">,</span>
-</span></span><span class="line"><span class="cl">			<span class="s">&#34;leader&#34;</span><span class="p">,</span> <span class="nx">leaderAddr</span><span class="p">,</span>
-</span></span><span class="line"><span class="cl">			<span class="s">&#34;leader-id&#34;</span><span class="p">,</span> <span class="nb">string</span><span class="p">(</span><span class="nx">leaderID</span><span class="p">))</span>
-</span></span><span class="line"><span class="cl">		<span class="k">return</span>
-</span></span><span class="line"><span class="cl">	<span class="p">}</span>
-</span></span><span class="line"><span class="cl">
-</span></span><span class="line"><span class="cl">	<span class="c1">// Ignore an older term
-</span></span></span><span class="line"><span class="cl"><span class="c1"></span>	<span class="k">if</span> <span class="nx">req</span><span class="p">.</span><span class="nx">Term</span> <span class="p">&lt;</span> <span class="nx">r</span><span class="p">.</span><span class="nf">getCurrentTerm</span><span class="p">()</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">		<span class="k">return</span>
-</span></span><span class="line"><span class="cl">	<span class="p">}</span>
-</span></span><span class="line"><span class="cl">
-</span></span><span class="line"><span class="cl">	<span class="c1">// Increase the term if we see a newer one
-</span></span></span><span class="line"><span class="cl"><span class="c1"></span>	<span class="k">if</span> <span class="nx">req</span><span class="p">.</span><span class="nx">Term</span> <span class="p">&gt;</span> <span class="nx">r</span><span class="p">.</span><span class="nf">getCurrentTerm</span><span class="p">()</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">		<span class="c1">// Ensure transition to follower
-</span></span></span><span class="line"><span class="cl"><span class="c1"></span>		<span class="nx">r</span><span class="p">.</span><span class="nx">logger</span><span class="p">.</span><span class="nf">Debug</span><span class="p">(</span><span class="s">&#34;lost leadership because received a requestVote with a newer term&#34;</span><span class="p">)</span>
-</span></span><span class="line"><span class="cl">		<span class="nx">r</span><span class="p">.</span><span class="nf">setState</span><span class="p">(</span><span class="nx">Follower</span><span class="p">)</span>
-</span></span><span class="line"><span class="cl">		<span class="nx">r</span><span class="p">.</span><span class="nf">setCurrentTerm</span><span class="p">(</span><span class="nx">req</span><span class="p">.</span><span class="nx">Term</span><span class="p">)</span>
-</span></span><span class="line"><span class="cl">		<span class="nx">resp</span><span class="p">.</span><span class="nx">Term</span> <span class="p">=</span> <span class="nx">req</span><span class="p">.</span><span class="nx">Term</span>
-</span></span><span class="line"><span class="cl">	<span class="p">}</span>
-</span></span><span class="line"><span class="cl">
-</span></span><span class="line"><span class="cl">	<span class="c1">// Check if we have voted yet
-</span></span></span><span class="line"><span class="cl"><span class="c1"></span>	<span class="nx">lastVoteTerm</span><span class="p">,</span> <span class="nx">err</span> <span class="o">:=</span> <span class="nx">r</span><span class="p">.</span><span class="nx">stable</span><span class="p">.</span><span class="nf">GetUint64</span><span class="p">(</span><span class="nx">keyLastVoteTerm</span><span class="p">)</span>
-</span></span><span class="line"><span class="cl">	<span class="k">if</span> <span class="nx">err</span> <span class="o">!=</span> <span class="kc">nil</span> <span class="o">&amp;&amp;</span> <span class="nx">err</span><span class="p">.</span><span class="nf">Error</span><span class="p">()</span> <span class="o">!=</span> <span class="s">&#34;not found&#34;</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">		<span class="nx">r</span><span class="p">.</span><span class="nx">logger</span><span class="p">.</span><span class="nf">Error</span><span class="p">(</span><span class="s">&#34;failed to get last vote term&#34;</span><span class="p">,</span> <span class="s">&#34;error&#34;</span><span class="p">,</span> <span class="nx">err</span><span class="p">)</span>
-</span></span><span class="line"><span class="cl">		<span class="k">return</span>
-</span></span><span class="line"><span class="cl">	<span class="p">}</span>
-</span></span><span class="line"><span class="cl">	<span class="nx">lastVoteCandBytes</span><span class="p">,</span> <span class="nx">err</span> <span class="o">:=</span> <span class="nx">r</span><span class="p">.</span><span class="nx">stable</span><span class="p">.</span><span class="nf">Get</span><span class="p">(</span><span class="nx">keyLastVoteCand</span><span class="p">)</span>
-</span></span><span class="line"><span class="cl">	<span class="k">if</span> <span class="nx">err</span> <span class="o">!=</span> <span class="kc">nil</span> <span class="o">&amp;&amp;</span> <span class="nx">err</span><span class="p">.</span><span class="nf">Error</span><span class="p">()</span> <span class="o">!=</span> <span class="s">&#34;not found&#34;</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">		<span class="nx">r</span><span class="p">.</span><span class="nx">logger</span><span class="p">.</span><span class="nf">Error</span><span class="p">(</span><span class="s">&#34;failed to get last vote candidate&#34;</span><span class="p">,</span> <span class="s">&#34;error&#34;</span><span class="p">,</span> <span class="nx">err</span><span class="p">)</span>
-</span></span><span class="line"><span class="cl">		<span class="k">return</span>
-</span></span><span class="line"><span class="cl">	<span class="p">}</span>
-</span></span><span class="line"><span class="cl">
-</span></span><span class="line"><span class="cl">	<span class="c1">// Check if we&#39;ve voted in this election before
-</span></span></span><span class="line"><span class="cl"><span class="c1"></span>	<span class="k">if</span> <span class="nx">lastVoteTerm</span> <span class="o">==</span> <span class="nx">req</span><span class="p">.</span><span class="nx">Term</span> <span class="o">&amp;&amp;</span> <span class="nx">lastVoteCandBytes</span> <span class="o">!=</span> <span class="kc">nil</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">		<span class="nx">r</span><span class="p">.</span><span class="nx">logger</span><span class="p">.</span><span class="nf">Info</span><span class="p">(</span><span class="s">&#34;duplicate requestVote for same term&#34;</span><span class="p">,</span> <span class="s">&#34;term&#34;</span><span class="p">,</span> <span class="nx">req</span><span class="p">.</span><span class="nx">Term</span><span class="p">)</span>
-</span></span><span class="line"><span class="cl">		<span class="k">if</span> <span class="nx">bytes</span><span class="p">.</span><span class="nf">Compare</span><span class="p">(</span><span class="nx">lastVoteCandBytes</span><span class="p">,</span> <span class="nx">candidateBytes</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">			<span class="nx">r</span><span class="p">.</span><span class="nx">logger</span><span class="p">.</span><span class="nf">Warn</span><span class="p">(</span><span class="s">&#34;duplicate requestVote from&#34;</span><span class="p">,</span> <span class="s">&#34;candidate&#34;</span><span class="p">,</span> <span class="nx">candidate</span><span class="p">)</span>
-</span></span><span class="line"><span class="cl">			<span class="nx">resp</span><span class="p">.</span><span class="nx">Granted</span> <span class="p">=</span> <span class="kc">true</span>
-</span></span><span class="line"><span class="cl">		<span class="p">}</span>
-</span></span><span class="line"><span class="cl">		<span class="k">return</span>
-</span></span><span class="line"><span class="cl">	<span class="p">}</span>
-</span></span><span class="line"><span class="cl">
-</span></span><span class="line"><span class="cl">	<span class="c1">// Reject if their term is older
-</span></span></span><span class="line"><span class="cl"><span class="c1"></span>	<span class="nx">lastIdx</span><span class="p">,</span> <span class="nx">lastTerm</span> <span class="o">:=</span> <span class="nx">r</span><span class="p">.</span><span class="nf">getLastEntry</span><span class="p">()</span>
-</span></span><span class="line"><span class="cl">	<span class="k">if</span> <span class="nx">lastTerm</span> <span class="p">&gt;</span> <span class="nx">req</span><span class="p">.</span><span class="nx">LastLogTerm</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">		<span class="nx">r</span><span class="p">.</span><span class="nx">logger</span><span class="p">.</span><span class="nf">Warn</span><span class="p">(</span><span class="s">&#34;rejecting vote request since our last term is greater&#34;</span><span class="p">,</span>
-</span></span><span class="line"><span class="cl">			<span class="s">&#34;candidate&#34;</span><span class="p">,</span> <span class="nx">candidate</span><span class="p">,</span>
-</span></span><span class="line"><span class="cl">			<span class="s">&#34;last-term&#34;</span><span class="p">,</span> <span class="nx">lastTerm</span><span class="p">,</span>
-</span></span><span class="line"><span class="cl">			<span class="s">&#34;last-candidate-term&#34;</span><span class="p">,</span> <span class="nx">req</span><span class="p">.</span><span class="nx">LastLogTerm</span><span class="p">)</span>
-</span></span><span class="line"><span class="cl">		<span class="k">return</span>
-</span></span><span class="line"><span class="cl">	<span class="p">}</span>
-</span></span><span class="line"><span class="cl">
-</span></span><span class="line"><span class="cl">	<span class="k">if</span> <span class="nx">lastTerm</span> <span class="o">==</span> <span class="nx">req</span><span class="p">.</span><span class="nx">LastLogTerm</span> <span class="o">&amp;&amp;</span> <span class="nx">lastIdx</span> <span class="p">&gt;</span> <span class="nx">req</span><span class="p">.</span><span class="nx">LastLogIndex</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">		<span class="nx">r</span><span class="p">.</span><span class="nx">logger</span><span class="p">.</span><span class="nf">Warn</span><span class="p">(</span><span class="s">&#34;rejecting vote request since our last index is greater&#34;</span><span class="p">,</span>
-</span></span><span class="line"><span class="cl">			<span class="s">&#34;candidate&#34;</span><span class="p">,</span> <span class="nx">candidate</span><span class="p">,</span>
-</span></span><span class="line"><span class="cl">			<span class="s">&#34;last-index&#34;</span><span class="p">,</span> <span class="nx">lastIdx</span><span class="p">,</span>
-</span></span><span class="line"><span class="cl">			<span class="s">&#34;last-candidate-index&#34;</span><span class="p">,</span> <span class="nx">req</span><span class="p">.</span><span class="nx">LastLogIndex</span><span class="p">)</span>
-</span></span><span class="line"><span class="cl">		<span class="k">return</span>
-</span></span><span class="line"><span class="cl">	<span class="p">}</span>
-</span></span><span class="line"><span class="cl">
-</span></span><span class="line"><span class="cl">	<span class="c1">// Persist a vote for safety
-</span></span></span><span class="line"><span class="cl"><span class="c1"></span>	<span class="k">if</span> <span class="nx">err</span> <span class="o">:=</span> <span class="nx">r</span><span class="p">.</span><span class="nf">persistVote</span><span class="p">(</span><span class="nx">req</span><span class="p">.</span><span class="nx">Term</span><span class="p">,</span> <span class="nx">candidateBytes</span><span class="p">);</span> <span class="nx">err</span> <span class="o">!=</span> <span class="kc">nil</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">		<span class="nx">r</span><span class="p">.</span><span class="nx">logger</span><span class="p">.</span><span class="nf">Error</span><span class="p">(</span><span class="s">&#34;failed to persist vote&#34;</span><span class="p">,</span> <span class="s">&#34;error&#34;</span><span class="p">,</span> <span class="nx">err</span><span class="p">)</span>
-</span></span><span class="line"><span class="cl">		<span class="k">return</span>
-</span></span><span class="line"><span class="cl">	<span class="p">}</span>
-</span></span><span class="line"><span class="cl">
-</span></span><span class="line"><span class="cl">	<span class="nx">resp</span><span class="p">.</span><span class="nx">Granted</span> <span class="p">=</span> <span class="kc">true</span>
-</span></span><span class="line"><span class="cl">	<span class="nx">r</span><span class="p">.</span><span class="nf">setLastContact</span><span class="p">()</span>
-</span></span><span class="line"><span class="cl">	<span class="k">return</span>
-</span></span><span class="line"><span class="cl"><span class="p">}</span>
-</span></span></code></pre></td></tr></table>
+<pre tabindex="0" class="chroma"><code class="language-go" data-lang="go"><span class="line"><span class="cl"><span class="kd">func</span><span class="w"> </span><span class="p">(</span><span class="nx">r</span><span class="w"> </span><span class="o">*</span><span class="nx">Raft</span><span class="p">)</span><span class="w"> </span><span class="nf">requestVote</span><span class="p">(</span><span class="nx">rpc</span><span class="w"> </span><span class="nx">RPC</span><span class="p">,</span><span class="w"> </span><span class="nx">req</span><span class="w"> </span><span class="o">*</span><span class="nx">RequestVoteRequest</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="k">defer</span><span class="w"> </span><span class="nx">metrics</span><span class="p">.</span><span class="nf">MeasureSince</span><span class="p">([]</span><span class="kt">string</span><span class="p">{</span><span class="s">&#34;raft&#34;</span><span class="p">,</span><span class="w"> </span><span class="s">&#34;rpc&#34;</span><span class="p">,</span><span class="w"> </span><span class="s">&#34;requestVote&#34;</span><span class="p">},</span><span class="w"> </span><span class="nx">time</span><span class="p">.</span><span class="nf">Now</span><span class="p">())</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">r</span><span class="p">.</span><span class="nf">observe</span><span class="p">(</span><span class="o">*</span><span class="nx">req</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="c1">// Setup a response</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">resp</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="o">&amp;</span><span class="nx">RequestVoteResponse</span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="nx">RPCHeader</span><span class="p">:</span><span class="w"> </span><span class="nx">r</span><span class="p">.</span><span class="nf">getRPCHeader</span><span class="p">(),</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="nx">Term</span><span class="p">:</span><span class="w">      </span><span class="nx">r</span><span class="p">.</span><span class="nf">getCurrentTerm</span><span class="p">(),</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="nx">Granted</span><span class="p">:</span><span class="w">   </span><span class="kc">false</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="kd">var</span><span class="w"> </span><span class="nx">rpcErr</span><span class="w"> </span><span class="kt">error</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="k">defer</span><span class="w"> </span><span class="kd">func</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="nx">rpc</span><span class="p">.</span><span class="nf">Respond</span><span class="p">(</span><span class="nx">resp</span><span class="p">,</span><span class="w"> </span><span class="nx">rpcErr</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="p">}()</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="c1">// Version 0 servers will panic unless the peers is present. It&#39;s only</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="c1">// used on them to produce a warning message.</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="k">if</span><span class="w"> </span><span class="nx">r</span><span class="p">.</span><span class="nx">protocolVersion</span><span class="w"> </span><span class="p">&lt;</span><span class="w"> </span><span class="mi">2</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="nx">resp</span><span class="p">.</span><span class="nx">Peers</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nf">encodePeers</span><span class="p">(</span><span class="nx">r</span><span class="p">.</span><span class="nx">configurations</span><span class="p">.</span><span class="nx">latest</span><span class="p">,</span><span class="w"> </span><span class="nx">r</span><span class="p">.</span><span class="nx">trans</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="c1">// Check if we have an existing leader [who&#39;s not the candidate] and also</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="c1">// check the LeadershipTransfer flag is set. Usually votes are rejected if</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="c1">// there is a known leader. But if the leader initiated a leadership transfer,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="c1">// vote!</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="kd">var</span><span class="w"> </span><span class="nx">candidate</span><span class="w"> </span><span class="nx">ServerAddress</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="kd">var</span><span class="w"> </span><span class="nx">candidateBytes</span><span class="w"> </span><span class="p">[]</span><span class="kt">byte</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="k">if</span><span class="w"> </span><span class="nb">len</span><span class="p">(</span><span class="nx">req</span><span class="p">.</span><span class="nx">RPCHeader</span><span class="p">.</span><span class="nx">Addr</span><span class="p">)</span><span class="w"> </span><span class="p">&gt;</span><span class="w"> </span><span class="mi">0</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="nx">candidate</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nx">r</span><span class="p">.</span><span class="nx">trans</span><span class="p">.</span><span class="nf">DecodePeer</span><span class="p">(</span><span class="nx">req</span><span class="p">.</span><span class="nx">RPCHeader</span><span class="p">.</span><span class="nx">Addr</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="nx">candidateBytes</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nx">req</span><span class="p">.</span><span class="nx">RPCHeader</span><span class="p">.</span><span class="nx">Addr</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="p">}</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="nx">candidate</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nx">r</span><span class="p">.</span><span class="nx">trans</span><span class="p">.</span><span class="nf">DecodePeer</span><span class="p">(</span><span class="nx">req</span><span class="p">.</span><span class="nx">Candidate</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="nx">candidateBytes</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nx">req</span><span class="p">.</span><span class="nx">Candidate</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="c1">// For older raft version ID is not part of the packed message</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="c1">// We assume that the peer is part of the configuration and skip this check</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="k">if</span><span class="w"> </span><span class="nb">len</span><span class="p">(</span><span class="nx">req</span><span class="p">.</span><span class="nx">ID</span><span class="p">)</span><span class="w"> </span><span class="p">&gt;</span><span class="w"> </span><span class="mi">0</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="nx">candidateID</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nf">ServerID</span><span class="p">(</span><span class="nx">req</span><span class="p">.</span><span class="nx">ID</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="c1">// if the Servers list is empty that mean the cluster is very likely trying to bootstrap,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="c1">// Grant the vote</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="k">if</span><span class="w"> </span><span class="nb">len</span><span class="p">(</span><span class="nx">r</span><span class="p">.</span><span class="nx">configurations</span><span class="p">.</span><span class="nx">latest</span><span class="p">.</span><span class="nx">Servers</span><span class="p">)</span><span class="w"> </span><span class="p">&gt;</span><span class="w"> </span><span class="mi">0</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="p">!</span><span class="nf">hasVote</span><span class="p">(</span><span class="nx">r</span><span class="p">.</span><span class="nx">configurations</span><span class="p">.</span><span class="nx">latest</span><span class="p">,</span><span class="w"> </span><span class="nx">candidateID</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">			</span><span class="nx">r</span><span class="p">.</span><span class="nx">logger</span><span class="p">.</span><span class="nf">Warn</span><span class="p">(</span><span class="s">&#34;rejecting vote request since node is not a voter&#34;</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">				</span><span class="s">&#34;from&#34;</span><span class="p">,</span><span class="w"> </span><span class="nx">candidate</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">			</span><span class="k">return</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="k">if</span><span class="w"> </span><span class="nx">leaderAddr</span><span class="p">,</span><span class="w"> </span><span class="nx">leaderID</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">r</span><span class="p">.</span><span class="nf">LeaderWithID</span><span class="p">();</span><span class="w"> </span><span class="nx">leaderAddr</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="s">&#34;&#34;</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="nx">leaderAddr</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="nx">candidate</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="p">!</span><span class="nx">req</span><span class="p">.</span><span class="nx">LeadershipTransfer</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="nx">r</span><span class="p">.</span><span class="nx">logger</span><span class="p">.</span><span class="nf">Warn</span><span class="p">(</span><span class="s">&#34;rejecting vote request since we have a leader&#34;</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">			</span><span class="s">&#34;from&#34;</span><span class="p">,</span><span class="w"> </span><span class="nx">candidate</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">			</span><span class="s">&#34;leader&#34;</span><span class="p">,</span><span class="w"> </span><span class="nx">leaderAddr</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">			</span><span class="s">&#34;leader-id&#34;</span><span class="p">,</span><span class="w"> </span><span class="nb">string</span><span class="p">(</span><span class="nx">leaderID</span><span class="p">))</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="k">return</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="c1">// Ignore an older term</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="k">if</span><span class="w"> </span><span class="nx">req</span><span class="p">.</span><span class="nx">Term</span><span class="w"> </span><span class="p">&lt;</span><span class="w"> </span><span class="nx">r</span><span class="p">.</span><span class="nf">getCurrentTerm</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="k">return</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="c1">// Increase the term if we see a newer one</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="k">if</span><span class="w"> </span><span class="nx">req</span><span class="p">.</span><span class="nx">Term</span><span class="w"> </span><span class="p">&gt;</span><span class="w"> </span><span class="nx">r</span><span class="p">.</span><span class="nf">getCurrentTerm</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="c1">// Ensure transition to follower</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="nx">r</span><span class="p">.</span><span class="nx">logger</span><span class="p">.</span><span class="nf">Debug</span><span class="p">(</span><span class="s">&#34;lost leadership because received a requestVote with a newer term&#34;</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="nx">r</span><span class="p">.</span><span class="nf">setState</span><span class="p">(</span><span class="nx">Follower</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="nx">r</span><span class="p">.</span><span class="nf">setCurrentTerm</span><span class="p">(</span><span class="nx">req</span><span class="p">.</span><span class="nx">Term</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="nx">resp</span><span class="p">.</span><span class="nx">Term</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nx">req</span><span class="p">.</span><span class="nx">Term</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="c1">// Check if we have voted yet</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">lastVoteTerm</span><span class="p">,</span><span class="w"> </span><span class="nx">err</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">r</span><span class="p">.</span><span class="nx">stable</span><span class="p">.</span><span class="nf">GetUint64</span><span class="p">(</span><span class="nx">keyLastVoteTerm</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="k">if</span><span class="w"> </span><span class="nx">err</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="kc">nil</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="nx">err</span><span class="p">.</span><span class="nf">Error</span><span class="p">()</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="s">&#34;not found&#34;</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="nx">r</span><span class="p">.</span><span class="nx">logger</span><span class="p">.</span><span class="nf">Error</span><span class="p">(</span><span class="s">&#34;failed to get last vote term&#34;</span><span class="p">,</span><span class="w"> </span><span class="s">&#34;error&#34;</span><span class="p">,</span><span class="w"> </span><span class="nx">err</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="k">return</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">lastVoteCandBytes</span><span class="p">,</span><span class="w"> </span><span class="nx">err</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">r</span><span class="p">.</span><span class="nx">stable</span><span class="p">.</span><span class="nf">Get</span><span class="p">(</span><span class="nx">keyLastVoteCand</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="k">if</span><span class="w"> </span><span class="nx">err</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="kc">nil</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="nx">err</span><span class="p">.</span><span class="nf">Error</span><span class="p">()</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="s">&#34;not found&#34;</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="nx">r</span><span class="p">.</span><span class="nx">logger</span><span class="p">.</span><span class="nf">Error</span><span class="p">(</span><span class="s">&#34;failed to get last vote candidate&#34;</span><span class="p">,</span><span class="w"> </span><span class="s">&#34;error&#34;</span><span class="p">,</span><span class="w"> </span><span class="nx">err</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="k">return</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="c1">// Check if we&#39;ve voted in this election before</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="k">if</span><span class="w"> </span><span class="nx">lastVoteTerm</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="nx">req</span><span class="p">.</span><span class="nx">Term</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="nx">lastVoteCandBytes</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="kc">nil</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="nx">r</span><span class="p">.</span><span class="nx">logger</span><span class="p">.</span><span class="nf">Info</span><span class="p">(</span><span class="s">&#34;duplicate requestVote for same term&#34;</span><span class="p">,</span><span class="w"> </span><span class="s">&#34;term&#34;</span><span class="p">,</span><span class="w"> </span><span class="nx">req</span><span class="p">.</span><span class="nx">Term</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="k">if</span><span class="w"> </span><span class="nx">bytes</span><span class="p">.</span><span class="nf">Compare</span><span class="p">(</span><span class="nx">lastVoteCandBytes</span><span class="p">,</span><span class="w"> </span><span class="nx">candidateBytes</span><span class="p">)</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="mi">0</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">			</span><span class="nx">r</span><span class="p">.</span><span class="nx">logger</span><span class="p">.</span><span class="nf">Warn</span><span class="p">(</span><span class="s">&#34;duplicate requestVote from&#34;</span><span class="p">,</span><span class="w"> </span><span class="s">&#34;candidate&#34;</span><span class="p">,</span><span class="w"> </span><span class="nx">candidate</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">			</span><span class="nx">resp</span><span class="p">.</span><span class="nx">Granted</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="kc">true</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="k">return</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="c1">// Reject if their term is older</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">lastIdx</span><span class="p">,</span><span class="w"> </span><span class="nx">lastTerm</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">r</span><span class="p">.</span><span class="nf">getLastEntry</span><span class="p">()</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="k">if</span><span class="w"> </span><span class="nx">lastTerm</span><span class="w"> </span><span class="p">&gt;</span><span class="w"> </span><span class="nx">req</span><span class="p">.</span><span class="nx">LastLogTerm</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="nx">r</span><span class="p">.</span><span class="nx">logger</span><span class="p">.</span><span class="nf">Warn</span><span class="p">(</span><span class="s">&#34;rejecting vote request since our last term is greater&#34;</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">			</span><span class="s">&#34;candidate&#34;</span><span class="p">,</span><span class="w"> </span><span class="nx">candidate</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">			</span><span class="s">&#34;last-term&#34;</span><span class="p">,</span><span class="w"> </span><span class="nx">lastTerm</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">			</span><span class="s">&#34;last-candidate-term&#34;</span><span class="p">,</span><span class="w"> </span><span class="nx">req</span><span class="p">.</span><span class="nx">LastLogTerm</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="k">return</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="k">if</span><span class="w"> </span><span class="nx">lastTerm</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="nx">req</span><span class="p">.</span><span class="nx">LastLogTerm</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="nx">lastIdx</span><span class="w"> </span><span class="p">&gt;</span><span class="w"> </span><span class="nx">req</span><span class="p">.</span><span class="nx">LastLogIndex</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="nx">r</span><span class="p">.</span><span class="nx">logger</span><span class="p">.</span><span class="nf">Warn</span><span class="p">(</span><span class="s">&#34;rejecting vote request since our last index is greater&#34;</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">			</span><span class="s">&#34;candidate&#34;</span><span class="p">,</span><span class="w"> </span><span class="nx">candidate</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">			</span><span class="s">&#34;last-index&#34;</span><span class="p">,</span><span class="w"> </span><span class="nx">lastIdx</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">			</span><span class="s">&#34;last-candidate-index&#34;</span><span class="p">,</span><span class="w"> </span><span class="nx">req</span><span class="p">.</span><span class="nx">LastLogIndex</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="k">return</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="c1">// Persist a vote for safety</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="k">if</span><span class="w"> </span><span class="nx">err</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">r</span><span class="p">.</span><span class="nf">persistVote</span><span class="p">(</span><span class="nx">req</span><span class="p">.</span><span class="nx">Term</span><span class="p">,</span><span class="w"> </span><span class="nx">candidateBytes</span><span class="p">);</span><span class="w"> </span><span class="nx">err</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="kc">nil</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="nx">r</span><span class="p">.</span><span class="nx">logger</span><span class="p">.</span><span class="nf">Error</span><span class="p">(</span><span class="s">&#34;failed to persist vote&#34;</span><span class="p">,</span><span class="w"> </span><span class="s">&#34;error&#34;</span><span class="p">,</span><span class="w"> </span><span class="nx">err</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="k">return</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">resp</span><span class="p">.</span><span class="nx">Granted</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="kc">true</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">r</span><span class="p">.</span><span class="nf">setLastContact</span><span class="p">()</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="k">return</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="p">}</span><span class="w">
+</span></span></span></code></pre></td></tr></table>
 </div>
 </div><p>如果<code>if lastTerm == req.LastLogTerm &amp;&amp; lastIdx &gt; req.LastLogIndex</code> ，则会拒绝投票请求；但是lastIndex是通过<code>appendEntries</code>来更新的，<code>appendEntries</code>只能由leader发起。</p>
 </li>
@@ -1059,7 +1066,7 @@
   <span class="copyright-year">
     &copy; 
     2022 - 
-    2023<span class="heart"><i class="iconfont icon-heart"></i></span><span><a href="/">hlday</a></span>
+    2026<span class="heart"><i class="iconfont icon-heart"></i></span><span><a href="/">hlday</a></span>
   </span>
 </div>
 
@@ -1076,7 +1083,7 @@
 
 
 
-<script type="text/javascript" src="/js/main.min.bfb94e1fe4773651a6fe907d388ed08d7d6f9628a062d0740d992e1dfb49466e.js"></script>
+<script type="text/javascript" src="/js/main.min.d3d26fe720923eebdba72c7cb26eef946d17ef1a1a7a289857149666ace3dfec.js"></script>
   <script type="text/javascript">
     window.MathJax = {
       tex: {
@@ -1085,6 +1092,7 @@
     };
   </script>
   <script async src="https://cdn.jsdelivr.net/npm/mathjax@3.0.5/es5/tex-mml-chtml.js" integrity="sha256-HGLuEfFcsUJGhvB8cQ8nr0gai9EucOOaIxFw7qxmd+w=" crossorigin="anonymous"></script>
+
 
 
 

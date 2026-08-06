@@ -31,7 +31,7 @@
   gtag('config', 'G-59Y2CYW544');
 </script>
 
-<meta name="generator" content="Hugo 0.93.2 with theme even" />
+<meta name="generator" content="Hugo 0.164.0 with theme even" />
 
 
 <link rel="canonical" href="/post/cli/" />
@@ -43,24 +43,30 @@
 
 <script async src="//busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
 
-<link href="/sass/main.min.b5a744db6de49a86cadafb3b70f555ab443f83c307a483402259e94726b045ff.css" rel="stylesheet">
+<link href="/sass/main.min.52d539dfadc86246e6ba9a98b4b3a7268cddea9db8ace7933730de9afef2c275.css" rel="stylesheet">
 
 
 
-<meta property="og:title" content="Command Line Interface Guidelines" />
-<meta property="og:description" content="An open-source guide to help you write better command-line programs, taking traditional UNIX principles and updating them for the modern day." />
-<meta property="og:type" content="article" />
-<meta property="og:url" content="/post/cli/" /><meta property="article:section" content="post" />
-<meta property="article:published_time" content="2022-05-20T16:31:59+08:00" />
-<meta property="article:modified_time" content="2022-05-20T16:31:59+08:00" />
+<meta property="og:url" content="/post/cli/">
+	<meta property="og:site_name" content="HLDay">
+	<meta property="og:title" content="Command Line Interface Guidelines">
+	<meta property="og:description" content="An open-source guide to help you write better command-line programs, taking traditional UNIX principles and updating them for the modern day.">
+	<meta property="og:locale" content="en">
+	<meta property="og:type" content="article">
+		<meta property="article:section" content="post">
+		<meta property="article:published_time" content="2022-05-20T16:31:59+08:00">
+		<meta property="article:modified_time" content="2022-05-20T16:31:59+08:00">
+		<meta property="article:tag" content="Cli">
 
-<meta itemprop="name" content="Command Line Interface Guidelines">
-<meta itemprop="description" content="An open-source guide to help you write better command-line programs, taking traditional UNIX principles and updating them for the modern day."><meta itemprop="datePublished" content="2022-05-20T16:31:59+08:00" />
-<meta itemprop="dateModified" content="2022-05-20T16:31:59+08:00" />
-<meta itemprop="wordCount" content="10620">
-<meta itemprop="keywords" content="cli," /><meta name="twitter:card" content="summary"/>
-<meta name="twitter:title" content="Command Line Interface Guidelines"/>
-<meta name="twitter:description" content="An open-source guide to help you write better command-line programs, taking traditional UNIX principles and updating them for the modern day."/>
+	<meta itemprop="name" content="Command Line Interface Guidelines">
+	<meta itemprop="description" content="An open-source guide to help you write better command-line programs, taking traditional UNIX principles and updating them for the modern day.">
+	<meta itemprop="datePublished" content="2022-05-20T16:31:59+08:00">
+	<meta itemprop="dateModified" content="2022-05-20T16:31:59+08:00">
+	<meta itemprop="wordCount" content="10620">
+	<meta itemprop="keywords" content="Cli">
+	<meta name="twitter:card" content="summary">
+	<meta name="twitter:title" content="Command Line Interface Guidelines">
+	<meta name="twitter:description" content="An open-source guide to help you write better command-line programs, taking traditional UNIX principles and updating them for the modern day.">
 
 <!--[if lte IE 9]>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
@@ -455,32 +461,32 @@ When you type <code>jq</code>, it displays an introductory description and an ex
 </span><span class="lnt">26
 </span></code></pre></td>
 <td class="lntd">
-<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">$ jq
-</span></span><span class="line"><span class="cl">jq - commandline JSON processor [version 1.6]
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl"><span class="o">$</span> <span class="n">jq</span>
+</span></span><span class="line"><span class="cl"><span class="n">jq</span> <span class="o">-</span> <span class="n">commandline</span> <span class="n">JSON</span> <span class="n">processor</span> <span class="p">[</span><span class="n">version</span> <span class="mf">1.6</span><span class="p">]</span>
 </span></span><span class="line"><span class="cl">
-</span></span><span class="line"><span class="cl">Usage:    jq [options] &lt;jq filter&gt; [file...]
-</span></span><span class="line"><span class="cl">    jq [options] --args &lt;jq filter&gt; [strings...]
-</span></span><span class="line"><span class="cl">    jq [options] --jsonargs &lt;jq filter&gt; [JSON_TEXTS...]
+</span></span><span class="line"><span class="cl"><span class="n">Usage</span><span class="p">:</span>    <span class="n">jq</span> <span class="p">[</span><span class="n">options</span><span class="p">]</span> <span class="o">&lt;</span><span class="n">jq</span> <span class="n">filter</span><span class="o">&gt;</span> <span class="p">[</span><span class="n">file</span><span class="o">...</span><span class="p">]</span>
+</span></span><span class="line"><span class="cl">    <span class="n">jq</span> <span class="p">[</span><span class="n">options</span><span class="p">]</span> <span class="o">--</span><span class="n">args</span> <span class="o">&lt;</span><span class="n">jq</span> <span class="n">filter</span><span class="o">&gt;</span> <span class="p">[</span><span class="n">strings</span><span class="o">...</span><span class="p">]</span>
+</span></span><span class="line"><span class="cl">    <span class="n">jq</span> <span class="p">[</span><span class="n">options</span><span class="p">]</span> <span class="o">--</span><span class="n">jsonargs</span> <span class="o">&lt;</span><span class="n">jq</span> <span class="n">filter</span><span class="o">&gt;</span> <span class="p">[</span><span class="n">JSON_TEXTS</span><span class="o">...</span><span class="p">]</span>
 </span></span><span class="line"><span class="cl">
-</span></span><span class="line"><span class="cl">jq is a tool for processing JSON inputs, applying the given filter to
-</span></span><span class="line"><span class="cl">its JSON text inputs and producing the filter&#39;s results as JSON on
-</span></span><span class="line"><span class="cl">standard output.
+</span></span><span class="line"><span class="cl"><span class="n">jq</span> <span class="n">is</span> <span class="n">a</span> <span class="k">tool</span> <span class="k">for</span> <span class="n">processing</span> <span class="n">JSON</span> <span class="n">inputs</span><span class="p">,</span> <span class="n">applying</span> <span class="n">the</span> <span class="n">given</span> <span class="n">filter</span> <span class="n">to</span>
+</span></span><span class="line"><span class="cl"><span class="n">its</span> <span class="n">JSON</span> <span class="n">text</span> <span class="n">inputs</span> <span class="ow">and</span> <span class="n">producing</span> <span class="n">the</span> <span class="n">filter</span><span class="s1">&#39;s results as JSON on</span>
+</span></span><span class="line"><span class="cl"><span class="n">standard</span> <span class="n">output</span><span class="o">.</span>
 </span></span><span class="line"><span class="cl">
-</span></span><span class="line"><span class="cl">The simplest filter is ., which copies jq&#39;s input to its output
-</span></span><span class="line"><span class="cl">unmodified (except for formatting, but note that IEEE754 is used
-</span></span><span class="line"><span class="cl">for number representation internally, with all that that implies).
+</span></span><span class="line"><span class="cl"><span class="n">The</span> <span class="n">simplest</span> <span class="n">filter</span> <span class="n">is</span> <span class="o">.</span><span class="p">,</span> <span class="n">which</span> <span class="n">copies</span> <span class="n">jq</span><span class="s1">&#39;s input to its output</span>
+</span></span><span class="line"><span class="cl"><span class="n">unmodified</span> <span class="p">(</span><span class="n">except</span> <span class="k">for</span> <span class="n">formatting</span><span class="p">,</span> <span class="n">but</span> <span class="n">note</span> <span class="n">that</span> <span class="n">IEEE754</span> <span class="n">is</span> <span class="n">used</span>
+</span></span><span class="line"><span class="cl"><span class="k">for</span> <span class="n">number</span> <span class="n">representation</span> <span class="n">internally</span><span class="p">,</span> <span class="n">with</span> <span class="n">all</span> <span class="n">that</span> <span class="n">that</span> <span class="n">implies</span><span class="p">)</span><span class="o">.</span>
 </span></span><span class="line"><span class="cl">
-</span></span><span class="line"><span class="cl">For more advanced filters see the jq(1) manpage (&#34;man jq&#34;)
-</span></span><span class="line"><span class="cl">and/or https://stedolan.github.io/jq
+</span></span><span class="line"><span class="cl"><span class="n">For</span> <span class="n">more</span> <span class="n">advanced</span> <span class="n">filters</span> <span class="n">see</span> <span class="n">the</span> <span class="n">jq</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span> <span class="n">manpage</span> <span class="p">(</span><span class="s2">&#34;man jq&#34;</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="ow">and</span><span class="o">/</span><span class="ow">or</span> <span class="n">https</span><span class="p">:</span><span class="o">//</span><span class="n">stedolan</span><span class="o">.</span><span class="n">github</span><span class="o">.</span><span class="n">io</span><span class="o">/</span><span class="n">jq</span>
 </span></span><span class="line"><span class="cl">
-</span></span><span class="line"><span class="cl">Example:
+</span></span><span class="line"><span class="cl"><span class="n">Example</span><span class="p">:</span>
 </span></span><span class="line"><span class="cl">
-</span></span><span class="line"><span class="cl">    $ echo &#39;{&#34;foo&#34;: 0}&#39; | jq .
-</span></span><span class="line"><span class="cl">    {
-</span></span><span class="line"><span class="cl">        &#34;foo&#34;: 0
-</span></span><span class="line"><span class="cl">    }
+</span></span><span class="line"><span class="cl">    <span class="o">$</span> <span class="n">echo</span> <span class="s1">&#39;{&#34;foo&#34;: 0}&#39;</span> <span class="o">|</span> <span class="n">jq</span> <span class="o">.</span>
+</span></span><span class="line"><span class="cl">    <span class="p">{</span>
+</span></span><span class="line"><span class="cl">        <span class="s2">&#34;foo&#34;</span><span class="p">:</span> <span class="mi">0</span>
+</span></span><span class="line"><span class="cl">    <span class="p">}</span>
 </span></span><span class="line"><span class="cl">
-</span></span><span class="line"><span class="cl">For a listing of options, use jq --help.
+</span></span><span class="line"><span class="cl"><span class="n">For</span> <span class="n">a</span> <span class="n">listing</span> <span class="n">of</span> <span class="n">options</span><span class="p">,</span> <span class="n">use</span> <span class="n">jq</span> <span class="o">--</span><span class="n">help</span><span class="o">.</span>
 </span></span></code></pre></td></tr></table>
 </div>
 </div><p><strong>Show full help when <code>-h</code> and <code>--help</code> is passed.</strong>
@@ -560,32 +566,32 @@ For example, the Git command displays the commands for getting started and the m
 </span><span class="lnt">26
 </span></code></pre></td>
 <td class="lntd">
-<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">$ git
-</span></span><span class="line"><span class="cl">usage: git [--version] [--help] [-C &lt;path&gt;] [-c &lt;name&gt;=&lt;value&gt;]
-</span></span><span class="line"><span class="cl">           [--exec-path[=&lt;path&gt;]] [--html-path] [--man-path] [--info-path]
-</span></span><span class="line"><span class="cl">           [-p | --paginate | -P | --no-pager] [--no-replace-objects] [--bare]
-</span></span><span class="line"><span class="cl">           [--git-dir=&lt;path&gt;] [--work-tree=&lt;path&gt;] [--namespace=&lt;name&gt;]
-</span></span><span class="line"><span class="cl">           &lt;command&gt; [&lt;args&gt;]
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl"><span class="o">$</span> <span class="n">git</span>
+</span></span><span class="line"><span class="cl"><span class="n">usage</span><span class="p">:</span> <span class="n">git</span> <span class="p">[</span><span class="o">--</span><span class="n">version</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">help</span><span class="p">]</span> <span class="p">[</span><span class="o">-</span><span class="n">C</span> <span class="o">&lt;</span><span class="n">path</span><span class="o">&gt;</span><span class="p">]</span> <span class="p">[</span><span class="o">-</span><span class="n">c</span> <span class="o">&lt;</span><span class="n">name</span><span class="o">&gt;=&lt;</span><span class="n">value</span><span class="o">&gt;</span><span class="p">]</span>
+</span></span><span class="line"><span class="cl">           <span class="p">[</span><span class="o">--</span><span class="n">exec</span><span class="o">-</span><span class="n">path</span><span class="p">[</span><span class="o">=&lt;</span><span class="n">path</span><span class="o">&gt;</span><span class="p">]]</span> <span class="p">[</span><span class="o">--</span><span class="n">html</span><span class="o">-</span><span class="n">path</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">man</span><span class="o">-</span><span class="n">path</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">info</span><span class="o">-</span><span class="n">path</span><span class="p">]</span>
+</span></span><span class="line"><span class="cl">           <span class="p">[</span><span class="o">-</span><span class="n">p</span> <span class="o">|</span> <span class="o">--</span><span class="n">paginate</span> <span class="o">|</span> <span class="o">-</span><span class="n">P</span> <span class="o">|</span> <span class="o">--</span><span class="n">no</span><span class="o">-</span><span class="n">pager</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">no</span><span class="o">-</span><span class="n">replace</span><span class="o">-</span><span class="n">objects</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">bare</span><span class="p">]</span>
+</span></span><span class="line"><span class="cl">           <span class="p">[</span><span class="o">--</span><span class="n">git</span><span class="o">-</span><span class="n">dir</span><span class="o">=&lt;</span><span class="n">path</span><span class="o">&gt;</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">work</span><span class="o">-</span><span class="n">tree</span><span class="o">=&lt;</span><span class="n">path</span><span class="o">&gt;</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">namespace</span><span class="o">=&lt;</span><span class="n">name</span><span class="o">&gt;</span><span class="p">]</span>
+</span></span><span class="line"><span class="cl">           <span class="o">&lt;</span><span class="n">command</span><span class="o">&gt;</span> <span class="p">[</span><span class="o">&lt;</span><span class="n">args</span><span class="o">&gt;</span><span class="p">]</span>
 </span></span><span class="line"><span class="cl">
-</span></span><span class="line"><span class="cl">These are common Git commands used in various situations:
+</span></span><span class="line"><span class="cl"><span class="n">These</span> <span class="n">are</span> <span class="n">common</span> <span class="n">Git</span> <span class="n">commands</span> <span class="n">used</span> <span class="ow">in</span> <span class="n">various</span> <span class="n">situations</span><span class="p">:</span>
 </span></span><span class="line"><span class="cl">
-</span></span><span class="line"><span class="cl">start a working area (see also: git help tutorial)
-</span></span><span class="line"><span class="cl">   clone      Clone a repository into a new directory
-</span></span><span class="line"><span class="cl">   init       Create an empty Git repository or reinitialize an existing one
+</span></span><span class="line"><span class="cl"><span class="n">start</span> <span class="n">a</span> <span class="n">working</span> <span class="n">area</span> <span class="p">(</span><span class="n">see</span> <span class="n">also</span><span class="p">:</span> <span class="n">git</span> <span class="n">help</span> <span class="n">tutorial</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">   <span class="n">clone</span>      <span class="n">Clone</span> <span class="n">a</span> <span class="n">repository</span> <span class="n">into</span> <span class="n">a</span> <span class="n">new</span> <span class="n">directory</span>
+</span></span><span class="line"><span class="cl">   <span class="n">init</span>       <span class="n">Create</span> <span class="n">an</span> <span class="n">empty</span> <span class="n">Git</span> <span class="n">repository</span> <span class="ow">or</span> <span class="n">reinitialize</span> <span class="n">an</span> <span class="n">existing</span> <span class="n">one</span>
 </span></span><span class="line"><span class="cl">
-</span></span><span class="line"><span class="cl">work on the current change (see also: git help everyday)
-</span></span><span class="line"><span class="cl">   add        Add file contents to the index
-</span></span><span class="line"><span class="cl">   mv         Move or rename a file, a directory, or a symlink
-</span></span><span class="line"><span class="cl">   reset      Reset current HEAD to the specified state
-</span></span><span class="line"><span class="cl">   rm         Remove files from the working tree and from the index
+</span></span><span class="line"><span class="cl"><span class="n">work</span> <span class="n">on</span> <span class="n">the</span> <span class="n">current</span> <span class="n">change</span> <span class="p">(</span><span class="n">see</span> <span class="n">also</span><span class="p">:</span> <span class="n">git</span> <span class="n">help</span> <span class="n">everyday</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">   <span class="n">add</span>        <span class="n">Add</span> <span class="n">file</span> <span class="n">contents</span> <span class="n">to</span> <span class="n">the</span> <span class="n">index</span>
+</span></span><span class="line"><span class="cl">   <span class="n">mv</span>         <span class="n">Move</span> <span class="ow">or</span> <span class="n">rename</span> <span class="n">a</span> <span class="n">file</span><span class="p">,</span> <span class="n">a</span> <span class="n">directory</span><span class="p">,</span> <span class="ow">or</span> <span class="n">a</span> <span class="n">symlink</span>
+</span></span><span class="line"><span class="cl">   <span class="n">reset</span>      <span class="n">Reset</span> <span class="n">current</span> <span class="n">HEAD</span> <span class="n">to</span> <span class="n">the</span> <span class="n">specified</span> <span class="n">state</span>
+</span></span><span class="line"><span class="cl">   <span class="n">rm</span>         <span class="n">Remove</span> <span class="n">files</span> <span class="n">from</span> <span class="n">the</span> <span class="n">working</span> <span class="n">tree</span> <span class="ow">and</span> <span class="n">from</span> <span class="n">the</span> <span class="n">index</span>
 </span></span><span class="line"><span class="cl">
-</span></span><span class="line"><span class="cl">examine the history and state (see also: git help revisions)
-</span></span><span class="line"><span class="cl">   bisect     Use binary search to find the commit that introduced a bug
-</span></span><span class="line"><span class="cl">   grep       Print lines matching a pattern
-</span></span><span class="line"><span class="cl">   log        Show commit logs
-</span></span><span class="line"><span class="cl">   show       Show various types of objects
-</span></span><span class="line"><span class="cl">   status     Show the working tree status
-</span></span><span class="line"><span class="cl">…
+</span></span><span class="line"><span class="cl"><span class="n">examine</span> <span class="n">the</span> <span class="n">history</span> <span class="ow">and</span> <span class="n">state</span> <span class="p">(</span><span class="n">see</span> <span class="n">also</span><span class="p">:</span> <span class="n">git</span> <span class="n">help</span> <span class="n">revisions</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">   <span class="n">bisect</span>     <span class="n">Use</span> <span class="n">binary</span> <span class="n">search</span> <span class="n">to</span> <span class="n">find</span> <span class="n">the</span> <span class="n">commit</span> <span class="n">that</span> <span class="n">introduced</span> <span class="n">a</span> <span class="n">bug</span>
+</span></span><span class="line"><span class="cl">   <span class="n">grep</span>       <span class="n">Print</span> <span class="n">lines</span> <span class="n">matching</span> <span class="n">a</span> <span class="n">pattern</span>
+</span></span><span class="line"><span class="cl">   <span class="nb">log</span>        <span class="n">Show</span> <span class="n">commit</span> <span class="n">logs</span>
+</span></span><span class="line"><span class="cl">   <span class="n">show</span>       <span class="n">Show</span> <span class="n">various</span> <span class="n">types</span> <span class="n">of</span> <span class="n">objects</span>
+</span></span><span class="line"><span class="cl">   <span class="n">status</span>     <span class="n">Show</span> <span class="n">the</span> <span class="n">working</span> <span class="n">tree</span> <span class="n">status</span>
+</span></span><span class="line"><span class="cl"><span class="err">…</span>
 </span></span></code></pre></td></tr></table>
 </div>
 </div><p><strong>Use formatting in your help text.</strong>
@@ -880,20 +886,20 @@ Be careful, though—it can be easy to overdo it and make your program look clut
 <pre tabindex="0" class="chroma"><code class="language-shell-session" data-lang="shell-session"><span class="line"><span class="cl"><span class="gp">$</span> yubikey-agent -setup
 </span></span><span class="line"><span class="cl"><span class="go">🔐 The PIN is up to 8 numbers, letters, or symbols. Not just numbers!
 </span></span></span><span class="line"><span class="cl"><span class="go">❌ The key will be lost if the PIN and PUK are locked after 3 incorrect tries.
-</span></span></span><span class="line"><span class="cl"><span class="go"></span><span class="err">
-</span></span></span><span class="line"><span class="cl"><span class="err"></span><span class="go">Choose a new PIN/PUK: 
+</span></span></span><span class="line"><span class="cl"><span class="err">
+</span></span></span><span class="line"><span class="cl"><span class="go">Choose a new PIN/PUK: 
 </span></span></span><span class="line"><span class="cl"><span class="go">Repeat the PIN/PUK: 
-</span></span></span><span class="line"><span class="cl"><span class="go"></span><span class="err">
-</span></span></span><span class="line"><span class="cl"><span class="err"></span><span class="go">🧪 Retriculating splines …
-</span></span></span><span class="line"><span class="cl"><span class="go"></span><span class="err">
-</span></span></span><span class="line"><span class="cl"><span class="err"></span><span class="go">✅ Done! This YubiKey is secured and ready to go.
+</span></span></span><span class="line"><span class="cl"><span class="err">
+</span></span></span><span class="line"><span class="cl"><span class="go">🧪 Retriculating splines …
+</span></span></span><span class="line"><span class="cl"><span class="err">
+</span></span></span><span class="line"><span class="cl"><span class="go">✅ Done! This YubiKey is secured and ready to go.
 </span></span></span><span class="line"><span class="cl"><span class="go">🤏 When the YubiKey blinks, touch it to authorize the login.
-</span></span></span><span class="line"><span class="cl"><span class="go"></span><span class="err">
-</span></span></span><span class="line"><span class="cl"><span class="err"></span><span class="go">🔑 Here&#39;s your new shiny SSH public key:
+</span></span></span><span class="line"><span class="cl"><span class="err">
+</span></span></span><span class="line"><span class="cl"><span class="go">🔑 Here&#39;s your new shiny SSH public key:
 </span></span></span><span class="line"><span class="cl"><span class="go">ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBCEJ/
 </span></span></span><span class="line"><span class="cl"><span class="go">UwlHnUFXgENO3ifPZd8zoSKMxESxxot4tMgvfXjmRp5G3BGrAnonncE7Aj11pn3SSYgEcrrn2sMyLGpVS0=
-</span></span></span><span class="line"><span class="cl"><span class="go"></span><span class="err">
-</span></span></span><span class="line"><span class="cl"><span class="err"></span><span class="go">💭 Remember: everything breaks, have a backup plan for when this YubiKey does.
+</span></span></span><span class="line"><span class="cl"><span class="err">
+</span></span></span><span class="line"><span class="cl"><span class="go">💭 Remember: everything breaks, have a backup plan for when this YubiKey does.
 </span></span></span></code></pre></td></tr></table>
 </div>
 </div><p><strong>By default, don’t output information that’s only understandable by the creators of the software.</strong>
@@ -1124,17 +1130,17 @@ For example, <code>docker pull</code>’s multiple progress bars offer crucial i
 </span><span class="lnt">11
 </span></code></pre></td>
 <td class="lntd">
-<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">$ docker image pull ruby
-</span></span><span class="line"><span class="cl">Using default tag: latest
-</span></span><span class="line"><span class="cl">latest: Pulling from library/ruby
-</span></span><span class="line"><span class="cl">6c33745f49b4: Pull complete 
-</span></span><span class="line"><span class="cl">ef072fc32a84: Extracting [================================================&gt;  ]  7.569MB/7.812MB
-</span></span><span class="line"><span class="cl">c0afb8e68e0b: Download complete 
-</span></span><span class="line"><span class="cl">d599c07d28e6: Download complete 
-</span></span><span class="line"><span class="cl">f2ecc74db11a: Downloading [=======================&gt;                           ]  89.11MB/192.3MB
-</span></span><span class="line"><span class="cl">3568445c8bf2: Download complete 
-</span></span><span class="line"><span class="cl">b0efebc74f25: Downloading [===========================================&gt;       ]  19.88MB/22.88MB
-</span></span><span class="line"><span class="cl">9cb1ba6838a0: Download complete 
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl"><span class="o">$</span> <span class="n">docker</span> <span class="n">image</span> <span class="n">pull</span> <span class="n">ruby</span>
+</span></span><span class="line"><span class="cl"><span class="n">Using</span> <span class="n">default</span> <span class="n">tag</span><span class="p">:</span> <span class="n">latest</span>
+</span></span><span class="line"><span class="cl"><span class="n">latest</span><span class="p">:</span> <span class="n">Pulling</span> <span class="n">from</span> <span class="n">library</span><span class="o">/</span><span class="n">ruby</span>
+</span></span><span class="line"><span class="cl"><span class="mi">6</span><span class="n">c33745f49b4</span><span class="p">:</span> <span class="n">Pull</span> <span class="n">complete</span> 
+</span></span><span class="line"><span class="cl"><span class="n">ef072fc32a84</span><span class="p">:</span> <span class="n">Extracting</span> <span class="p">[</span><span class="o">================================================&gt;</span>  <span class="p">]</span>  <span class="mf">7.569</span><span class="n">MB</span><span class="o">/</span><span class="mf">7.812</span><span class="n">MB</span>
+</span></span><span class="line"><span class="cl"><span class="n">c0afb8e68e0b</span><span class="p">:</span> <span class="n">Download</span> <span class="n">complete</span> 
+</span></span><span class="line"><span class="cl"><span class="n">d599c07d28e6</span><span class="p">:</span> <span class="n">Download</span> <span class="n">complete</span> 
+</span></span><span class="line"><span class="cl"><span class="n">f2ecc74db11a</span><span class="p">:</span> <span class="n">Downloading</span> <span class="p">[</span><span class="o">=======================&gt;</span>                           <span class="p">]</span>  <span class="mf">89.11</span><span class="n">MB</span><span class="o">/</span><span class="mf">192.3</span><span class="n">MB</span>
+</span></span><span class="line"><span class="cl"><span class="mi">3568445</span><span class="n">c8bf2</span><span class="p">:</span> <span class="n">Download</span> <span class="n">complete</span> 
+</span></span><span class="line"><span class="cl"><span class="n">b0efebc74f25</span><span class="p">:</span> <span class="n">Downloading</span> <span class="p">[</span><span class="o">===========================================&gt;</span>       <span class="p">]</span>  <span class="mf">19.88</span><span class="n">MB</span><span class="o">/</span><span class="mf">22.88</span><span class="n">MB</span>
+</span></span><span class="line"><span class="cl"><span class="mi">9</span><span class="n">cb1ba6838a0</span><span class="p">:</span> <span class="n">Download</span> <span class="n">complete</span> 
 </span></span></code></pre></td></tr></table>
 </div>
 </div><p>One thing to be aware of: hiding logs behind progress bars when things go <em>well</em> makes it much easier for the user to understand what’s going on, but if there is an error, make sure you print out the logs.
@@ -1554,7 +1560,7 @@ Encourage feedback and feature requests in your docs and repos, and try to draw 
   <span class="copyright-year">
     &copy; 
     2022 - 
-    2023<span class="heart"><i class="iconfont icon-heart"></i></span><span><a href="/">hlday</a></span>
+    2026<span class="heart"><i class="iconfont icon-heart"></i></span><span><a href="/">hlday</a></span>
   </span>
 </div>
 
@@ -1571,7 +1577,7 @@ Encourage feedback and feature requests in your docs and repos, and try to draw 
 
 
 
-<script type="text/javascript" src="/js/main.min.bfb94e1fe4773651a6fe907d388ed08d7d6f9628a062d0740d992e1dfb49466e.js"></script>
+<script type="text/javascript" src="/js/main.min.d3d26fe720923eebdba72c7cb26eef946d17ef1a1a7a289857149666ace3dfec.js"></script>
   <script type="text/javascript">
     window.MathJax = {
       tex: {
@@ -1580,6 +1586,7 @@ Encourage feedback and feature requests in your docs and repos, and try to draw 
     };
   </script>
   <script async src="https://cdn.jsdelivr.net/npm/mathjax@3.0.5/es5/tex-mml-chtml.js" integrity="sha256-HGLuEfFcsUJGhvB8cQ8nr0gai9EucOOaIxFw7qxmd+w=" crossorigin="anonymous"></script>
+
 
 
 

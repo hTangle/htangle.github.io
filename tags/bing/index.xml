@@ -1,20 +1,24 @@
 <?xml version="1.0" encoding="utf-8" standalone="yes"?>
 <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
-  <channel>
-    <title>bing on HLDay</title>
-    <link>/tags/bing/</link>
-    <description>Recent content in bing on HLDay</description>
-    <generator>Hugo -- gohugo.io</generator>
-    <language>en</language>
-    <lastBuildDate>Tue, 14 Feb 2023 21:54:49 +0800</lastBuildDate><atom:link href="/tags/bing/index.xml" rel="self" type="application/rss+xml" />
-    <item>
-      <title>不使用魔法加入Bing ChatGPT候补名单</title>
-      <link>/post/linux/add_bing_chatgpt/</link>
-      <pubDate>Tue, 14 Feb 2023 21:54:49 +0800</pubDate>
-      
-      <guid>/post/linux/add_bing_chatgpt/</guid>
-      <description>不使用魔法加入Bing ChatGPT候补名单</description>
-    </item>
-    
-  </channel>
+	<channel>
+		<title>Bing on HLDay</title>
+		<link>/tags/bing/</link>
+		<description>Recent content in Bing on HLDay</description>
+		<generator>Hugo</generator>
+		<language>en</language>
+		
+		
+		
+		
+			<lastBuildDate>Tue, 14 Feb 2023 21:54:49 +0800</lastBuildDate>
+		
+			<atom:link href="/tags/bing/index.xml" rel="self" type="application/rss+xml" />
+			<item>
+				<title>不使用魔法加入Bing ChatGPT候补名单</title>
+				<link>/post/linux/add_bing_chatgpt/</link>
+				<pubDate>Tue, 14 Feb 2023 21:54:49 +0800</pubDate>
+				<guid>/post/linux/add_bing_chatgpt/</guid>
+				<description>不使用魔法加入Bing ChatGPT候补名单</description>
+			</item>
+	</channel>
 </rss>

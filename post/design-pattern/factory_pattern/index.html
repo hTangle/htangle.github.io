@@ -31,7 +31,7 @@
   gtag('config', 'G-59Y2CYW544');
 </script>
 
-<meta name="generator" content="Hugo 0.93.2 with theme even" />
+<meta name="generator" content="Hugo 0.164.0 with theme even" />
 
 
 <link rel="canonical" href="/post/design-pattern/factory_pattern/" />
@@ -43,24 +43,31 @@
 
 <script async src="//busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
 
-<link href="/sass/main.min.b5a744db6de49a86cadafb3b70f555ab443f83c307a483402259e94726b045ff.css" rel="stylesheet">
+<link href="/sass/main.min.52d539dfadc86246e6ba9a98b4b3a7268cddea9db8ace7933730de9afef2c275.css" rel="stylesheet">
 
 
 
-<meta property="og:title" content="工厂模式" />
-<meta property="og:description" content="工厂模式（Factory Pattern）是 Java 中最常用的设计模式之一。这种类型的设计模式属于创建型模式，它提供了一种创建对象的最佳方式。在工厂模式中，我们在创建对象时不会对客户端暴露创建逻辑，并且是通过使用一个共同的接口来指向新创建的对象。" />
-<meta property="og:type" content="article" />
-<meta property="og:url" content="/post/design-pattern/factory_pattern/" /><meta property="article:section" content="post" />
-<meta property="article:published_time" content="2022-03-08T15:51:07+08:00" />
-<meta property="article:modified_time" content="2022-03-08T15:51:07+08:00" />
+<meta property="og:url" content="/post/design-pattern/factory_pattern/">
+	<meta property="og:site_name" content="HLDay">
+	<meta property="og:title" content="工厂模式">
+	<meta property="og:description" content="工厂模式（Factory Pattern）是 Java 中最常用的设计模式之一。这种类型的设计模式属于创建型模式，它提供了一种创建对象的最佳方式。在工厂模式中，我们在创建对象时不会对客户端暴露创建逻辑，并且是通过使用一个共同的接口来指向新创建的对象。">
+	<meta property="og:locale" content="en">
+	<meta property="og:type" content="article">
+		<meta property="article:section" content="post">
+		<meta property="article:published_time" content="2022-03-08T15:51:07+08:00">
+		<meta property="article:modified_time" content="2022-03-08T15:51:07+08:00">
+		<meta property="article:tag" content="设计模式">
+		<meta property="article:tag" content="Go">
 
-<meta itemprop="name" content="工厂模式">
-<meta itemprop="description" content="工厂模式（Factory Pattern）是 Java 中最常用的设计模式之一。这种类型的设计模式属于创建型模式，它提供了一种创建对象的最佳方式。在工厂模式中，我们在创建对象时不会对客户端暴露创建逻辑，并且是通过使用一个共同的接口来指向新创建的对象。"><meta itemprop="datePublished" content="2022-03-08T15:51:07+08:00" />
-<meta itemprop="dateModified" content="2022-03-08T15:51:07+08:00" />
-<meta itemprop="wordCount" content="2517">
-<meta itemprop="keywords" content="设计模式,Go," /><meta name="twitter:card" content="summary"/>
-<meta name="twitter:title" content="工厂模式"/>
-<meta name="twitter:description" content="工厂模式（Factory Pattern）是 Java 中最常用的设计模式之一。这种类型的设计模式属于创建型模式，它提供了一种创建对象的最佳方式。在工厂模式中，我们在创建对象时不会对客户端暴露创建逻辑，并且是通过使用一个共同的接口来指向新创建的对象。"/>
+	<meta itemprop="name" content="工厂模式">
+	<meta itemprop="description" content="工厂模式（Factory Pattern）是 Java 中最常用的设计模式之一。这种类型的设计模式属于创建型模式，它提供了一种创建对象的最佳方式。在工厂模式中，我们在创建对象时不会对客户端暴露创建逻辑，并且是通过使用一个共同的接口来指向新创建的对象。">
+	<meta itemprop="datePublished" content="2022-03-08T15:51:07+08:00">
+	<meta itemprop="dateModified" content="2022-03-08T15:51:07+08:00">
+	<meta itemprop="wordCount" content="2517">
+	<meta itemprop="keywords" content="设计模式,Go">
+	<meta name="twitter:card" content="summary">
+	<meta name="twitter:title" content="工厂模式">
+	<meta name="twitter:description" content="工厂模式（Factory Pattern）是 Java 中最常用的设计模式之一。这种类型的设计模式属于创建型模式，它提供了一种创建对象的最佳方式。在工厂模式中，我们在创建对象时不会对客户端暴露创建逻辑，并且是通过使用一个共同的接口来指向新创建的对象。">
 
 <!--[if lte IE 9]>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
@@ -221,33 +228,33 @@
 </span><span class="lnt">26
 </span></code></pre></td>
 <td class="lntd">
-<pre tabindex="0" class="chroma"><code class="language-go" data-lang="go"><span class="line"><span class="cl"><span class="kd">type</span> <span class="nx">Fruit</span> <span class="kd">interface</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">	<span class="nf">Name</span><span class="p">()</span> <span class="kt">string</span>
-</span></span><span class="line"><span class="cl"><span class="p">}</span>
-</span></span><span class="line"><span class="cl"><span class="kd">type</span> <span class="nx">Apple</span> <span class="kd">struct</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">	<span class="nx">name</span> <span class="kt">string</span>
-</span></span><span class="line"><span class="cl"><span class="p">}</span>
-</span></span><span class="line"><span class="cl">
-</span></span><span class="line"><span class="cl"><span class="kd">func</span> <span class="p">(</span><span class="nx">a</span> <span class="o">*</span><span class="nx">Apple</span><span class="p">)</span> <span class="nf">Name</span><span class="p">()</span> <span class="kt">string</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">	<span class="k">return</span> <span class="nx">a</span><span class="p">.</span><span class="nx">name</span>
-</span></span><span class="line"><span class="cl"><span class="p">}</span>
-</span></span><span class="line"><span class="cl">
-</span></span><span class="line"><span class="cl"><span class="kd">type</span> <span class="nx">Banana</span> <span class="kd">struct</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">	<span class="nx">name</span> <span class="kt">string</span>
-</span></span><span class="line"><span class="cl"><span class="p">}</span>
-</span></span><span class="line"><span class="cl">
-</span></span><span class="line"><span class="cl"><span class="kd">func</span> <span class="p">(</span><span class="nx">a</span> <span class="o">*</span><span class="nx">Banana</span><span class="p">)</span> <span class="nf">Name</span><span class="p">()</span> <span class="kt">string</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">	<span class="k">return</span> <span class="nx">a</span><span class="p">.</span><span class="nx">name</span>
-</span></span><span class="line"><span class="cl"><span class="p">}</span>
-</span></span><span class="line"><span class="cl">
-</span></span><span class="line"><span class="cl"><span class="kd">type</span> <span class="nx">Orange</span> <span class="kd">struct</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">	<span class="nx">name</span> <span class="kt">string</span>
-</span></span><span class="line"><span class="cl"><span class="p">}</span>
-</span></span><span class="line"><span class="cl">
-</span></span><span class="line"><span class="cl"><span class="kd">func</span> <span class="p">(</span><span class="nx">a</span> <span class="o">*</span><span class="nx">Orange</span><span class="p">)</span> <span class="nf">Name</span><span class="p">()</span> <span class="kt">string</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">	<span class="k">return</span> <span class="nx">a</span><span class="p">.</span><span class="nx">name</span>
-</span></span><span class="line"><span class="cl"><span class="p">}</span>
-</span></span></code></pre></td></tr></table>
+<pre tabindex="0" class="chroma"><code class="language-go" data-lang="go"><span class="line"><span class="cl"><span class="kd">type</span><span class="w"> </span><span class="nx">Fruit</span><span class="w"> </span><span class="kd">interface</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nf">Name</span><span class="p">()</span><span class="w"> </span><span class="kt">string</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="kd">type</span><span class="w"> </span><span class="nx">Apple</span><span class="w"> </span><span class="kd">struct</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">name</span><span class="w"> </span><span class="kt">string</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="kd">func</span><span class="w"> </span><span class="p">(</span><span class="nx">a</span><span class="w"> </span><span class="o">*</span><span class="nx">Apple</span><span class="p">)</span><span class="w"> </span><span class="nf">Name</span><span class="p">()</span><span class="w"> </span><span class="kt">string</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="k">return</span><span class="w"> </span><span class="nx">a</span><span class="p">.</span><span class="nx">name</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="kd">type</span><span class="w"> </span><span class="nx">Banana</span><span class="w"> </span><span class="kd">struct</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">name</span><span class="w"> </span><span class="kt">string</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="kd">func</span><span class="w"> </span><span class="p">(</span><span class="nx">a</span><span class="w"> </span><span class="o">*</span><span class="nx">Banana</span><span class="p">)</span><span class="w"> </span><span class="nf">Name</span><span class="p">()</span><span class="w"> </span><span class="kt">string</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="k">return</span><span class="w"> </span><span class="nx">a</span><span class="p">.</span><span class="nx">name</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="kd">type</span><span class="w"> </span><span class="nx">Orange</span><span class="w"> </span><span class="kd">struct</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">name</span><span class="w"> </span><span class="kt">string</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="kd">func</span><span class="w"> </span><span class="p">(</span><span class="nx">a</span><span class="w"> </span><span class="o">*</span><span class="nx">Orange</span><span class="p">)</span><span class="w"> </span><span class="nf">Name</span><span class="p">()</span><span class="w"> </span><span class="kt">string</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="k">return</span><span class="w"> </span><span class="nx">a</span><span class="p">.</span><span class="nx">name</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="p">}</span><span class="w">
+</span></span></span></code></pre></td></tr></table>
 </div>
 </div><p>然后我们可以使用一个简单工厂来决定创建哪一种水果</p>
 <div class="highlight"><div class="chroma">
@@ -265,18 +272,18 @@
 </span><span class="lnt">11
 </span></code></pre></td>
 <td class="lntd">
-<pre tabindex="0" class="chroma"><code class="language-go" data-lang="go"><span class="line"><span class="cl"><span class="kd">func</span> <span class="nf">NewSimpleFruitFactory</span><span class="p">(</span><span class="nx">name</span> <span class="kt">string</span><span class="p">)</span> <span class="nx">Fruit</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">	<span class="k">switch</span> <span class="nx">name</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">	<span class="k">case</span> <span class="s">&#34;apple&#34;</span><span class="p">:</span>
-</span></span><span class="line"><span class="cl">		<span class="k">return</span> <span class="o">&amp;</span><span class="nx">Apple</span><span class="p">{</span><span class="nx">name</span><span class="p">:</span> <span class="nx">name</span><span class="p">}</span>
-</span></span><span class="line"><span class="cl">	<span class="k">case</span> <span class="s">&#34;banana&#34;</span><span class="p">:</span>
-</span></span><span class="line"><span class="cl">		<span class="k">return</span> <span class="o">&amp;</span><span class="nx">Banana</span><span class="p">{</span><span class="nx">name</span><span class="p">:</span> <span class="nx">name</span><span class="p">}</span>
-</span></span><span class="line"><span class="cl">	<span class="k">case</span> <span class="s">&#34;orange&#34;</span><span class="p">:</span>
-</span></span><span class="line"><span class="cl">		<span class="k">return</span> <span class="o">&amp;</span><span class="nx">Orange</span><span class="p">{</span><span class="nx">name</span><span class="p">:</span> <span class="nx">name</span><span class="p">}</span>
-</span></span><span class="line"><span class="cl">	<span class="p">}</span>
-</span></span><span class="line"><span class="cl">	<span class="k">return</span> <span class="kc">nil</span>
-</span></span><span class="line"><span class="cl"><span class="p">}</span>
-</span></span></code></pre></td></tr></table>
+<pre tabindex="0" class="chroma"><code class="language-go" data-lang="go"><span class="line"><span class="cl"><span class="kd">func</span><span class="w"> </span><span class="nf">NewSimpleFruitFactory</span><span class="p">(</span><span class="nx">name</span><span class="w"> </span><span class="kt">string</span><span class="p">)</span><span class="w"> </span><span class="nx">Fruit</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="k">switch</span><span class="w"> </span><span class="nx">name</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="k">case</span><span class="w"> </span><span class="s">&#34;apple&#34;</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="k">return</span><span class="w"> </span><span class="o">&amp;</span><span class="nx">Apple</span><span class="p">{</span><span class="nx">name</span><span class="p">:</span><span class="w"> </span><span class="nx">name</span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="k">case</span><span class="w"> </span><span class="s">&#34;banana&#34;</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="k">return</span><span class="w"> </span><span class="o">&amp;</span><span class="nx">Banana</span><span class="p">{</span><span class="nx">name</span><span class="p">:</span><span class="w"> </span><span class="nx">name</span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="k">case</span><span class="w"> </span><span class="s">&#34;orange&#34;</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="k">return</span><span class="w"> </span><span class="o">&amp;</span><span class="nx">Orange</span><span class="p">{</span><span class="nx">name</span><span class="p">:</span><span class="w"> </span><span class="nx">name</span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="k">return</span><span class="w"> </span><span class="kc">nil</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="p">}</span><span class="w">
+</span></span></span></code></pre></td></tr></table>
 </div>
 </div><p>新建一个单元测试</p>
 <div class="highlight"><div class="chroma">
@@ -322,46 +329,46 @@
 </span><span class="lnt">39
 </span></code></pre></td>
 <td class="lntd">
-<pre tabindex="0" class="chroma"><code class="language-go" data-lang="go"><span class="line"><span class="cl"><span class="kd">func</span> <span class="nf">TestNewSimpleFruitFactory</span><span class="p">(</span><span class="nx">t</span> <span class="o">*</span><span class="nx">testing</span><span class="p">.</span><span class="nx">T</span><span class="p">)</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">	<span class="kd">type</span> <span class="nx">args</span> <span class="kd">struct</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">		<span class="nx">name</span> <span class="kt">string</span>
-</span></span><span class="line"><span class="cl">	<span class="p">}</span>
-</span></span><span class="line"><span class="cl">	<span class="nx">tests</span> <span class="o">:=</span> <span class="p">[]</span><span class="kd">struct</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">		<span class="nx">name</span> <span class="kt">string</span>
-</span></span><span class="line"><span class="cl">		<span class="nx">args</span> <span class="nx">args</span>
-</span></span><span class="line"><span class="cl">		<span class="nx">want</span> <span class="kt">string</span>
-</span></span><span class="line"><span class="cl">	<span class="p">}{</span>
-</span></span><span class="line"><span class="cl">		<span class="p">{</span>
-</span></span><span class="line"><span class="cl">			<span class="nx">name</span><span class="p">:</span> <span class="s">&#34;apple&#34;</span><span class="p">,</span>
-</span></span><span class="line"><span class="cl">			<span class="nx">args</span><span class="p">:</span> <span class="nx">args</span><span class="p">{</span>
-</span></span><span class="line"><span class="cl">				<span class="nx">name</span><span class="p">:</span> <span class="s">&#34;apple&#34;</span><span class="p">,</span>
-</span></span><span class="line"><span class="cl">			<span class="p">},</span>
-</span></span><span class="line"><span class="cl">			<span class="nx">want</span><span class="p">:</span> <span class="s">&#34;apple&#34;</span><span class="p">,</span>
-</span></span><span class="line"><span class="cl">		<span class="p">},</span>
-</span></span><span class="line"><span class="cl">		<span class="p">{</span>
-</span></span><span class="line"><span class="cl">			<span class="nx">name</span><span class="p">:</span> <span class="s">&#34;banana&#34;</span><span class="p">,</span>
-</span></span><span class="line"><span class="cl">			<span class="nx">args</span><span class="p">:</span> <span class="nx">args</span><span class="p">{</span>
-</span></span><span class="line"><span class="cl">				<span class="nx">name</span><span class="p">:</span> <span class="s">&#34;banana&#34;</span><span class="p">,</span>
-</span></span><span class="line"><span class="cl">			<span class="p">},</span>
-</span></span><span class="line"><span class="cl">			<span class="nx">want</span><span class="p">:</span> <span class="s">&#34;banana&#34;</span><span class="p">,</span>
-</span></span><span class="line"><span class="cl">		<span class="p">},</span>
-</span></span><span class="line"><span class="cl">		<span class="p">{</span>
-</span></span><span class="line"><span class="cl">			<span class="nx">name</span><span class="p">:</span> <span class="s">&#34;orange&#34;</span><span class="p">,</span>
-</span></span><span class="line"><span class="cl">			<span class="nx">args</span><span class="p">:</span> <span class="nx">args</span><span class="p">{</span>
-</span></span><span class="line"><span class="cl">				<span class="nx">name</span><span class="p">:</span> <span class="s">&#34;orange&#34;</span><span class="p">,</span>
-</span></span><span class="line"><span class="cl">			<span class="p">},</span>
-</span></span><span class="line"><span class="cl">			<span class="nx">want</span><span class="p">:</span> <span class="s">&#34;orange&#34;</span><span class="p">,</span>
-</span></span><span class="line"><span class="cl">		<span class="p">},</span>
-</span></span><span class="line"><span class="cl">	<span class="p">}</span>
-</span></span><span class="line"><span class="cl">	<span class="k">for</span> <span class="nx">_</span><span class="p">,</span> <span class="nx">tes</span> <span class="o">:=</span> <span class="k">range</span> <span class="nx">tests</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">		<span class="nx">t</span><span class="p">.</span><span class="nf">Run</span><span class="p">(</span><span class="nx">tes</span><span class="p">.</span><span class="nx">name</span><span class="p">,</span> <span class="kd">func</span><span class="p">(</span><span class="nx">ts</span> <span class="o">*</span><span class="nx">testing</span><span class="p">.</span><span class="nx">T</span><span class="p">)</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">			<span class="k">if</span> <span class="nx">got</span> <span class="o">:=</span> <span class="nf">NewSimpleFruitFactory</span><span class="p">(</span><span class="nx">tes</span><span class="p">.</span><span class="nx">args</span><span class="p">.</span><span class="nx">name</span><span class="p">);</span> <span class="p">!(</span><span class="nx">got</span><span class="p">.</span><span class="nf">Name</span><span class="p">()</span> <span class="o">==</span> <span class="nx">tes</span><span class="p">.</span><span class="nx">want</span><span class="p">)</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">				<span class="nx">ts</span><span class="p">.</span><span class="nf">Errorf</span><span class="p">(</span><span class="s">&#34;NewSimpleFruitFactory Name=%s, want %s&#34;</span><span class="p">,</span> <span class="nx">got</span><span class="p">.</span><span class="nf">Name</span><span class="p">(),</span> <span class="nx">tes</span><span class="p">.</span><span class="nx">want</span><span class="p">)</span>
-</span></span><span class="line"><span class="cl">			<span class="p">}</span>
-</span></span><span class="line"><span class="cl">		<span class="p">})</span>
-</span></span><span class="line"><span class="cl">	<span class="p">}</span>
-</span></span><span class="line"><span class="cl"><span class="p">}</span>
-</span></span></code></pre></td></tr></table>
+<pre tabindex="0" class="chroma"><code class="language-go" data-lang="go"><span class="line"><span class="cl"><span class="kd">func</span><span class="w"> </span><span class="nf">TestNewSimpleFruitFactory</span><span class="p">(</span><span class="nx">t</span><span class="w"> </span><span class="o">*</span><span class="nx">testing</span><span class="p">.</span><span class="nx">T</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="kd">type</span><span class="w"> </span><span class="nx">args</span><span class="w"> </span><span class="kd">struct</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="nx">name</span><span class="w"> </span><span class="kt">string</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">tests</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="p">[]</span><span class="kd">struct</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="nx">name</span><span class="w"> </span><span class="kt">string</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="nx">args</span><span class="w"> </span><span class="nx">args</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="nx">want</span><span class="w"> </span><span class="kt">string</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="p">}{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">			</span><span class="nx">name</span><span class="p">:</span><span class="w"> </span><span class="s">&#34;apple&#34;</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">			</span><span class="nx">args</span><span class="p">:</span><span class="w"> </span><span class="nx">args</span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">				</span><span class="nx">name</span><span class="p">:</span><span class="w"> </span><span class="s">&#34;apple&#34;</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">			</span><span class="p">},</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">			</span><span class="nx">want</span><span class="p">:</span><span class="w"> </span><span class="s">&#34;apple&#34;</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="p">},</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">			</span><span class="nx">name</span><span class="p">:</span><span class="w"> </span><span class="s">&#34;banana&#34;</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">			</span><span class="nx">args</span><span class="p">:</span><span class="w"> </span><span class="nx">args</span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">				</span><span class="nx">name</span><span class="p">:</span><span class="w"> </span><span class="s">&#34;banana&#34;</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">			</span><span class="p">},</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">			</span><span class="nx">want</span><span class="p">:</span><span class="w"> </span><span class="s">&#34;banana&#34;</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="p">},</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">			</span><span class="nx">name</span><span class="p">:</span><span class="w"> </span><span class="s">&#34;orange&#34;</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">			</span><span class="nx">args</span><span class="p">:</span><span class="w"> </span><span class="nx">args</span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">				</span><span class="nx">name</span><span class="p">:</span><span class="w"> </span><span class="s">&#34;orange&#34;</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">			</span><span class="p">},</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">			</span><span class="nx">want</span><span class="p">:</span><span class="w"> </span><span class="s">&#34;orange&#34;</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="p">},</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="k">for</span><span class="w"> </span><span class="nx">_</span><span class="p">,</span><span class="w"> </span><span class="nx">tes</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="k">range</span><span class="w"> </span><span class="nx">tests</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="nx">t</span><span class="p">.</span><span class="nf">Run</span><span class="p">(</span><span class="nx">tes</span><span class="p">.</span><span class="nx">name</span><span class="p">,</span><span class="w"> </span><span class="kd">func</span><span class="p">(</span><span class="nx">ts</span><span class="w"> </span><span class="o">*</span><span class="nx">testing</span><span class="p">.</span><span class="nx">T</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">			</span><span class="k">if</span><span class="w"> </span><span class="nx">got</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nf">NewSimpleFruitFactory</span><span class="p">(</span><span class="nx">tes</span><span class="p">.</span><span class="nx">args</span><span class="p">.</span><span class="nx">name</span><span class="p">);</span><span class="w"> </span><span class="p">!(</span><span class="nx">got</span><span class="p">.</span><span class="nf">Name</span><span class="p">()</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="nx">tes</span><span class="p">.</span><span class="nx">want</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">				</span><span class="nx">ts</span><span class="p">.</span><span class="nf">Errorf</span><span class="p">(</span><span class="s">&#34;NewSimpleFruitFactory Name=%s, want %s&#34;</span><span class="p">,</span><span class="w"> </span><span class="nx">got</span><span class="p">.</span><span class="nf">Name</span><span class="p">(),</span><span class="w"> </span><span class="nx">tes</span><span class="p">.</span><span class="nx">want</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">			</span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="p">})</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="p">}</span><span class="w">
+</span></span></span></code></pre></td></tr></table>
 </div>
 </div><p>使用简单工厂模式的优势：让对象的调用者和对象创建过程分离，当对象调用者需要对象时，直接向工厂请求即可。从而避免了对象的调用者与对象的实现类以硬编码方式耦合，以提高系统的可维护性、可扩展性。工厂模式也有一个小小的缺陷：当产品修改时，工厂类也要做相应的修改，违反了开闭原则。如上例，需要增加一种新的水果时，需要修改工厂类<code>NewSimpleFruitFactory</code></p>
 <blockquote>
@@ -422,50 +429,50 @@
 </span><span class="lnt">43
 </span></code></pre></td>
 <td class="lntd">
-<pre tabindex="0" class="chroma"><code class="language-go" data-lang="go"><span class="line"><span class="cl"><span class="kn">package</span> <span class="nx">factory_method</span>
-</span></span><span class="line"><span class="cl">
-</span></span><span class="line"><span class="cl"><span class="kn">import</span> <span class="s">&#34;errors&#34;</span>
-</span></span><span class="line"><span class="cl">
-</span></span><span class="line"><span class="cl"><span class="kd">type</span> <span class="nx">FruitFactory</span> <span class="kd">interface</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">	<span class="nf">CreateFruit</span><span class="p">()</span> <span class="nx">Fruit</span>
-</span></span><span class="line"><span class="cl"><span class="p">}</span>
-</span></span><span class="line"><span class="cl">
-</span></span><span class="line"><span class="cl"><span class="kd">type</span> <span class="nx">AppleFruitFactory</span> <span class="kd">struct</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">	<span class="nx">name</span> <span class="kt">string</span>
-</span></span><span class="line"><span class="cl"><span class="p">}</span>
-</span></span><span class="line"><span class="cl">
-</span></span><span class="line"><span class="cl"><span class="kd">func</span> <span class="p">(</span><span class="nx">f</span> <span class="o">*</span><span class="nx">AppleFruitFactory</span><span class="p">)</span> <span class="nf">CreateFruit</span><span class="p">()</span> <span class="nx">Fruit</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">	<span class="k">return</span> <span class="o">&amp;</span><span class="nx">Apple</span><span class="p">{</span><span class="nx">name</span><span class="p">:</span> <span class="nx">f</span><span class="p">.</span><span class="nx">name</span><span class="p">,</span> <span class="nx">type_</span><span class="p">:</span> <span class="s">&#34;apple&#34;</span><span class="p">}</span>
-</span></span><span class="line"><span class="cl"><span class="p">}</span>
-</span></span><span class="line"><span class="cl">
-</span></span><span class="line"><span class="cl"><span class="kd">type</span> <span class="nx">BananaFruitFactory</span> <span class="kd">struct</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">	<span class="nx">name</span> <span class="kt">string</span>
-</span></span><span class="line"><span class="cl"><span class="p">}</span>
-</span></span><span class="line"><span class="cl">
-</span></span><span class="line"><span class="cl"><span class="kd">func</span> <span class="p">(</span><span class="nx">f</span> <span class="o">*</span><span class="nx">BananaFruitFactory</span><span class="p">)</span> <span class="nf">CreateFruit</span><span class="p">()</span> <span class="nx">Fruit</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">	<span class="k">return</span> <span class="o">&amp;</span><span class="nx">Banana</span><span class="p">{</span><span class="nx">name</span><span class="p">:</span> <span class="nx">f</span><span class="p">.</span><span class="nx">name</span><span class="p">,</span> <span class="nx">type_</span><span class="p">:</span> <span class="s">&#34;banana&#34;</span><span class="p">}</span>
-</span></span><span class="line"><span class="cl"><span class="p">}</span>
-</span></span><span class="line"><span class="cl">
-</span></span><span class="line"><span class="cl"><span class="kd">type</span> <span class="nx">OrangeFruitFactory</span> <span class="kd">struct</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">	<span class="nx">name</span> <span class="kt">string</span>
-</span></span><span class="line"><span class="cl"><span class="p">}</span>
-</span></span><span class="line"><span class="cl">
-</span></span><span class="line"><span class="cl"><span class="kd">func</span> <span class="p">(</span><span class="nx">f</span> <span class="o">*</span><span class="nx">OrangeFruitFactory</span><span class="p">)</span> <span class="nf">CreateFruit</span><span class="p">()</span> <span class="nx">Fruit</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">	<span class="k">return</span> <span class="o">&amp;</span><span class="nx">Orange</span><span class="p">{</span><span class="nx">name</span><span class="p">:</span> <span class="nx">f</span><span class="p">.</span><span class="nx">name</span><span class="p">,</span> <span class="nx">type_</span><span class="p">:</span> <span class="s">&#34;orange&#34;</span><span class="p">}</span>
-</span></span><span class="line"><span class="cl"><span class="p">}</span>
-</span></span><span class="line"><span class="cl">
-</span></span><span class="line"><span class="cl"><span class="kd">func</span> <span class="nf">NewFruitFactory</span><span class="p">(</span><span class="nx">name</span> <span class="kt">string</span><span class="p">)</span> <span class="p">(</span><span class="nx">FruitFactory</span><span class="p">,</span> <span class="kt">error</span><span class="p">)</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">	<span class="k">switch</span> <span class="nx">name</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">	<span class="k">case</span> <span class="s">&#34;apple&#34;</span><span class="p">:</span>
-</span></span><span class="line"><span class="cl">		<span class="k">return</span> <span class="o">&amp;</span><span class="nx">AppleFruitFactory</span><span class="p">{</span><span class="nx">name</span><span class="p">:</span> <span class="nx">name</span><span class="p">},</span> <span class="kc">nil</span>
-</span></span><span class="line"><span class="cl">	<span class="k">case</span> <span class="s">&#34;banana&#34;</span><span class="p">:</span>
-</span></span><span class="line"><span class="cl">		<span class="k">return</span> <span class="o">&amp;</span><span class="nx">BananaFruitFactory</span><span class="p">{</span><span class="nx">name</span><span class="p">:</span> <span class="nx">name</span><span class="p">},</span> <span class="kc">nil</span>
-</span></span><span class="line"><span class="cl">	<span class="k">case</span> <span class="s">&#34;orange&#34;</span><span class="p">:</span>
-</span></span><span class="line"><span class="cl">		<span class="k">return</span> <span class="o">&amp;</span><span class="nx">OrangeFruitFactory</span><span class="p">{</span><span class="nx">name</span><span class="p">:</span> <span class="nx">name</span><span class="p">},</span> <span class="kc">nil</span>
-</span></span><span class="line"><span class="cl">	<span class="p">}</span>
-</span></span><span class="line"><span class="cl">	<span class="k">return</span> <span class="kc">nil</span><span class="p">,</span> <span class="nx">errors</span><span class="p">.</span><span class="nf">New</span><span class="p">(</span><span class="s">&#34;not supported&#34;</span><span class="p">)</span>
-</span></span><span class="line"><span class="cl"><span class="p">}</span>
-</span></span></code></pre></td></tr></table>
+<pre tabindex="0" class="chroma"><code class="language-go" data-lang="go"><span class="line"><span class="cl"><span class="kn">package</span><span class="w"> </span><span class="nx">factory_method</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="kn">import</span><span class="w"> </span><span class="s">&#34;errors&#34;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="kd">type</span><span class="w"> </span><span class="nx">FruitFactory</span><span class="w"> </span><span class="kd">interface</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nf">CreateFruit</span><span class="p">()</span><span class="w"> </span><span class="nx">Fruit</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="kd">type</span><span class="w"> </span><span class="nx">AppleFruitFactory</span><span class="w"> </span><span class="kd">struct</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">name</span><span class="w"> </span><span class="kt">string</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="kd">func</span><span class="w"> </span><span class="p">(</span><span class="nx">f</span><span class="w"> </span><span class="o">*</span><span class="nx">AppleFruitFactory</span><span class="p">)</span><span class="w"> </span><span class="nf">CreateFruit</span><span class="p">()</span><span class="w"> </span><span class="nx">Fruit</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="k">return</span><span class="w"> </span><span class="o">&amp;</span><span class="nx">Apple</span><span class="p">{</span><span class="nx">name</span><span class="p">:</span><span class="w"> </span><span class="nx">f</span><span class="p">.</span><span class="nx">name</span><span class="p">,</span><span class="w"> </span><span class="nx">type_</span><span class="p">:</span><span class="w"> </span><span class="s">&#34;apple&#34;</span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="kd">type</span><span class="w"> </span><span class="nx">BananaFruitFactory</span><span class="w"> </span><span class="kd">struct</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">name</span><span class="w"> </span><span class="kt">string</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="kd">func</span><span class="w"> </span><span class="p">(</span><span class="nx">f</span><span class="w"> </span><span class="o">*</span><span class="nx">BananaFruitFactory</span><span class="p">)</span><span class="w"> </span><span class="nf">CreateFruit</span><span class="p">()</span><span class="w"> </span><span class="nx">Fruit</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="k">return</span><span class="w"> </span><span class="o">&amp;</span><span class="nx">Banana</span><span class="p">{</span><span class="nx">name</span><span class="p">:</span><span class="w"> </span><span class="nx">f</span><span class="p">.</span><span class="nx">name</span><span class="p">,</span><span class="w"> </span><span class="nx">type_</span><span class="p">:</span><span class="w"> </span><span class="s">&#34;banana&#34;</span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="kd">type</span><span class="w"> </span><span class="nx">OrangeFruitFactory</span><span class="w"> </span><span class="kd">struct</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">name</span><span class="w"> </span><span class="kt">string</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="kd">func</span><span class="w"> </span><span class="p">(</span><span class="nx">f</span><span class="w"> </span><span class="o">*</span><span class="nx">OrangeFruitFactory</span><span class="p">)</span><span class="w"> </span><span class="nf">CreateFruit</span><span class="p">()</span><span class="w"> </span><span class="nx">Fruit</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="k">return</span><span class="w"> </span><span class="o">&amp;</span><span class="nx">Orange</span><span class="p">{</span><span class="nx">name</span><span class="p">:</span><span class="w"> </span><span class="nx">f</span><span class="p">.</span><span class="nx">name</span><span class="p">,</span><span class="w"> </span><span class="nx">type_</span><span class="p">:</span><span class="w"> </span><span class="s">&#34;orange&#34;</span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="kd">func</span><span class="w"> </span><span class="nf">NewFruitFactory</span><span class="p">(</span><span class="nx">name</span><span class="w"> </span><span class="kt">string</span><span class="p">)</span><span class="w"> </span><span class="p">(</span><span class="nx">FruitFactory</span><span class="p">,</span><span class="w"> </span><span class="kt">error</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="k">switch</span><span class="w"> </span><span class="nx">name</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="k">case</span><span class="w"> </span><span class="s">&#34;apple&#34;</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="k">return</span><span class="w"> </span><span class="o">&amp;</span><span class="nx">AppleFruitFactory</span><span class="p">{</span><span class="nx">name</span><span class="p">:</span><span class="w"> </span><span class="nx">name</span><span class="p">},</span><span class="w"> </span><span class="kc">nil</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="k">case</span><span class="w"> </span><span class="s">&#34;banana&#34;</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="k">return</span><span class="w"> </span><span class="o">&amp;</span><span class="nx">BananaFruitFactory</span><span class="p">{</span><span class="nx">name</span><span class="p">:</span><span class="w"> </span><span class="nx">name</span><span class="p">},</span><span class="w"> </span><span class="kc">nil</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="k">case</span><span class="w"> </span><span class="s">&#34;orange&#34;</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="k">return</span><span class="w"> </span><span class="o">&amp;</span><span class="nx">OrangeFruitFactory</span><span class="p">{</span><span class="nx">name</span><span class="p">:</span><span class="w"> </span><span class="nx">name</span><span class="p">},</span><span class="w"> </span><span class="kc">nil</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="k">return</span><span class="w"> </span><span class="kc">nil</span><span class="p">,</span><span class="w"> </span><span class="nx">errors</span><span class="p">.</span><span class="nf">New</span><span class="p">(</span><span class="s">&#34;not supported&#34;</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="p">}</span><span class="w">
+</span></span></span></code></pre></td></tr></table>
 </div>
 </div><p>单元测试</p>
 <div class="highlight"><div class="chroma">
@@ -518,53 +525,53 @@
 </span><span class="lnt">46
 </span></code></pre></td>
 <td class="lntd">
-<pre tabindex="0" class="chroma"><code class="language-go" data-lang="go"><span class="line"><span class="cl"><span class="kn">package</span> <span class="nx">factory_method</span>
-</span></span><span class="line"><span class="cl">
-</span></span><span class="line"><span class="cl"><span class="kn">import</span> <span class="p">(</span>
-</span></span><span class="line"><span class="cl">	<span class="s">&#34;testing&#34;</span>
-</span></span><span class="line"><span class="cl"><span class="p">)</span>
-</span></span><span class="line"><span class="cl">
-</span></span><span class="line"><span class="cl"><span class="kd">func</span> <span class="nf">TestNewFruitFactory</span><span class="p">(</span><span class="nx">t</span> <span class="o">*</span><span class="nx">testing</span><span class="p">.</span><span class="nx">T</span><span class="p">)</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">	<span class="kd">type</span> <span class="nx">args</span> <span class="kd">struct</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">		<span class="nx">name</span> <span class="kt">string</span>
-</span></span><span class="line"><span class="cl">	<span class="p">}</span>
-</span></span><span class="line"><span class="cl">	<span class="nx">tests</span> <span class="o">:=</span> <span class="p">[]</span><span class="kd">struct</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">		<span class="nx">name</span>  <span class="kt">string</span>
-</span></span><span class="line"><span class="cl">		<span class="nx">args</span>  <span class="nx">args</span>
-</span></span><span class="line"><span class="cl">		<span class="nx">want</span>  <span class="kt">string</span>
-</span></span><span class="line"><span class="cl">		<span class="nx">want1</span> <span class="kt">string</span>
-</span></span><span class="line"><span class="cl">	<span class="p">}{</span>
-</span></span><span class="line"><span class="cl">		<span class="p">{</span>
-</span></span><span class="line"><span class="cl">			<span class="nx">name</span><span class="p">:</span>  <span class="s">&#34;apple&#34;</span><span class="p">,</span>
-</span></span><span class="line"><span class="cl">			<span class="nx">args</span><span class="p">:</span>  <span class="kd">struct</span><span class="p">{</span> <span class="nx">name</span> <span class="kt">string</span> <span class="p">}{</span><span class="nx">name</span><span class="p">:</span> <span class="s">&#34;apple&#34;</span><span class="p">},</span>
-</span></span><span class="line"><span class="cl">			<span class="nx">want</span><span class="p">:</span>  <span class="s">&#34;apple&#34;</span><span class="p">,</span>
-</span></span><span class="line"><span class="cl">			<span class="nx">want1</span><span class="p">:</span> <span class="s">&#34;apple&#34;</span><span class="p">,</span>
-</span></span><span class="line"><span class="cl">		<span class="p">},</span>
-</span></span><span class="line"><span class="cl">		<span class="p">{</span>
-</span></span><span class="line"><span class="cl">			<span class="nx">name</span><span class="p">:</span>  <span class="s">&#34;orange&#34;</span><span class="p">,</span>
-</span></span><span class="line"><span class="cl">			<span class="nx">args</span><span class="p">:</span>  <span class="kd">struct</span><span class="p">{</span> <span class="nx">name</span> <span class="kt">string</span> <span class="p">}{</span><span class="nx">name</span><span class="p">:</span> <span class="s">&#34;orange&#34;</span><span class="p">},</span>
-</span></span><span class="line"><span class="cl">			<span class="nx">want</span><span class="p">:</span>  <span class="s">&#34;orange&#34;</span><span class="p">,</span>
-</span></span><span class="line"><span class="cl">			<span class="nx">want1</span><span class="p">:</span> <span class="s">&#34;orange&#34;</span><span class="p">,</span>
-</span></span><span class="line"><span class="cl">		<span class="p">},</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">			<span class="nx">name</span><span class="p">:</span>  <span class="s">&#34;banana&#34;</span><span class="p">,</span>
-</span></span><span class="line"><span class="cl">			<span class="nx">args</span><span class="p">:</span>  <span class="kd">struct</span><span class="p">{</span> <span class="nx">name</span> <span class="kt">string</span> <span class="p">}{</span><span class="nx">name</span><span class="p">:</span> <span class="s">&#34;banana&#34;</span><span class="p">},</span>
-</span></span><span class="line"><span class="cl">			<span class="nx">want</span><span class="p">:</span>  <span class="s">&#34;banana&#34;</span><span class="p">,</span>
-</span></span><span class="line"><span class="cl">			<span class="nx">want1</span><span class="p">:</span> <span class="s">&#34;banana&#34;</span><span class="p">,</span>
-</span></span><span class="line"><span class="cl">		<span class="p">},</span>
-</span></span><span class="line"><span class="cl">	<span class="p">}</span>
-</span></span><span class="line"><span class="cl">	<span class="k">for</span> <span class="nx">_</span><span class="p">,</span> <span class="nx">tt</span> <span class="o">:=</span> <span class="k">range</span> <span class="nx">tests</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">		<span class="nx">t</span><span class="p">.</span><span class="nf">Run</span><span class="p">(</span><span class="nx">tt</span><span class="p">.</span><span class="nx">name</span><span class="p">,</span> <span class="kd">func</span><span class="p">(</span><span class="nx">t</span> <span class="o">*</span><span class="nx">testing</span><span class="p">.</span><span class="nx">T</span><span class="p">)</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">			<span class="nx">got</span><span class="p">,</span> <span class="nx">_</span> <span class="o">:=</span> <span class="nf">NewFruitFactory</span><span class="p">(</span><span class="nx">tt</span><span class="p">.</span><span class="nx">args</span><span class="p">.</span><span class="nx">name</span><span class="p">)</span>
-</span></span><span class="line"><span class="cl">			<span class="k">if</span> <span class="nx">got</span><span class="p">.</span><span class="nf">CreateFruit</span><span class="p">().</span><span class="nf">Type</span><span class="p">()</span> <span class="o">!=</span> <span class="nx">tt</span><span class="p">.</span><span class="nx">want1</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">				<span class="nx">t</span><span class="p">.</span><span class="nf">Errorf</span><span class="p">(</span><span class="s">&#34;NewFruitFactory() got = %v, want1 %v&#34;</span><span class="p">,</span> <span class="nx">got</span><span class="p">.</span><span class="nf">CreateFruit</span><span class="p">().</span><span class="nf">Type</span><span class="p">(),</span> <span class="nx">tt</span><span class="p">.</span><span class="nx">want1</span><span class="p">)</span>
-</span></span><span class="line"><span class="cl">			<span class="p">}</span>
-</span></span><span class="line"><span class="cl">			<span class="k">if</span> <span class="nx">got</span><span class="p">.</span><span class="nf">CreateFruit</span><span class="p">().</span><span class="nf">Name</span><span class="p">()</span> <span class="o">!=</span> <span class="nx">tt</span><span class="p">.</span><span class="nx">want</span> <span class="p">{</span>
-</span></span><span class="line"><span class="cl">				<span class="nx">t</span><span class="p">.</span><span class="nf">Errorf</span><span class="p">(</span><span class="s">&#34;NewFruitFactory() got = %v, want %v&#34;</span><span class="p">,</span> <span class="nx">got</span><span class="p">.</span><span class="nf">CreateFruit</span><span class="p">().</span><span class="nf">Type</span><span class="p">(),</span> <span class="nx">tt</span><span class="p">.</span><span class="nx">want</span><span class="p">)</span>
-</span></span><span class="line"><span class="cl">			<span class="p">}</span>
-</span></span><span class="line"><span class="cl">		<span class="p">})</span>
-</span></span><span class="line"><span class="cl">	<span class="p">}</span>
-</span></span><span class="line"><span class="cl"><span class="p">}</span>
-</span></span></code></pre></td></tr></table>
+<pre tabindex="0" class="chroma"><code class="language-go" data-lang="go"><span class="line"><span class="cl"><span class="kn">package</span><span class="w"> </span><span class="nx">factory_method</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="kn">import</span><span class="w"> </span><span class="p">(</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="s">&#34;testing&#34;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="kd">func</span><span class="w"> </span><span class="nf">TestNewFruitFactory</span><span class="p">(</span><span class="nx">t</span><span class="w"> </span><span class="o">*</span><span class="nx">testing</span><span class="p">.</span><span class="nx">T</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="kd">type</span><span class="w"> </span><span class="nx">args</span><span class="w"> </span><span class="kd">struct</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="nx">name</span><span class="w"> </span><span class="kt">string</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="nx">tests</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="p">[]</span><span class="kd">struct</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="nx">name</span><span class="w">  </span><span class="kt">string</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="nx">args</span><span class="w">  </span><span class="nx">args</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="nx">want</span><span class="w">  </span><span class="kt">string</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="nx">want1</span><span class="w"> </span><span class="kt">string</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="p">}{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">			</span><span class="nx">name</span><span class="p">:</span><span class="w">  </span><span class="s">&#34;apple&#34;</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">			</span><span class="nx">args</span><span class="p">:</span><span class="w">  </span><span class="kd">struct</span><span class="p">{</span><span class="w"> </span><span class="nx">name</span><span class="w"> </span><span class="kt">string</span><span class="w"> </span><span class="p">}{</span><span class="nx">name</span><span class="p">:</span><span class="w"> </span><span class="s">&#34;apple&#34;</span><span class="p">},</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">			</span><span class="nx">want</span><span class="p">:</span><span class="w">  </span><span class="s">&#34;apple&#34;</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">			</span><span class="nx">want1</span><span class="p">:</span><span class="w"> </span><span class="s">&#34;apple&#34;</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="p">},</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">			</span><span class="nx">name</span><span class="p">:</span><span class="w">  </span><span class="s">&#34;orange&#34;</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">			</span><span class="nx">args</span><span class="p">:</span><span class="w">  </span><span class="kd">struct</span><span class="p">{</span><span class="w"> </span><span class="nx">name</span><span class="w"> </span><span class="kt">string</span><span class="w"> </span><span class="p">}{</span><span class="nx">name</span><span class="p">:</span><span class="w"> </span><span class="s">&#34;orange&#34;</span><span class="p">},</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">			</span><span class="nx">want</span><span class="p">:</span><span class="w">  </span><span class="s">&#34;orange&#34;</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">			</span><span class="nx">want1</span><span class="p">:</span><span class="w"> </span><span class="s">&#34;orange&#34;</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="p">},</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">			</span><span class="nx">name</span><span class="p">:</span><span class="w">  </span><span class="s">&#34;banana&#34;</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">			</span><span class="nx">args</span><span class="p">:</span><span class="w">  </span><span class="kd">struct</span><span class="p">{</span><span class="w"> </span><span class="nx">name</span><span class="w"> </span><span class="kt">string</span><span class="w"> </span><span class="p">}{</span><span class="nx">name</span><span class="p">:</span><span class="w"> </span><span class="s">&#34;banana&#34;</span><span class="p">},</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">			</span><span class="nx">want</span><span class="p">:</span><span class="w">  </span><span class="s">&#34;banana&#34;</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">			</span><span class="nx">want1</span><span class="p">:</span><span class="w"> </span><span class="s">&#34;banana&#34;</span><span class="p">,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="p">},</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="k">for</span><span class="w"> </span><span class="nx">_</span><span class="p">,</span><span class="w"> </span><span class="nx">tt</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="k">range</span><span class="w"> </span><span class="nx">tests</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="nx">t</span><span class="p">.</span><span class="nf">Run</span><span class="p">(</span><span class="nx">tt</span><span class="p">.</span><span class="nx">name</span><span class="p">,</span><span class="w"> </span><span class="kd">func</span><span class="p">(</span><span class="nx">t</span><span class="w"> </span><span class="o">*</span><span class="nx">testing</span><span class="p">.</span><span class="nx">T</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">			</span><span class="nx">got</span><span class="p">,</span><span class="w"> </span><span class="nx">_</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nf">NewFruitFactory</span><span class="p">(</span><span class="nx">tt</span><span class="p">.</span><span class="nx">args</span><span class="p">.</span><span class="nx">name</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">			</span><span class="k">if</span><span class="w"> </span><span class="nx">got</span><span class="p">.</span><span class="nf">CreateFruit</span><span class="p">().</span><span class="nf">Type</span><span class="p">()</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="nx">tt</span><span class="p">.</span><span class="nx">want1</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">				</span><span class="nx">t</span><span class="p">.</span><span class="nf">Errorf</span><span class="p">(</span><span class="s">&#34;NewFruitFactory() got = %v, want1 %v&#34;</span><span class="p">,</span><span class="w"> </span><span class="nx">got</span><span class="p">.</span><span class="nf">CreateFruit</span><span class="p">().</span><span class="nf">Type</span><span class="p">(),</span><span class="w"> </span><span class="nx">tt</span><span class="p">.</span><span class="nx">want1</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">			</span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">			</span><span class="k">if</span><span class="w"> </span><span class="nx">got</span><span class="p">.</span><span class="nf">CreateFruit</span><span class="p">().</span><span class="nf">Name</span><span class="p">()</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="nx">tt</span><span class="p">.</span><span class="nx">want</span><span class="w"> </span><span class="p">{</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">				</span><span class="nx">t</span><span class="p">.</span><span class="nf">Errorf</span><span class="p">(</span><span class="s">&#34;NewFruitFactory() got = %v, want %v&#34;</span><span class="p">,</span><span class="w"> </span><span class="nx">got</span><span class="p">.</span><span class="nf">CreateFruit</span><span class="p">().</span><span class="nf">Type</span><span class="p">(),</span><span class="w"> </span><span class="nx">tt</span><span class="p">.</span><span class="nx">want</span><span class="p">)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">			</span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">		</span><span class="p">})</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">	</span><span class="p">}</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="p">}</span><span class="w">
+</span></span></span></code></pre></td></tr></table>
 </div>
 </div><p>优点：</p>
 <ul>
@@ -607,9 +614,9 @@
           <a href="/tags/go/">Go</a>
           </div>
       <nav class="post-nav">
-        <a class="prev" href="/post/k8s/%E4%BD%BF%E7%94%A8rbac%E9%89%B4%E6%9D%83/">
+        <a class="prev" href="/post/linux/ps1%E6%8F%90%E7%A4%BA%E7%AC%A6/">
             <i class="iconfont icon-left"></i>
-            <span class="prev-text nav-default">使用RBAC鉴权</span>
+            <span class="prev-text nav-default">PS1提示符</span>
             <span class="prev-text nav-mobile">Prev</span>
           </a>
         <a class="next" href="/post/bigdata/raft/">
@@ -765,7 +772,7 @@
   <span class="copyright-year">
     &copy; 
     2022 - 
-    2023<span class="heart"><i class="iconfont icon-heart"></i></span><span><a href="/">hlday</a></span>
+    2026<span class="heart"><i class="iconfont icon-heart"></i></span><span><a href="/">hlday</a></span>
   </span>
 </div>
 
@@ -782,7 +789,7 @@
 
 
 
-<script type="text/javascript" src="/js/main.min.bfb94e1fe4773651a6fe907d388ed08d7d6f9628a062d0740d992e1dfb49466e.js"></script>
+<script type="text/javascript" src="/js/main.min.d3d26fe720923eebdba72c7cb26eef946d17ef1a1a7a289857149666ace3dfec.js"></script>
   <script type="text/javascript">
     window.MathJax = {
       tex: {
@@ -791,6 +798,7 @@
     };
   </script>
   <script async src="https://cdn.jsdelivr.net/npm/mathjax@3.0.5/es5/tex-mml-chtml.js" integrity="sha256-HGLuEfFcsUJGhvB8cQ8nr0gai9EucOOaIxFw7qxmd+w=" crossorigin="anonymous"></script>
+
 
 
 

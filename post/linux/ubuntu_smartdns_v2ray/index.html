@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
+<head><script src="/livereload.js?mindelay=10&amp;v=2&amp;port=1313&amp;path=livereload" data-no-instant defer></script>
   <meta charset="utf-8">
   <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
   <title>在Ubuntu上安装v2ray和smartdns，并在客户端使用proxy上网 - HLDay</title>
@@ -31,10 +31,10 @@
   gtag('config', 'G-59Y2CYW544');
 </script>
 
-<meta name="generator" content="Hugo 0.93.2 with theme even" />
+<meta name="generator" content="Hugo 0.164.0 with theme even" />
 
 
-<link rel="canonical" href="/post/linux/ubuntu_smartdns_v2ray/" />
+<link rel="canonical" href="//localhost:1313/post/linux/ubuntu_smartdns_v2ray/" />
 <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
 <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
 <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
@@ -43,24 +43,30 @@
 
 <script async src="//busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
 
-<link href="/sass/main.min.b5a744db6de49a86cadafb3b70f555ab443f83c307a483402259e94726b045ff.css" rel="stylesheet">
+<link href="/sass/main.min.52d539dfadc86246e6ba9a98b4b3a7268cddea9db8ace7933730de9afef2c275.css" rel="stylesheet">
 
 
 
-<meta property="og:title" content="在Ubuntu上安装v2ray和smartdns，并在客户端使用proxy上网" />
-<meta property="og:description" content="在Ubuntu Server上安装V2ray客户端，并使用smartdns进行科学上网" />
-<meta property="og:type" content="article" />
-<meta property="og:url" content="/post/linux/ubuntu_smartdns_v2ray/" /><meta property="article:section" content="post" />
-<meta property="article:published_time" content="2022-12-21T22:35:08+08:00" />
-<meta property="article:modified_time" content="2022-12-21T22:35:08+08:00" />
+<meta property="og:url" content="//localhost:1313/post/linux/ubuntu_smartdns_v2ray/">
+	<meta property="og:site_name" content="HLDay">
+	<meta property="og:title" content="在Ubuntu上安装v2ray和smartdns，并在客户端使用proxy上网">
+	<meta property="og:description" content="在Ubuntu Server上安装V2ray客户端，并使用smartdns进行科学上网">
+	<meta property="og:locale" content="en">
+	<meta property="og:type" content="article">
+		<meta property="article:section" content="post">
+		<meta property="article:published_time" content="2022-12-21T22:35:08+08:00">
+		<meta property="article:modified_time" content="2022-12-21T22:35:08+08:00">
+		<meta property="article:tag" content="Linux">
 
-<meta itemprop="name" content="在Ubuntu上安装v2ray和smartdns，并在客户端使用proxy上网">
-<meta itemprop="description" content="在Ubuntu Server上安装V2ray客户端，并使用smartdns进行科学上网"><meta itemprop="datePublished" content="2022-12-21T22:35:08+08:00" />
-<meta itemprop="dateModified" content="2022-12-21T22:35:08+08:00" />
-<meta itemprop="wordCount" content="1321">
-<meta itemprop="keywords" content="linux," /><meta name="twitter:card" content="summary"/>
-<meta name="twitter:title" content="在Ubuntu上安装v2ray和smartdns，并在客户端使用proxy上网"/>
-<meta name="twitter:description" content="在Ubuntu Server上安装V2ray客户端，并使用smartdns进行科学上网"/>
+	<meta itemprop="name" content="在Ubuntu上安装v2ray和smartdns，并在客户端使用proxy上网">
+	<meta itemprop="description" content="在Ubuntu Server上安装V2ray客户端，并使用smartdns进行科学上网">
+	<meta itemprop="datePublished" content="2022-12-21T22:35:08+08:00">
+	<meta itemprop="dateModified" content="2022-12-21T22:35:08+08:00">
+	<meta itemprop="wordCount" content="1321">
+	<meta itemprop="keywords" content="Linux">
+	<meta name="twitter:card" content="summary">
+	<meta name="twitter:title" content="在Ubuntu上安装v2ray和smartdns，并在客户端使用proxy上网">
+	<meta name="twitter:description" content="在Ubuntu Server上安装V2ray客户端，并使用smartdns进行科学上网">
 
 <!--[if lte IE 9]>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
@@ -159,14 +165,14 @@
   <div class="post-toc-content always-active">
     <nav id="TableOfContents">
   <ul>
-    <li><a href="#v2ray安装httpswwwv2raycomchapter_00installhtml"><a href="https://www.v2ray.com/chapter_00/install.html">v2ray安装</a></a>
+    <li><a href="#v2ray安装">v2ray安装</a>
       <ul>
         <li><a href="#编辑配置文件">编辑配置文件</a></li>
         <li><a href="#编辑systemd文件">编辑systemd文件</a></li>
         <li><a href="#启动v2ray">启动v2ray</a></li>
       </ul>
     </li>
-    <li><a href="#smartdnshttpsgithubcompymumusmartdns"><a href="https://github.com/pymumu/smartdns">smartdns</a></a>
+    <li><a href="#smartdns">smartdns</a>
       <ul>
         <li><a href="#安装">安装</a></li>
         <li><a href="#配置">配置</a></li>
@@ -183,7 +189,7 @@
 <blockquote>
 <p>本文假设你已经安装了Ubuntu Server了</p>
 </blockquote>
-<h1 id="v2ray安装httpswwwv2raycomchapter_00installhtml"><a href="https://www.v2ray.com/chapter_00/install.html">v2ray安装</a></h1>
+<h1 id="v2ray安装"><a href="https://www.v2ray.com/chapter_00/install.html">v2ray安装</a></h1>
 <p>v2ray安装比较简单，直接去<a href="https://github.com/v2ray/v2ray-core/releases">github</a>上找一个版本下载即可
 <img src="https://ahsup.oss-cn-beijing.aliyuncs.com/20221221230158.png" alt="">
 然后将下载的文件scp到服务器并解压到一个目录中，假设解压的目录为<code>/usr/local/bin/v2ray</code>。</p>
@@ -461,7 +467,7 @@ systemd文件内容为：</p>
 </span></span><span class="line"><span class="cl">sudo systemctl start v2ray
 </span></span></code></pre></td></tr></table>
 </div>
-</div><h1 id="smartdnshttpsgithubcompymumusmartdns"><a href="https://github.com/pymumu/smartdns">smartdns</a></h1>
+</div><h1 id="smartdns"><a href="https://github.com/pymumu/smartdns">smartdns</a></h1>
 <p>官网介绍的是：</p>
 <blockquote>
 <p>SmartDNS 是一个运行在本地的 DNS 服务器，它接受来自本地客户端的 DNS 查询请求，然后从多个上游 DNS 服务器获取 DNS 查询结果，并将访问速度最快的结果返回给客户端，以此提高网络访问速度。 SmartDNS 同时支持指定特定域名 IP 地址，并高性匹配，可达到过滤广告的效果; 支持DOT(DNS over TLS)和DOH(DNS over HTTPS)，更好的保护隐私。 与 DNSmasq 的 all-servers 不同，SmartDNS 返回的是访问速度最快的解析结果。</p>
@@ -736,7 +742,7 @@ systemd文件内容为：</p>
   <span class="copyright-year">
     &copy; 
     2022 - 
-    2023<span class="heart"><i class="iconfont icon-heart"></i></span><span><a href="/">hlday</a></span>
+    2026<span class="heart"><i class="iconfont icon-heart"></i></span><span><a href="/">hlday</a></span>
   </span>
 </div>
 
@@ -753,7 +759,7 @@ systemd文件内容为：</p>
 
 
 
-<script type="text/javascript" src="/js/main.min.bfb94e1fe4773651a6fe907d388ed08d7d6f9628a062d0740d992e1dfb49466e.js"></script>
+<script type="text/javascript" src="/js/main.min.d3d26fe720923eebdba72c7cb26eef946d17ef1a1a7a289857149666ace3dfec.js"></script>
   <script type="text/javascript">
     window.MathJax = {
       tex: {
@@ -762,6 +768,7 @@ systemd文件内容为：</p>
     };
   </script>
   <script async src="https://cdn.jsdelivr.net/npm/mathjax@3.0.5/es5/tex-mml-chtml.js" integrity="sha256-HGLuEfFcsUJGhvB8cQ8nr0gai9EucOOaIxFw7qxmd+w=" crossorigin="anonymous"></script>
+
 
 
 

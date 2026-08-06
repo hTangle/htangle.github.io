@@ -31,7 +31,7 @@
   gtag('config', 'G-59Y2CYW544');
 </script>
 
-<meta name="generator" content="Hugo 0.93.2 with theme even" />
+<meta name="generator" content="Hugo 0.164.0 with theme even" />
 
 
 <link rel="canonical" href="/post/linux/shell/" />
@@ -43,24 +43,30 @@
 
 <script async src="//busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
 
-<link href="/sass/main.min.b5a744db6de49a86cadafb3b70f555ab443f83c307a483402259e94726b045ff.css" rel="stylesheet">
+<link href="/sass/main.min.52d539dfadc86246e6ba9a98b4b3a7268cddea9db8ace7933730de9afef2c275.css" rel="stylesheet">
 
 
 
-<meta property="og:title" content="Shell一些tips" />
-<meta property="og:description" content="使用shell过程中的一些tips" />
-<meta property="og:type" content="article" />
-<meta property="og:url" content="/post/linux/shell/" /><meta property="article:section" content="post" />
-<meta property="article:published_time" content="2023-01-10T15:38:00+08:00" />
-<meta property="article:modified_time" content="2023-01-10T15:38:00+08:00" />
+<meta property="og:url" content="/post/linux/shell/">
+	<meta property="og:site_name" content="HLDay">
+	<meta property="og:title" content="Shell一些tips">
+	<meta property="og:description" content="使用shell过程中的一些tips">
+	<meta property="og:locale" content="en">
+	<meta property="og:type" content="article">
+		<meta property="article:section" content="post">
+		<meta property="article:published_time" content="2023-01-10T15:38:00+08:00">
+		<meta property="article:modified_time" content="2023-01-10T15:38:00+08:00">
+		<meta property="article:tag" content="Linux">
 
-<meta itemprop="name" content="Shell一些tips">
-<meta itemprop="description" content="使用shell过程中的一些tips"><meta itemprop="datePublished" content="2023-01-10T15:38:00+08:00" />
-<meta itemprop="dateModified" content="2023-01-10T15:38:00+08:00" />
-<meta itemprop="wordCount" content="1058">
-<meta itemprop="keywords" content="linux," /><meta name="twitter:card" content="summary"/>
-<meta name="twitter:title" content="Shell一些tips"/>
-<meta name="twitter:description" content="使用shell过程中的一些tips"/>
+	<meta itemprop="name" content="Shell一些tips">
+	<meta itemprop="description" content="使用shell过程中的一些tips">
+	<meta itemprop="datePublished" content="2023-01-10T15:38:00+08:00">
+	<meta itemprop="dateModified" content="2023-01-10T15:38:00+08:00">
+	<meta itemprop="wordCount" content="1102">
+	<meta itemprop="keywords" content="Linux">
+	<meta name="twitter:card" content="summary">
+	<meta name="twitter:title" content="Shell一些tips">
+	<meta name="twitter:description" content="使用shell过程中的一些tips">
 
 <!--[if lte IE 9]>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
@@ -148,7 +154,7 @@
         <div class="post-category">
             <a href="/categories/linux/"> linux </a>
             </div>
-          <span class="more-meta"> 1058 words </span>
+          <span class="more-meta"> 1102 words </span>
           <span class="more-meta"> 3 mins read </span>
         <span id="busuanzi_container_page_pv" class="more-meta"> <span id="busuanzi_value_page_pv"><img src="/img/spinner.svg" alt="spinner.svg"/></span> times read </span>
       </div>
@@ -189,6 +195,11 @@
         <li><a href="#删除远程仓库文件不删除本地文件">删除远程仓库文件，不删除本地文件</a></li>
       </ul>
     </li>
+    <li><a href="#kubectl">kubectl</a>
+      <ul>
+        <li><a href="#手动运行一个cronjob">手动运行一个cronjob</a></li>
+      </ul>
+    </li>
   </ul>
 </nav>
   </div>
@@ -208,7 +219,7 @@
 </span></code></pre></td>
 <td class="lntd">
 <pre tabindex="0" class="chroma"><code class="language-shell" data-lang="shell"><span class="line"><span class="cl"><span class="cp">#!/bin/bash
-</span></span></span><span class="line"><span class="cl"><span class="cp"></span><span class="k">if</span> <span class="o">[</span> <span class="nv">$1</span> -gt <span class="nv">$2</span> <span class="o">]</span><span class="p">;</span><span class="k">then</span> 
+</span></span></span><span class="line"><span class="cl"><span class="k">if</span> <span class="o">[</span> <span class="nv">$1</span> -gt <span class="nv">$2</span> <span class="o">]</span><span class="p">;</span><span class="k">then</span> 
 </span></span><span class="line"><span class="cl">  <span class="nb">echo</span> <span class="s2">&#34;参数</span><span class="nv">$1</span><span class="s2">大于参数</span><span class="nv">$2</span><span class="s2">&#34;</span>
 </span></span><span class="line"><span class="cl"><span class="k">else</span> 
 </span></span><span class="line"><span class="cl">  <span class="nb">echo</span> <span class="s2">&#34;参数</span><span class="nv">$1</span><span class="s2">小于参数</span><span class="nv">$2</span><span class="s2">&#34;</span>
@@ -410,7 +421,7 @@
 <pre tabindex="0" class="chroma"><code><span class="lnt">1
 </span></code></pre></td>
 <td class="lntd">
-<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">sudo tail -f -n 200 /var/log/syslog|grep CRON
+<pre tabindex="0" class="chroma"><code class="language-gdscript3" data-lang="gdscript3"><span class="line"><span class="cl"><span class="n">sudo</span> <span class="n">tail</span> <span class="o">-</span><span class="n">f</span> <span class="o">-</span><span class="n">n</span> <span class="mi">200</span> <span class="o">/</span><span class="k">var</span><span class="o">/</span><span class="nb">log</span><span class="o">/</span><span class="n">syslog</span><span class="o">|</span><span class="n">grep</span> <span class="n">CRON</span>
 </span></span></code></pre></td></tr></table>
 </div>
 </div><h1 id="ansible">ansible</h1>
@@ -453,7 +464,7 @@
 </span></span></span><span class="line"><span class="cl"><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">    </span>- <span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l">exec run</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">      </span><span class="nt">shell</span><span class="p">:</span><span class="w"> </span><span class="p">|</span><span class="sd">
-</span></span></span><span class="line"><span class="cl"><span class="sd">        </span><span class="w">        </span><span class="l">docker run</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="sd">        docker run</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">      </span><span class="nt">when</span><span class="p">:</span><span class="w"> </span><span class="l">healthz.rc != 0</span><span class="w">
 </span></span></span></code></pre></td></tr></table>
 </div>
@@ -469,6 +480,16 @@
 <pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">git rm -r --cached 文件/文件夹名称
 </span></span><span class="line"><span class="cl">git commit -m &#34;提交说明&#34;
 </span></span><span class="line"><span class="cl">git push origin master
+</span></span></code></pre></td></tr></table>
+</div>
+</div><h1 id="kubectl">kubectl</h1>
+<h2 id="手动运行一个cronjob">手动运行一个cronjob</h2>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-fallback" data-lang="fallback"><span class="line"><span class="cl">kubectl create job --from=cronjob/&lt;name of cronjob&gt; &lt;name of job&gt;
 </span></span></code></pre></td></tr></table>
 </div>
 </div>
@@ -499,8 +520,8 @@
             <span class="prev-text nav-default">GO使用io.TeeReader显示下载进度</span>
             <span class="prev-text nav-mobile">Prev</span>
           </a>
-        <a class="next" href="/post/linux/ubuntu_smartdns_v2ray/">
-            <span class="next-text nav-default">在Ubuntu上安装v2ray和smartdns，并在客户端使用proxy上网</span>
+        <a class="next" href="/post/bing/">
+            <span class="next-text nav-default">必应每日一图api接口</span>
             <span class="next-text nav-mobile">Next</span>
             <i class="iconfont icon-right"></i>
           </a>
@@ -652,7 +673,7 @@
   <span class="copyright-year">
     &copy; 
     2022 - 
-    2023<span class="heart"><i class="iconfont icon-heart"></i></span><span><a href="/">hlday</a></span>
+    2026<span class="heart"><i class="iconfont icon-heart"></i></span><span><a href="/">hlday</a></span>
   </span>
 </div>
 
@@ -669,7 +690,7 @@
 
 
 
-<script type="text/javascript" src="/js/main.min.bfb94e1fe4773651a6fe907d388ed08d7d6f9628a062d0740d992e1dfb49466e.js"></script>
+<script type="text/javascript" src="/js/main.min.d3d26fe720923eebdba72c7cb26eef946d17ef1a1a7a289857149666ace3dfec.js"></script>
   <script type="text/javascript">
     window.MathJax = {
       tex: {
@@ -678,6 +699,7 @@
     };
   </script>
   <script async src="https://cdn.jsdelivr.net/npm/mathjax@3.0.5/es5/tex-mml-chtml.js" integrity="sha256-HGLuEfFcsUJGhvB8cQ8nr0gai9EucOOaIxFw7qxmd+w=" crossorigin="anonymous"></script>
+
 
 
 
