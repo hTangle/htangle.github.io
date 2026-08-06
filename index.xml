@@ -10,9 +10,23 @@
 		
 		
 		
-			<lastBuildDate>Thu, 06 Aug 2026 11:00:00 +0800</lastBuildDate>
+			<lastBuildDate>Thu, 06 Aug 2026 13:00:00 +0800</lastBuildDate>
 		
 			<atom:link href="/index.xml" rel="self" type="application/rss+xml" />
+			<item>
+				<title>GMP 调度器：Go 1.26.5 源码分析</title>
+				<link>/post/golang/gmp-source-analysis/</link>
+				<pubDate>Thu, 06 Aug 2026 13:00:00 +0800</pubDate>
+				<guid>/post/golang/gmp-source-analysis/</guid>
+				<description>Go 1.26.5 GMP 调度器源码分析：G/M/P 结构、schedt、runq、findrunnable、sysmon</description>
+			</item>
+			<item>
+				<title>Context：Go 1.26.5 源码分析</title>
+				<link>/post/golang/context-source-analysis/</link>
+				<pubDate>Thu, 06 Aug 2026 12:00:00 +0800</pubDate>
+				<guid>/post/golang/context-source-analysis/</guid>
+				<description>Go 1.26.5 Context 源码分析：value 树、cancel/timeout、Done Channel 关闭唤醒</description>
+			</item>
 			<item>
 				<title>Channel：Go 1.26.5 源码分析</title>
 				<link>/post/golang/channel-source-analysis/</link>

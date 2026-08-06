@@ -1,0 +1,894 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>GMP 调度器：Go 1.26.5 源码分析 - HLDay</title>
+  <meta name="renderer" content="webkit" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+<meta name="theme-color" content="#f8f5ec" />
+<meta name="msapplication-navbutton-color" content="#f8f5ec">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="#f8f5ec">
+
+
+<meta name="author" content="hlday" /><meta name="description" content="Go 1.26.5 GMP 调度器源码分析：G/M/P 结构、schedt、runq、findrunnable、sysmon" /><meta name="keywords" content="hlday, blog, go, python, linux, shell" />
+
+
+
+
+
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-59Y2CYW544"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-59Y2CYW544');
+</script>
+
+<meta name="generator" content="Hugo 0.164.0 with theme even" />
+
+
+<link rel="canonical" href="/post/golang/gmp-source-analysis/" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
+
+<script async src="//busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+
+<link href="/sass/main.min.52d539dfadc86246e6ba9a98b4b3a7268cddea9db8ace7933730de9afef2c275.css" rel="stylesheet">
+
+
+
+<meta property="og:url" content="/post/golang/gmp-source-analysis/">
+	<meta property="og:site_name" content="HLDay">
+	<meta property="og:title" content="GMP 调度器：Go 1.26.5 源码分析">
+	<meta property="og:description" content="Go 1.26.5 GMP 调度器源码分析：G/M/P 结构、schedt、runq、findrunnable、sysmon">
+	<meta property="og:locale" content="en">
+	<meta property="og:type" content="article">
+		<meta property="article:section" content="post">
+		<meta property="article:published_time" content="2026-08-06T13:00:00+08:00">
+		<meta property="article:modified_time" content="2026-08-06T13:00:00+08:00">
+		<meta property="article:tag" content="Go">
+		<meta property="article:tag" content="并发编程">
+		<meta property="article:tag" content="GMP">
+		<meta property="article:tag" content="Scheduler">
+		<meta property="article:tag" content="Runtime">
+		<meta property="article:tag" content="源码分析">
+
+	<meta itemprop="name" content="GMP 调度器：Go 1.26.5 源码分析">
+	<meta itemprop="description" content="Go 1.26.5 GMP 调度器源码分析：G/M/P 结构、schedt、runq、findrunnable、sysmon">
+	<meta itemprop="datePublished" content="2026-08-06T13:00:00+08:00">
+	<meta itemprop="dateModified" content="2026-08-06T13:00:00+08:00">
+	<meta itemprop="wordCount" content="5980">
+	<meta itemprop="keywords" content="Go,并发编程,GMP,Scheduler,Runtime,源码分析">
+	<meta name="twitter:card" content="summary">
+	<meta name="twitter:title" content="GMP 调度器：Go 1.26.5 源码分析">
+	<meta name="twitter:description" content="Go 1.26.5 GMP 调度器源码分析：G/M/P 结构、schedt、runq、findrunnable、sysmon">
+
+<!--[if lte IE 9]>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/classlist/1.1.20170427/classList.min.js"></script>
+<![endif]-->
+
+<!--[if lt IE 9]>
+  <script src="https://cdn.jsdelivr.net/npm/html5shiv@3.7.3/dist/html5shiv.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/respond.js@1.4.2/dest/respond.min.js"></script>
+<![endif]-->
+
+</head>
+<body>
+  <div id="mobile-navbar" class="mobile-navbar">
+  <div class="mobile-header-logo">
+    <a href="/" class="logo">HLDay</a>
+  </div>
+  <div class="mobile-navbar-icon">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+</div>
+<nav id="mobile-menu" class="mobile-menu slideout-menu">
+  <ul class="mobile-menu-list">
+    <a href="/">
+        <li class="mobile-menu-item">Home</li>
+      </a><a href="/post/">
+        <li class="mobile-menu-item">Archives</li>
+      </a><a href="/tags/">
+        <li class="mobile-menu-item">Tags</li>
+      </a><a href="/categories/">
+        <li class="mobile-menu-item">Categories</li>
+      </a><a href="/image/bing">
+        <li class="mobile-menu-item">BingDailyPicture</li>
+      </a><a href="/post/preview/">
+        <li class="mobile-menu-item">Share</li>
+      </a>
+  </ul>
+
+  
+
+
+</nav>
+
+  <div class="container" id="mobile-panel" style="max-width: 75%; width: 70% !important;">
+    <header id="header" class="header">
+        <div class="logo-wrapper">
+  <a href="/" class="logo">HLDay</a>
+</div>
+
+
+
+
+
+<nav class="site-navbar">
+  <ul id="menu" class="menu">
+    <li class="menu-item">
+        <a class="menu-item-link" href="/">Home</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/">Archives</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/tags/">Tags</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/categories/">Categories</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/image/bing">BingDailyPicture</a>
+      </li><li class="menu-item">
+        <a class="menu-item-link" href="/post/preview/">Share</a>
+      </li>
+  </ul>
+</nav>
+
+    </header>
+
+    <main id="main" class="main">
+      <div class="content-wrapper">
+        <div id="content" class="content">
+          <article class="post">
+    
+    <header class="post-header">
+      <h1 class="post-title">GMP 调度器：Go 1.26.5 源码分析</h1>
+
+      <div class="post-meta">
+        <span class="post-time"> 2026-08-06 </span>
+        <div class="post-category">
+            <a href="/categories/go/"> go </a>
+            </div>
+          <span class="more-meta"> 5980 words </span>
+          <span class="more-meta"> 12 mins read </span>
+        <span id="busuanzi_container_page_pv" class="more-meta"> <span id="busuanzi_value_page_pv"><img src="/img/spinner.svg" alt="spinner.svg"/></span> times read </span>
+      </div>
+    </header>
+
+    <div class="post-toc" id="post-toc" style="position: fixed !important;width:14%;top:10%;right: 1% !important;">
+  <h2 class="post-toc-title">Contents</h2>
+  <div class="post-toc-content always-active">
+    <nav id="TableOfContents">
+  <ul>
+    <li>
+      <ul>
+        <li><a href="#当前版本需要关注的变化">当前版本需要关注的变化</a></li>
+        <li><a href="#源码地图">源码地图</a></li>
+      </ul>
+    </li>
+    <li><a href="#gmp-分别是什么">G、M、P 分别是什么</a>
+      <ul>
+        <li><a href="#ggoroutine-的运行时描述">G：goroutine 的运行时描述</a></li>
+        <li><a href="#m操作系统线程">M：操作系统线程</a></li>
+        <li><a href="#p执行权与每-p-资源">P：执行权与每 P 资源</a></li>
+      </ul>
+    </li>
+    <li><a href="#三者如何组合">三者如何组合</a></li>
+    <li><a href="#g-的状态机">G 的状态机</a></li>
+    <li><a href="#调度器初始化">调度器初始化</a></li>
+    <li><a href="#创建-goroutine从-go-f-到-_grunnable">创建 goroutine：从 <code>go f()</code> 到 <code>_Grunnable</code></a></li>
+    <li><a href="#运行队列局部性全局公平与-work-stealing">运行队列：局部性、全局公平与 work stealing</a>
+      <ul>
+        <li><a href="#队列层次">队列层次</a></li>
+        <li><a href="#work-stealing">Work stealing</a></li>
+      </ul>
+    </li>
+    <li><a href="#调度循环schedule--findrunnable--execute">调度循环：<code>schedule → findRunnable → execute</code></a></li>
+    <li><a href="#阻塞与唤醒为什么-g-阻塞不等于线程阻塞">阻塞与唤醒：为什么 G 阻塞不等于线程阻塞</a></li>
+    <li><a href="#系统调用m-可以被占住p-必须继续流动">系统调用：M 可以被占住，P 必须继续流动</a></li>
+    <li><a href="#网络轮询器少量线程等待大量-fd">网络轮询器：少量线程等待大量 fd</a></li>
+    <li><a href="#抢占协作安全点与异步安全点">抢占：协作安全点与异步安全点</a></li>
+    <li><a href="#sysmon没有-p-的后台监督线程">sysmon：没有 P 的后台监督线程</a></li>
+    <li><a href="#spinning-m避免频繁休眠与惊群">Spinning M：避免频繁休眠与惊群</a></li>
+    <li><a href="#gomaxprocs-与容器-cpu-配额"><code>GOMAXPROCS</code> 与容器 CPU 配额</a></li>
+    <li><a href="#lockosthreadg-与-m-的例外绑定"><code>LockOSThread</code>：G 与 M 的例外绑定</a></li>
+    <li><a href="#调度器不保证什么">调度器不保证什么</a></li>
+    <li><a href="#诊断调度问题">诊断调度问题</a>
+      <ul>
+        <li><a href="#schedtrace"><code>schedtrace</code></a></li>
+        <li><a href="#执行-trace">执行 trace</a></li>
+        <li><a href="#pprof">pprof</a></li>
+      </ul>
+    </li>
+    <li><a href="#从业务代码看调度器">从业务代码看调度器</a></li>
+    <li><a href="#总结">总结</a></li>
+    <li><a href="#参考资料">参考资料</a></li>
+  </ul>
+</nav>
+  </div>
+</div>
+    <div class="post-content">
+      <p>Go 调度器解决的核心问题是：如何用较少的操作系统线程运行数量巨大的 goroutine，同时在阻塞、系统调用、网络 I/O、抢占和 GC 之间维持吞吐与延迟。G、M、P 不是三个抽象首字母，而是 runtime 中真实存在、长期复用的数据结构。</p>
+<div class="mermaid">flowchart LR
+    G1["G：goroutine"] --> P1["P：执行 Go 代码的许可与本地资源"]
+    P1 --> M1["M：OS thread"]
+    M1 --> CPU["CPU"]
+    P1 --> Q["local runq / runnext"]
+    S["全局调度器"] --> P1
+    NP["netpoll"] --> P1
+    TM["timers"] --> P1</div><blockquote>
+<p>[!info] 版本与源码基线
+本文以 <strong>Go 1.26.5</strong> 为基准，源码链接固定到提交 <code>c19862e5f8415b4f24b189d065ed739517c548ba</code>。旧笔记 GMP 仅作历史参考，当前实现以 runtime 源码为准。</p>
+</blockquote>
+<h2 id="当前版本需要关注的变化">当前版本需要关注的变化</h2>
+<table>
+	<thead>
+			<tr>
+					<th>版本</th>
+					<th>调度/runtime 相关变化</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>Go 1.1</td>
+					<td>引入以 P 和 work stealing 为核心的新调度器</td>
+			</tr>
+			<tr>
+					<td>Go 1.14</td>
+					<td>基于信号的异步抢占投入使用，纯计算循环也能被抢占</td>
+			</tr>
+			<tr>
+					<td>Go 1.21</td>
+					<td>P 本地队列、netpoll、timer 等框架持续演进，GMP 基本模型保持稳定</td>
+			</tr>
+			<tr>
+					<td>Go 1.25</td>
+					<td>默认 <code>GOMAXPROCS</code> 具备容器 CPU 配额感知，并可由 sysmon 周期性更新</td>
+			</tr>
+			<tr>
+					<td>Go 1.26</td>
+					<td>Green Tea GC 默认启用；新增实验性 <code>goroutineleak</code> profile，可发现一类永久阻塞的 G</td>
+			</tr>
+	</tbody>
+</table>
+<blockquote>
+<p>[!note] GC 不是调度器，但两者高度耦合
+P 持有分配缓存与 GC worker 状态，调度循环会优先运行 GC worker；STW、抢占和栈扫描也都需要调度器配合。因此理解 GMP 时不能完全绕开 GC。</p>
+</blockquote>
+<h2 id="源码地图">源码地图</h2>
+<table>
+	<thead>
+			<tr>
+					<th>内容</th>
+					<th>Go 1.26.5 源码</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>runtime 对 G/M/P 的官方说明</td>
+					<td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/HACKING.md#L6-L42"><code>runtime/HACKING.md#L6-L42</code></a></td>
+			</tr>
+			<tr>
+					<td>G、M、P 状态常量</td>
+					<td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/runtime2.go#L17-L170"><code>runtime2.go#L17-L170</code></a></td>
+			</tr>
+			<tr>
+					<td><code>g</code></td>
+					<td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/runtime2.go#L473-L617"><code>runtime2.go#L473-L617</code></a></td>
+			</tr>
+			<tr>
+					<td><code>m</code></td>
+					<td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/runtime2.go#L618-L771"><code>runtime2.go#L618-L771</code></a></td>
+			</tr>
+			<tr>
+					<td><code>p</code></td>
+					<td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/runtime2.go#L772-L929"><code>runtime2.go#L772-L929</code></a></td>
+			</tr>
+			<tr>
+					<td>全局调度状态 <code>schedt</code></td>
+					<td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/runtime2.go#L930-L1054"><code>runtime2.go#L930-L1054</code></a></td>
+			</tr>
+			<tr>
+					<td>调度器初始化</td>
+					<td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/proc.go#L831-L970"><code>schedinit</code></a>、<a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/proc.go#L6030-L6205"><code>procresize</code></a></td>
+			</tr>
+			<tr>
+					<td>创建 goroutine</td>
+					<td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/proc.go#L5295-L5413"><code>newproc/newproc1</code></a></td>
+			</tr>
+			<tr>
+					<td>调度循环</td>
+					<td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/proc.go#L4135-L4251"><code>schedule</code></a></td>
+			</tr>
+			<tr>
+					<td>寻找可运行 G</td>
+					<td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/proc.go#L3389-L4019"><code>findRunnable</code></a></td>
+			</tr>
+			<tr>
+					<td>切换并执行 G</td>
+					<td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/proc.go#L3331-L3387"><code>execute</code></a></td>
+			</tr>
+			<tr>
+					<td>本地/全局运行队列</td>
+					<td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/proc.go#L7244-L7747"><code>proc.go#L7244-L7747</code></a></td>
+			</tr>
+			<tr>
+					<td>sysmon 与抢占/回收 P</td>
+					<td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/proc.go#L6486-L6725"><code>sysmon/retake</code></a></td>
+			</tr>
+			<tr>
+					<td>抢占设计</td>
+					<td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/preempt.go#L5-L51"><code>preempt.go#L5-L51</code></a></td>
+			</tr>
+			<tr>
+					<td>系统调用进出</td>
+					<td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/proc.go#L4737-L5100"><code>proc.go#L4737-L5100</code></a></td>
+			</tr>
+	</tbody>
+</table>
+<h1 id="gmp-分别是什么">G、M、P 分别是什么</h1>
+<h2 id="ggoroutine-的运行时描述">G：goroutine 的运行时描述</h2>
+<p><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/runtime2.go#L473-L617"><code>g</code></a> 不等于“函数”。它保存一个 goroutine 从创建到退出所需的运行状态：</p>
+<div class="mermaid">flowchart TB
+    G["g"] --> ST["stack：动态用户栈范围"]
+    G --> GU["stackguard0/1：栈增长与抢占检查"]
+    G --> SC["sched gobuf：SP / PC / BP 等上下文"]
+    G --> A["atomicstatus：_Grunnable/_Grunning/... "]
+    G --> M["m：当前承载它的线程"]
+    G --> W["waiting：阻塞原语对应 sudog"]
+    G --> P["preempt / preemptStop / asyncSafePoint"]
+    G --> ID["goid / startpc / waitreason"]</div><p>G 对象会复用：goroutine 退出后，其 <code>g</code> 进入空闲池，未来可代表另一个 goroutine。G 的用户栈起始很小，按需增长或收缩；运行时还会扫描它来寻找 GC root。</p>
+<h2 id="m操作系统线程">M：操作系统线程</h2>
+<p><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/runtime2.go#L618-L771"><code>m</code></a> 是 machine，即 OS thread 的 runtime 表示：</p>
+<div class="mermaid">flowchart TB
+    M["m"] --> G0["g0：系统栈上的 runtime 工作"]
+    M --> GS["gsignal：信号处理栈"]
+    M --> C["curg：当前用户 G"]
+    M --> P["p / nextp / oldp"]
+    M --> L["lockedg / lockedm：LockOSThread"]
+    M --> SP["spinning：正在寻找工作"]
+    M --> B["blocked / locks / preemptoff"]</div><p>M 可以没有 P，例如阻塞在系统调用、执行 cgo 或处于空闲线程池。M 的数量不等于 <code>GOMAXPROCS</code>；大量系统调用可以让 runtime 创建更多 M，但只有拿到 P 的 M 才能执行普通 Go 代码。</p>
+<h2 id="p执行权与每-p-资源">P：执行权与每 P 资源</h2>
+<p><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/runtime2.go#L772-L929"><code>p</code></a> 是 processor。它不是 CPU 核心，也不是线程，而是执行用户 Go 代码所需的许可和一组分片资源：</p>
+<div class="mermaid">flowchart TB
+    P["p"] --> ID["id / status / m"]
+    P --> RN["runnext：高局部性的下一个 G"]
+    P --> RQ["runq[256]：本地可运行队列"]
+    P --> MC["mcache：每 P 分配缓存"]
+    P --> TM["timers：每 P timer heap"]
+    P --> GC["gcBgMarkWorker / gcAssistTime"]
+    P --> SG["sudogcache / deferpool 等缓存"]</div><p>P 的数量等于当前 <code>GOMAXPROCS</code>。把常用调度、分配和 timer 状态放在 P 上，可以让多数操作使用本地分片，减少全局锁竞争。</p>
+<h1 id="三者如何组合">三者如何组合</h1>
+<div class="mermaid">sequenceDiagram
+    participant G as Runnable G
+    participant P as P
+    participant M as M / OS Thread
+    P->>P: 从 runnext/runq 取 G
+    P->>M: M 持有 P
+    M->>G: execute，切到 G 用户栈
+    G->>G: 执行 Go 代码
+    G-->>M: 阻塞、抢占、退出或主动让出
+    M->>P: 回到 schedule 寻找下一个 G</div><p>可以把关系简化为：</p>
+<ul>
+<li>G 提供“要运行什么”。</li>
+<li>M 提供“在哪里运行”，即 OS 执行上下文。</li>
+<li>P 提供“运行 Go 代码的权利和本地资源”。</li>
+<li>调度器持续匹配三者，而不是把 G 永久绑定给某个 M 或 P。</li>
+</ul>
+<blockquote>
+<p>[!warning] 常见误解
+<code>GOMAXPROCS=1</code> 不是只有一个 M，也不是程序没有并发；它只限制同时执行普通 Go 代码的 P 数量为 1。阻塞系统调用、runtime 线程和 cgo 仍可能存在多个 M。</p>
+</blockquote>
+<h1 id="g-的状态机">G 的状态机</h1>
+<p>主要状态定义在 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/runtime2.go#L17-L120"><code>runtime2.go</code></a>：</p>
+<div class="mermaid">stateDiagram-v2
+    [*] --> _Gidle
+    _Gidle --> _Grunnable: newproc 初始化完成
+    _Grunnable --> _Grunning: execute
+    _Grunning --> _Gwaiting: gopark / Channel / Mutex / timer / netpoll
+    _Gwaiting --> _Grunnable: ready / goready
+    _Grunning --> _Gsyscall: entersyscall
+    _Gsyscall --> _Grunnable: exitsyscall 未立即拿到 P
+    _Gsyscall --> _Grunning: exitsyscall 重新获得 P
+    _Grunning --> _Gpreempted: 异步安全点暂停
+    _Gpreempted --> _Grunnable: resume/ready
+    _Grunning --> _Gdead: goexit
+    _Gdead --> _Gidle: 复用前准备</div><p><code>_Gscan</code> 是叠加在基础状态上的 GC 扫描位，不是普通独立生命周期状态。状态迁移必须通过 runtime 的原子/CAS 辅助函数完成，调度器、GC 和栈复制都依赖这些不变量。</p>
+<h1 id="调度器初始化">调度器初始化</h1>
+<p>程序启动会先在系统栈执行 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/proc.go#L831-L970"><code>schedinit</code></a>，初始化锁、栈、内存分配器、GC、CPU 特征、随机数、P 等 runtime 子系统。</p>
+<div class="mermaid">flowchart TD
+    A["runtime 启动"] --> M0["建立 m0 / g0"]
+    M0 --> S["schedinit"]
+    S --> G["读取 GODEBUG / CPU / 内存 / GC 配置"]
+    G --> N["计算初始 GOMAXPROCS"]
+    N --> P["procresize：创建/调整 allp"]
+    P --> R["创建 main goroutine"]
+    R --> W["启动世界，进入调度"]
+    W --> U["runtime.main -> 用户 main.main"]</div><p><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/proc.go#L6030-L6205"><code>procresize</code></a> 必须在 STW 下调整 P 数量，初始化新增 P 的本地资源，并把不再使用 P 上的 runnable G 迁移到可继续调度的位置。</p>
+<h1 id="创建-goroutine从-go-f-到-_grunnable">创建 goroutine：从 <code>go f()</code> 到 <code>_Grunnable</code></h1>
+<p>编译器把 <code>go f(args)</code> 变成对 runtime 创建入口的调用；当前主体是 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/proc.go#L5295-L5413"><code>newproc/newproc1</code></a>：</p>
+<div class="mermaid">flowchart TD
+    A["go f()"] --> N["newproc"]
+    N --> SS["systemstack(newproc1)"]
+    SS --> C{"P 的 gFree 有可复用 G?"}
+    C -->|是| R["复用 _Gdead 的 g"]
+    C -->|否| G["分配 g 与初始用户栈"]
+    R --> I["初始化 sched.pc/sp、startpc、goid"]
+    G --> I
+    I --> ST["状态 _Gdead -> _Grunnable"]
+    ST --> Q["runqput 到当前 P"]
+    Q --> W["必要时 wakep 启动/唤醒 M"]</div><p>新 G 的初始 PC 被安排到 <code>goexit</code> 包装后的入口，使用户函数返回后必然进入 runtime 的 goroutine 退出清理。创建 goroutine 不等于马上新建 OS 线程；通常只是分配/复用 G 并把它放入当前 P 的本地队列。</p>
+<h1 id="运行队列局部性全局公平与-work-stealing">运行队列：局部性、全局公平与 work stealing</h1>
+<h2 id="队列层次">队列层次</h2>
+<div class="mermaid">flowchart LR
+    RN["P.runnext<br/>1 个高优先局部槽"] --> M["M 当前优先获取"]
+    LQ["P.runq[256]<br/>本地无锁环形队列"] --> M
+    GQ["sched.runq<br/>全局队列"] --> M
+    NP["netpoll 就绪 G"] --> M
+    T["timer 就绪 G"] --> M
+    V["其他 P.runq"] -->|steal 约一半| LQ</div><ul>
+<li><code>runnext</code> 适合刚刚被当前 G 唤醒、很可能共享缓存的 G；它继承当前时间片。</li>
+<li>本地 <code>runq</code> 容量 256，owner P 从头取、尾部写；窃取者通过原子操作从头部批量取得。</li>
+<li>本地队列满时，<a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/proc.go#L7522-L7560"><code>runqputslow</code></a> 把约一半旧任务加上新任务批量放到全局队列。</li>
+<li>全局队列由 <code>sched.lock</code> 保护；取任务时会按 <code>runqsize/gomaxprocs+1</code> 批量分给本地 P，见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/proc.go#L7291-L7309"><code>globrunqgetbatch</code></a>。</li>
+</ul>
+<h2 id="work-stealing">Work stealing</h2>
+<p>空闲 P 不会立刻休眠；<a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/proc.go#L3389-L4019"><code>findRunnable</code></a> 会综合检查本地/全局队列、GC worker、timer、netpoll，并尝试从其他 P 窃取工作。</p>
+<p><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/proc.go#L7662-L7747"><code>runqsteal</code></a> 通常窃取 victim P 可运行队列的大约一半，把多数任务留在自己的本地队列并返回一个立即执行：</p>
+<div class="mermaid">flowchart LR
+    V["Victim P<br/>G1 G2 G3 G4 G5 G6"] -->|steal half| T["Thief P<br/>G1 G2 G3"]
+    V --> K["Victim 保留<br/>G4 G5 G6"]
+    T --> E["返回一个 G 执行，其余进入 thief.runq"]</div><p>窃取一半是在负载均衡开销与缓存局部性之间折中；如果每次只偷一个，空闲 P 会频繁扫描。</p>
+<h1 id="调度循环schedule--findrunnable--execute">调度循环：<code>schedule → findRunnable → execute</code></h1>
+<p><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/proc.go#L4135-L4251"><code>schedule</code></a> 运行在 M 的 g0 系统栈上：</p>
+<div class="mermaid">flowchart TD
+    S["schedule"] --> K{"M 锁定某个 G?"}
+    K -->|是| LG["执行 lockedg"]
+    K -->|否| F["findRunnable"]
+    F --> R{"找到 G?"}
+    R -->|否且无工作| P["停止 M / 归还 P / 等待唤醒"]
+    R -->|是| X["execute(gp)"]
+    X --> B["绑定 gp.m、切 _Grunnable->_Grunning"]
+    B --> G["gogo：恢复用户 SP/PC"]
+    G --> Y["G 运行，直到阻塞/抢占/退出/让出"]
+    Y --> S</div><p><code>execute</code> 会把 G 绑定到 M、更新状态和时间片，再通过 <code>gogo</code> 恢复 <code>g.sched</code> 中保存的寄存器上下文。调度器不是普通 Go 函数之间递归调用，而是在用户栈和 g0 系统栈之间切换。</p>
+<h1 id="阻塞与唤醒为什么-g-阻塞不等于线程阻塞">阻塞与唤醒：为什么 G 阻塞不等于线程阻塞</h1>
+<p>Channel、Mutex、Cond、timer 等 runtime 可感知的阻塞会走 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/proc.go#L445-L469"><code>gopark</code></a>：</p>
+<div class="mermaid">sequenceDiagram
+    participant G as 当前 G
+    participant M as M/g0
+    participant P as P
+    participant Q as 等待队列
+    G->>Q: 登记 sudog/等待原因
+    G->>M: gopark -> mcall(park_m)
+    M->>G: _Grunning -> _Gwaiting
+    M->>P: schedule 另一个 runnable G
+    Q-->>M: 条件满足，goready/ready
+    M->>G: _Gwaiting -> _Grunnable，入 runq
+    P->>G: 未来某次 execute</div><p><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/proc.go#L1120-L1165"><code>ready</code></a> 把 waiting G 改为 runnable 并入队；它不是直接让目标 G 在当前线程上继续执行。Channel 的完整阻塞链见 <a href="/post/golang/channel-source-analysis/">Channel（Go 1.26.5 源码分析）</a>。</p>
+<h1 id="系统调用m-可以被占住p-必须继续流动">系统调用：M 可以被占住，P 必须继续流动</h1>
+<p>系统调用可能让 OS thread 长时间阻塞。runtime 用 <code>_Gsyscall</code> / <code>_Psyscall</code> 记录它，并允许 P 被其他 M 接管：</p>
+<div class="mermaid">sequenceDiagram
+    participant G as G
+    participant M as M
+    participant P as P
+    participant S as sysmon/其他 M
+    G->>M: entersyscall
+    M->>G: G -> _Gsyscall
+    M->>P: P -> _Psyscall，保留快速返回线索
+    M->>M: 阻塞在内核
+    S->>P: 长系统调用时 retake P
+    P->>S: 交给其他 M 继续跑 Go 代码
+    M->>G: syscall 返回，exitsyscall
+    M->>P: 尝试拿回 oldp 或空闲 P
+    alt 获得 P
+        M->>G: _Grunning，继续
+    else 没有 P
+        M->>G: _Grunnable，放入队列
+    end</div><p>入口和返回路径见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/proc.go#L4737-L5100"><code>entersyscall/exitsyscall</code></a>。这解释了为什么 M 数量可能超过 P：被系统调用占住的 M 暂时不能执行其他 G，但它原来的 P 可以继续服务。</p>
+<h1 id="网络轮询器少量线程等待大量-fd">网络轮询器：少量线程等待大量 fd</h1>
+<p>网络 I/O 不会为每个连接长期占一条线程。runtime netpoller 把等待 fd 的 G 停在 poll descriptor 上，OS 多路复用器报告就绪后再把 G 变为 runnable：</p>
+<div class="mermaid">flowchart LR
+    G["G 调用 net.Read"] --> P["pollDesc 登记 waiter"]
+    P --> GP["gopark：Gwaiting"]
+    OS["epoll/kqueue/IOCP 等"] --> NP["runtime netpoll"]
+    NP --> R["netpollready"]
+    R --> Q["注入 runnable G"]
+    Q --> E["P/M execute"]</div><p>公共逻辑位于 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/netpoll.go#L218-L700"><code>runtime/netpoll.go</code></a>，平台文件负责具体 OS 接口。<code>findRunnable</code> 会用非阻塞 netpoll 检查就绪事件；所有 P 即将空闲时，也可由一个 M 阻塞在 netpoll 等待。</p>
+<h1 id="抢占协作安全点与异步安全点">抢占：协作安全点与异步安全点</h1>
+<p>Go 1.26 的抢占设计在 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/preempt.go#L5-L51"><code>preempt.go#L5-L51</code></a> 明确区分三类安全点：</p>
+<table>
+	<thead>
+			<tr>
+					<th>安全点</th>
+					<th>场景</th>
+					<th>做法</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>blocked safe-point</td>
+					<td>G 已阻塞、在同步原语或系统调用中</td>
+					<td>本来就不在执行用户代码</td>
+			</tr>
+			<tr>
+					<td>synchronous safe-point</td>
+					<td>函数序言检查栈边界</td>
+					<td>把 <code>stackguard0</code> 设为 <code>stackPreempt</code>，下次检查转入抢占</td>
+			</tr>
+			<tr>
+					<td>asynchronous safe-point</td>
+					<td>用户代码中的可安全暂停指令</td>
+					<td>向 M 发 OS 信号，修改上下文进入 <code>asyncPreempt</code></td>
+			</tr>
+	</tbody>
+</table>
+<div class="mermaid">flowchart TD
+    S["sysmon 发现 P 在同一时间片运行过久"] --> P["preemptone(pp)"]
+    P --> C["gp.preempt=true<br/>stackguard0=stackPreempt"]
+    C --> Q{"G 很快进入同步安全点?"}
+    Q -->|是| SP["函数序言/栈检查进入调度"]
+    Q -->|否且平台支持| M["preemptM：向 M 发信号"]
+    M --> A["信号上下文改到 asyncPreempt"]
+    A --> G["gopreempt_m，G 重新入 runnable"]</div><p><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/proc.go#L6626-L6671"><code>retake</code></a> 当前使用约 10ms 的 <code>forcePreemptNS</code> 判断同一调度时间片是否过长。10ms 不是 goroutine 保证执行时长，也不是固定轮询周期；调度仍受安全点、系统调用、GC、OS 调度和负载影响。</p>
+<h1 id="sysmon没有-p-的后台监督线程">sysmon：没有 P 的后台监督线程</h1>
+<p><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/proc.go#L6486-L6617"><code>sysmon</code></a> 不绑定 P，因此在所有 P 忙碌或陷入系统调用时仍能工作。它负责或参与：</p>
+<ul>
+<li>检查网络轮询器和长时间阻塞的系统调用。</li>
+<li><code>retake</code> 长时间处于 syscall 的 P。</li>
+<li>请求抢占运行过久的 G/时间片。</li>
+<li>触发周期 GC、调度 trace 等后台动作。</li>
+<li>Go 1.25+ 周期性检查默认 <code>GOMAXPROCS</code> 是否应随容器 CPU 配额变化。</li>
+</ul>
+<p>sysmon 的休眠间隔会动态调整，它不是持续忙轮询。</p>
+<h1 id="spinning-m避免频繁休眠与惊群">Spinning M：避免频繁休眠与惊群</h1>
+<p>当有 P 找不到工作时，runtime 允许少量 M 处于 spinning 状态继续寻找工作；如果全部立刻休眠，新 G 到来需要更昂贵的线程唤醒。反之，过多 spinning M 会浪费 CPU 并争抢同一批 P。</p>
+<div class="mermaid">flowchart TD
+    A["P 暂无本地任务"] --> S{"允许成为 spinning M?"}
+    S -->|是| W["检查全局队列/netpoll/timer/偷取"]
+    W -->|找到 G| R["resetspinning，确保还有搜索者"]
+    W -->|仍无工作| I["减少 nmspinning，重新检查后 idle"]
+    S -->|否| I
+    N["新 runnable G 到来"] --> P{"有 idle P 且无 spinning M?"}
+    P -->|是| K["wakep/startm"]</div><p>这套协议试图避免“先发布任务、后让最后一个搜索者休眠”之间的丢失唤醒，相关代码分散在 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/proc.go#L2992-L3259"><code>wakep/startm/stopm</code></a> 和 <code>findRunnable</code> 中。</p>
+<h1 id="gomaxprocs-与容器-cpu-配额"><code>GOMAXPROCS</code> 与容器 CPU 配额</h1>
+<p>P 的数量决定同一时刻最多有多少执行普通 Go 代码的执行上下文。Go 1.25 起，未被用户显式设置时，默认值会考虑逻辑 CPU、CPU affinity 和 Linux cgroup CPU 配额，并可动态更新。</p>
+<p><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/proc.go#L7122-L7150"><code>sysmonUpdateGOMAXPROCS</code></a> 的关键约束：</p>
+<ul>
+<li>如果程序显式调用 <code>runtime.GOMAXPROCS</code> 或显式配置，runtime 不自动覆盖。</li>
+<li>sysmon 读取外部限制后，不能自己直接 STW；它唤醒辅助 G 完成 P 数量调整。</li>
+<li>修改 P 数量需要 <code>procresize</code>，会影响运行队列、timer、mcache 等 per-P 状态。</li>
+</ul>
+<blockquote>
+<p>[!tip] 性能调优
+不要机械地把 <code>GOMAXPROCS</code> 设为宿主机核数。容器中应优先验证默认行为，再结合 CPU 配额、节流指标、延迟和吞吐测量决定是否显式覆盖。</p>
+</blockquote>
+<h1 id="lockosthreadg-与-m-的例外绑定"><code>LockOSThread</code>：G 与 M 的例外绑定</h1>
+<p>普通 G 可在不同 M 之间迁移。<code>runtime.LockOSThread</code> 会建立 <code>lockedg/lockedm</code> 双向关系，使当前 G 后续继续在同一 OS thread 上运行，适用于线程局部状态、GUI 主线程或特定系统 API。</p>
+<p>代价是降低调度自由度；锁定的 G 阻塞时，runtime 可能需要额外 M 承载其他 P。每次 <code>LockOSThread</code> 必须匹配 <code>UnlockOSThread</code>，除非 goroutine 设计上永久占用该线程。</p>
+<h1 id="调度器不保证什么">调度器不保证什么</h1>
+<ol>
+<li>不保证 goroutine 按创建顺序运行。</li>
+<li>不保证 <code>runnext</code> 或 <code>select</code> 的严格公平性。</li>
+<li>不保证每个 G 精确获得固定 10ms 时间片。</li>
+<li>不保证 G 固定在同一个 P/M/CPU 上。</li>
+<li>不保证 goroutine 退出时自动 join；需要显式 WaitGroup/Channel/Context 生命周期。</li>
+<li>不保证增加 goroutine 或增大 <code>GOMAXPROCS</code> 就一定提升吞吐。</li>
+</ol>
+<h1 id="诊断调度问题">诊断调度问题</h1>
+<h2 id="schedtrace"><code>schedtrace</code></h2>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl"><span class="nv">GODEBUG</span><span class="o">=</span><span class="nv">schedtrace</span><span class="o">=</span>1000,scheddetail<span class="o">=</span><span class="m">1</span> ./app
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>重点观察 <code>gomaxprocs</code>、idle P、线程数、spinning threads、全局 runqueue 和各 P runqueue。它适合快速看整体失衡，但输出本身会有开销。</p>
+<h2 id="执行-trace">执行 trace</h2>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl">go <span class="nb">test</span> -trace<span class="o">=</span>trace.out ./...
+</span></span><span class="line"><span class="cl">go tool trace trace.out
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>trace 可以回答：G 在哪个 P 上运行、何时被抢占/阻塞、系统调用持续多久、netpoll 何时唤醒、并行度为什么下降。</p>
+<h2 id="pprof">pprof</h2>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span><span class="lnt">3
+</span><span class="lnt">4
+</span><span class="lnt">5
+</span><span class="lnt">6
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl"><span class="c1"># goroutine 堆栈</span>
+</span></span><span class="line"><span class="cl">curl -o goroutine.pb.gz http://127.0.0.1:6060/debug/pprof/goroutine
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="c1"># 阻塞与锁竞争</span>
+</span></span><span class="line"><span class="cl">curl -o block.pb.gz http://127.0.0.1:6060/debug/pprof/block
+</span></span><span class="line"><span class="cl">curl -o mutex.pb.gz http://127.0.0.1:6060/debug/pprof/mutex
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>Go 1.26 还提供实验性 goroutine 泄漏 profile：</p>
+<div class="highlight"><div class="chroma">
+<table class="lntable"><tr><td class="lntd">
+<pre tabindex="0" class="chroma"><code><span class="lnt">1
+</span><span class="lnt">2
+</span></code></pre></td>
+<td class="lntd">
+<pre tabindex="0" class="chroma"><code class="language-bash" data-lang="bash"><span class="line"><span class="cl"><span class="nv">GOEXPERIMENT</span><span class="o">=</span>goroutineleakprofile go build ./cmd/app
+</span></span><span class="line"><span class="cl">curl -o leaks.pb.gz http://127.0.0.1:6060/debug/pprof/goroutineleak
+</span></span></code></pre></td></tr></table>
+</div>
+</div><p>它利用 GC 可达性识别一类永远无法解除的 Channel、Mutex、Cond 等等待；全局变量仍可达、或逻辑上“很久但可能恢复”的泄漏不一定能被判定。</p>
+<h1 id="从业务代码看调度器">从业务代码看调度器</h1>
+<div class="mermaid">flowchart TD
+    A["业务观察到延迟/CPU问题"] --> B{"CPU 是否饱和?"}
+    B -->|否| C["trace：找阻塞、syscall、netpoll、串行点"]
+    B -->|是| D["CPU profile：先找热点"]
+    C --> E{"大量 Gwaiting?"}
+    E -->|Channel/锁| F["block/mutex profile"]
+    E -->|网络/系统调用| G["trace + OS 指标"]
+    D --> H{"run queue 很长?"}
+    H -->|是| I["减少任务、批处理、检查 GOMAXPROCS/配额"]
+    H -->|否| J["检查 GC、cgo、线程锁定等"]</div><p>调度器源码解释现象，但优化应从测量开始。大多数业务性能问题首先是工作量、锁竞争、I/O、分配或并行度设计问题，不应直接归因于“GMP 调度慢”。</p>
+<h1 id="总结">总结</h1>
+<ol>
+<li>G 保存 goroutine 的栈、寄存器上下文和生命周期状态；M 是 OS thread；P 是执行 Go 代码的许可与本地资源。</li>
+<li><code>GOMAXPROCS</code> 决定 P 数，不限制 M 总数；Go 1.25+ 默认值可感知并动态适应容器 CPU 配额。</li>
+<li>新 G 通常进入当前 P 的 <code>runnext</code> 或本地 256 槽运行队列，不会直接创建线程。</li>
+<li>调度循环从本地/全局队列、GC、timer、netpoll 和其他 P 获取 G；空闲 P 通过 work stealing 均衡负载。</li>
+<li>runtime 可感知阻塞只 park G，M/P 可继续运行别的 G；阻塞系统调用则可能占住 M，P 可被 sysmon 回收。</li>
+<li>抢占同时使用同步安全点和基于信号的异步安全点；约 10ms 是 sysmon 请求抢占的阈值，不是严格时间片保证。</li>
+<li>调度问题应使用 trace、schedtrace 和 pprof 建立证据，再决定是否调整并发结构或 <code>GOMAXPROCS</code>。</li>
+</ol>
+<h1 id="参考资料">参考资料</h1>
+<ul>
+<li><a href="https://github.com/golang/go/tree/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime">Go 1.26.5 runtime 源码树</a></li>
+<li><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/HACKING.md">runtime/HACKING.md</a></li>
+<li><a href="https://go.dev/doc/devel/release">Go 发布历史</a></li>
+<li><a href="https://go.dev/doc/go1.26">Go 1.26 发布说明</a></li>
+<li><a href="https://go.dev/doc/go1.25#container-aware-gomaxprocs">Go 1.25 发布说明：container-aware GOMAXPROCS</a></li>
+<li><a href="https://go.dev/doc/diagnostics">Go diagnostics</a></li>
+<li><a href="https://go.dev/doc/diagnostics#execution-tracer">Go execution tracer</a></li>
+</ul>
+
+    </div>
+
+    <div class="post-copyright">
+  <p class="copyright-item">
+    <span class="item-title">Author</span>
+    <span class="item-content">hlday</span>
+  </p>
+  <p class="copyright-item">
+    <span class="item-title">LastMod</span>
+    <span class="item-content">
+        2026-08-06
+        
+    </span>
+  </p>
+  
+  
+</div>
+<footer class="post-footer">
+      <div class="post-tags">
+          <a href="/tags/go/">Go</a>
+          <a href="/tags/%E5%B9%B6%E5%8F%91%E7%BC%96%E7%A8%8B/">并发编程</a>
+          <a href="/tags/gmp/">GMP</a>
+          <a href="/tags/scheduler/">scheduler</a>
+          <a href="/tags/runtime/">runtime</a>
+          <a href="/tags/%E6%BA%90%E7%A0%81%E5%88%86%E6%9E%90/">源码分析</a>
+          </div>
+      <nav class="post-nav">
+        
+        <a class="next" href="/post/golang/context-source-analysis/">
+            <span class="next-text nav-default">Context：Go 1.26.5 源码分析</span>
+            <span class="next-text nav-mobile">Next</span>
+            <i class="iconfont icon-right"></i>
+          </a>
+      </nav>
+    </footer>
+  </article>
+        </div>
+        
+
+  
+
+  
+    <script src="https://utteranc.es/client.js"
+            repo="hTangle/hxsup-blog-image"
+            issue-term="pathname"
+            theme="github-light"
+            crossorigin="anonymous"
+            async>
+    </script>
+    <style>
+      utterances {
+        max-width: 75%;
+        width: 1200px;
+      }
+    </style>
+    <noscript>Please enable JavaScript to view the <a href="https://github.com/utterance">comments powered by utterances.</a></noscript>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <link href="https://cdn.staticfile.org/bootstrap/5.0.2/css/bootstrap.min.css" rel="stylesheet" crossorigin="anonymous">
+<script src="https://cdn.staticfile.org/bootstrap/5.0.2/js/bootstrap.min.js" crossorigin="anonymous"></script>
+<style>
+  .modal {
+    display: none;
+     
+    position: fixed;
+     
+    z-index: 1000;
+     
+    padding-top: 100px;
+     
+    left: 0;
+    top: 0;
+    width: 100%;
+     
+    height: 100%;
+     
+    overflow: auto;
+     
+    background-color: #FFFFFF;
+     
+    background-color: rgba(255, 255,255, 0.98);
+     
+  }
+
+   
+  .modal-content {
+    margin: auto;
+    display: block;
+  }
+
+   
+  .modal-content,
+  #caption {
+    animation-name: zoom;
+    animation-duration: 0.6s;
+  }
+
+  @keyframes zoom {
+    from {
+      transform: scale(0)
+    }
+
+    to {
+      transform: scale(1)
+    }
+  }
+  .image-show-center {
+    display: block !important;
+    margin: 0 auto;
+    border: 0;
+    border-radius: 5px;
+     
+  }
+</style>
+<div id="myModal" class="modal" onclick="disShowImage()">
+  <img class="modal-content" id="img01" onmousewheel="return zoomImg(this)"
+       style="width: auto;height: auto;max-width: 100%;max-height: 100%;">
+</div>
+<script type="text/javascript">
+  var modal = document.getElementById("myModal");
+  var modalImg = document.getElementById("img01");
+  
+  function disShowImage() {
+    modal.style.display = "none";
+  }
+  function zoomImg(obj) {
+    
+    let zoom = parseInt(obj.style.zoom, 10) || 100;
+    
+    zoom += event.wheelDelta / 12;
+    if (zoom > 0) {
+      obj.style.zoom = zoom + '%';
+    }
+    return false;
+  }
+  $(function () {
+    console.log("init")
+    var imgs=$("img");
+    for(var i=0;i<imgs.length;i++){
+      imgs[i].className="image-show-center rounded";
+    }
+    
+    $("img").on('click', function () {
+      console.log("test---", $(this).attr("src"))
+      modal.style.display = "block";
+      modalImg.style.zoom = "reset";
+      modalImg.src = $(this).attr("src");
+      imageClicked = true;
+    })
+    
+  })
+</script>
+
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="social-links">
+      <a href="hsup1994@hotmail.com" class="iconfont icon-email" title="email"></a>
+      <a href="https://github.com/hTangle" class="iconfont icon-github" title="github"></a>
+  <a href="/index.xml" type="application/rss+xml" class="iconfont icon-rss" title="rss"></a>
+</div>
+
+<div class="copyright">
+  <span class="power-by">
+    Powered by <a class="hexo-link" href="https://gohugo.io">Hugo</a>
+  </span>
+  <span class="division">|</span>
+  <span class="theme-info">
+    Theme - 
+    <a class="theme-link" href="https://github.com/olOwOlo/hugo-theme-even">Even</a>
+  </span>
+
+  <div class="busuanzi-footer">
+    <span id="busuanzi_container_site_pv"> site pv: <span id="busuanzi_value_site_pv"><img src="/img/spinner.svg" alt="spinner.svg"/></span> </span>
+      <span class="division">|</span>
+    <span id="busuanzi_container_site_uv"> site uv: <span id="busuanzi_value_site_uv"><img src="/img/spinner.svg" alt="spinner.svg"/></span> </span>
+  </div>
+
+  <span class="copyright-year">
+    &copy; 
+    2022 - 
+    2026<span class="heart"><i class="iconfont icon-heart"></i></span><span><a href="/">hlday</a></span>
+  </span>
+</div>
+
+    </footer>
+
+    <div class="back-to-top" id="back-to-top">
+      <i class="iconfont icon-up"></i>
+    </div>
+  </div>
+  
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.2.1/dist/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/slideout@1.0.1/dist/slideout.min.js" integrity="sha256-t+zJ/g8/KXIJMjSVQdnibt4dlaDxc9zXr/9oNPeWqdg=" crossorigin="anonymous"></script>
+  
+
+
+
+<script type="text/javascript" src="/js/main.min.d3d26fe720923eebdba72c7cb26eef946d17ef1a1a7a289857149666ace3dfec.js"></script>
+  <script type="text/javascript">
+    window.MathJax = {
+      tex: {
+        inlineMath: [['$','$'], ['\\(','\\)']],
+        }
+    };
+  </script>
+  <script async src="https://cdn.jsdelivr.net/npm/mathjax@3.0.5/es5/tex-mml-chtml.js" integrity="sha256-HGLuEfFcsUJGhvB8cQ8nr0gai9EucOOaIxFw7qxmd+w=" crossorigin="anonymous"></script>
+
+
+
+
+
+
+
+
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script>
+  mermaid.initialize({ startOnLoad: true });
+</script>
+</body>
+</html>
