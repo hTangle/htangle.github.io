@@ -66,7 +66,7 @@
 	<meta itemprop="description" content="Go 1.26.5 Context 源码分析：value 树、cancel/timeout、Done Channel 关闭唤醒">
 	<meta itemprop="datePublished" content="2026-08-06T12:00:00+08:00">
 	<meta itemprop="dateModified" content="2026-08-06T12:00:00+08:00">
-	<meta itemprop="wordCount" content="4287">
+	<meta itemprop="wordCount" content="4198">
 	<meta itemprop="keywords" content="Go,并发编程,Context,Cancellation,源码分析">
 	<meta name="twitter:card" content="summary">
 	<meta name="twitter:title" content="Context：Go 1.26.5 源码分析">
@@ -158,7 +158,7 @@
         <div class="post-category">
             <a href="/categories/go/"> go </a>
             </div>
-          <span class="more-meta"> 4287 words </span>
+          <span class="more-meta"> 4198 words </span>
           <span class="more-meta"> 9 mins read </span>
         <span id="busuanzi_container_page_pv" class="more-meta"> <span id="busuanzi_value_page_pv"><img src="/img/spinner.svg" alt="spinner.svg"/></span> times read </span>
       </div>
@@ -223,11 +223,7 @@
     T --> V1["valueCtx"]
     C --> V2["valueCtx"]
     C -.关闭 Done.-> G1["goroutine / RPC / DB"]
-    T -.超时或取消.-> G2["下游任务"]</div><blockquote>
-<p>[!info] 版本与源码基线
-本文以 <strong>Go 1.26.5</strong> 为基准，所有源码链接固定到提交 <code>c19862e5f8415b4f24b189d065ed739517c548ba</code>。旧笔记 Context 仅作参考，本文按当前标准库实现重写。</p>
-</blockquote>
-<h2 id="版本变化">版本变化</h2>
+    T -.超时或取消.-> G2["下游任务"]</div><h2 id="版本变化">版本变化</h2>
 <table>
 	<thead>
 			<tr>
@@ -418,10 +414,8 @@
 <li><code>Background()</code> 用在 <code>main</code>、初始化、测试和请求树根部。</li>
 <li><code>TODO()</code> 的运行语义相同，但表达“这里应该传什么 Context 尚未决定”。它是代码审阅信号，不是永久默认值。</li>
 </ul>
-<blockquote>
-<p>[!warning] 不要传 nil Context
-标准库构造函数会对 nil parent panic。即使暂时不确定，也应显式传 <code>context.TODO()</code>。</p>
-</blockquote>
+<p><strong>⚠️ 不要传 nil Context</strong></p>
+<p>标准库构造函数会对 nil parent panic。即使暂时不确定，也应显式传 <code>context.TODO()</code>。</p>
 <h1 id="cancelctx取消树的核心"><code>cancelCtx</code>：取消树的核心</h1>
 <h2 id="数据结构">数据结构</h2>
 <p><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/context/context.go#L431-L439"><code>cancelCtx</code></a> 内嵌父 Context：</p>
@@ -492,10 +486,8 @@
     C->>Kids: 递归 cancel 每个 child
     C->>C: children=nil；unlock
     C->>C: 可选：从 parent 移除自己</div><p>为什么先设 <code>err/cause</code> 再关闭 <code>Done</code>？因为其他 goroutine 从 <code>&lt;-Done()</code> 返回后，必须能立即读取到稳定的 <code>Err()</code> 和 <code>Cause()</code>。</p>
-<blockquote>
-<p>[!warning] 取消函数必须被调用
-即使操作成功提前完成，也应 <code>defer cancel()</code>。它不仅关闭信号，还会停止 timer，并把子节点从父节点的 <code>children</code> 集合移除；长期遗漏会保留对象和定时器直到父节点取消。</p>
-</blockquote>
+<p><strong>⚠️ 取消函数必须被调用</strong></p>
+<p>即使操作成功提前完成，也应 <code>defer cancel()</code>。它不仅关闭信号，还会停止 timer，并把子节点从父节点的 <code>children</code> 集合移除；长期遗漏会保留对象和定时器直到父节点取消。</p>
 <h1 id="取消原因cause">取消原因：<code>Cause</code></h1>
 <p>传统 <code>Err()</code> 只有两个稳定类别：<code>context.Canceled</code> 与 <code>context.DeadlineExceeded</code>。Go 1.20 的 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/context/context.go#L255-L300"><code>WithCancelCause</code> 与 <code>Cause</code></a> 把“控制流分类”和“业务根因”分开：</p>
 <div class="highlight"><div class="chroma">

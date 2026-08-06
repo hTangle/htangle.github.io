@@ -66,7 +66,7 @@
 	<meta itemprop="description" content="Go 1.26.5 同步原语（Mutex/RWMutex/WaitGroup/Once/Cond/Map/Pool/atomic）源码分析">
 	<meta itemprop="datePublished" content="2026-08-06T10:00:00+08:00">
 	<meta itemprop="dateModified" content="2026-08-06T10:00:00+08:00">
-	<meta itemprop="wordCount" content="6757">
+	<meta itemprop="wordCount" content="6762">
 	<meta itemprop="keywords" content="Go,并发编程,Sync,Runtime,源码分析">
 	<meta name="twitter:card" content="summary">
 	<meta name="twitter:title" content="同步和锁：Go 1.26.5 源码分析">
@@ -158,7 +158,7 @@
         <div class="post-category">
             <a href="/categories/go/"> go </a>
             </div>
-          <span class="more-meta"> 6757 words </span>
+          <span class="more-meta"> 6762 words </span>
           <span class="more-meta"> 14 mins read </span>
         <span id="busuanzi_container_page_pv" class="more-meta"> <span id="busuanzi_value_page_pv"><img src="/img/spinner.svg" alt="spinner.svg"/></span> times read </span>
       </div>
@@ -402,10 +402,8 @@
 			</tr>
 	</tbody>
 </table>
-<blockquote>
-<p>[!warning] 不要拷贝已使用的同步原语
-<code>Mutex</code>、<code>RWMutex</code>、<code>WaitGroup</code>、<code>Once</code>、<code>Cond</code>、<code>Map</code>、<code>Pool</code> 以及 typed atomic 都不应在首次使用后被拷贝。优先使用指针接收者，并运行 <code>go vet</code> 的 <code>copylocks</code> 检查。</p>
-</blockquote>
+<p><strong>⚠️ 不要拷贝已使用的同步原语</strong></p>
+<p><code>Mutex</code>、<code>RWMutex</code>、<code>WaitGroup</code>、<code>Once</code>、<code>Cond</code>、<code>Map</code>、<code>Pool</code> 以及 typed atomic 都不应在首次使用后被拷贝。优先使用指针接收者，并运行 <code>go vet</code> 的 <code>copylocks</code> 检查。</p>
 <h1 id="syncmutex互斥锁"><code>sync.Mutex</code>：互斥锁</h1>
 <h2 id="公开结构已经变成包装层">公开结构已经变成包装层</h2>
 <p>Go 1.26.5 的 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/sync/mutex.go#L30-L34"><code>sync.Mutex</code></a> 不再直接声明 <code>state</code> 和 <code>sema</code>：</p>
@@ -536,10 +534,8 @@
 <li>正常模式仅在“有 waiter，且没有其他 goroutine 已被唤醒/抢到锁”时唤醒一个等待者；</li>
 <li>饥饿模式调用 <code>runtime_Semrelease(..., handoff=true, ...)</code>，直接交接所有权和当前 P 的时间片。</li>
 </ul>
-<blockquote>
-<p>[!warning] Mutex 没有 goroutine 所有权
-Go 允许 goroutine A <code>Lock</code>，由 goroutine B <code>Unlock</code>。但这不意味着这种设计容易维护；如果所有权转移没有明确的协议，优先用 channel 表达。</p>
-</blockquote>
+<p><strong>⚠️ Mutex 没有 goroutine 所有权</strong></p>
+<p>Go 允许 goroutine A <code>Lock</code>，由 goroutine B <code>Unlock</code>。但这不意味着这种设计容易维护；如果所有权转移没有明确的协议，优先用 channel 表达。</p>
 <h2 id="runtime-信号量不是业务计数信号量">runtime 信号量：不是业务计数信号量</h2>
 <p><code>Mutex.sema</code> 使用 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/sema.go#L5-L18"><code>runtime/sema.go</code></a> 的休眠/唤醒机制。它的目标类似 futex：保证每次 sleep 都能与一次 wakeup 配对，即使 wakeup 因竞争而先发生也不丢失。</p>
 <div class="mermaid">flowchart TD
@@ -617,10 +613,8 @@ Go 允许 goroutine A <code>Lock</code>，由 goroutine B <code>Unlock</code>。
     R2->>W: 释放 writerSem
     W->>W: 进入写临界区
     W->>RN: Unlock 释放 readerSem</div><p><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/sync/rwmutex.go#L195-L223"><code>Unlock</code></a> 恢复 <code>readerCount</code>，唤醒被写者拦住的新读者，最后释放 <code>w</code>让下一个写者竞争。</p>
-<blockquote>
-<p>[!danger] RWMutex 不支持升级、降级和递归读锁
-<code>RLock -&gt; Lock</code> 会死锁；<code>Lock -&gt; RLock</code> 也不是受支持的降级协议。当写者 pending 时，新的 <code>RLock</code> 会阻塞，因此同一 goroutine 递归 <code>RLock</code> 也可能把自己卡住。</p>
-</blockquote>
+<p><strong>‼️ RWMutex 不支持升级、降级和递归读锁</strong></p>
+<p><code>RLock -&gt; Lock</code> 会死锁；<code>Lock -&gt; RLock</code> 也不是受支持的降级协议。当写者 pending 时，新的 <code>RLock</code> 会阻塞，因此同一 goroutine 递归 <code>RLock</code> 也可能把自己卡住。</p>
 <p><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/sync/rwmutex.go#L82-L108"><code>TryRLock</code></a> 和 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/sync/rwmutex.go#L164-L193"><code>TryLock</code></a> 只适合少数有明确退路的算法；失败后不得假设自己观察到了任何最新状态。</p>
 <h1 id="syncwaitgroup任务计数与等待者"><code>sync.WaitGroup</code>：任务计数与等待者</h1>
 <h2 id="64-位状态压缩">64 位状态压缩</h2>
@@ -672,10 +666,8 @@ Go 允许 goroutine A <code>Lock</code>，由 goroutine B <code>Unlock</code>。
 </span></span></span><span class="line"><span class="cl"><span class="nx">wg</span><span class="p">.</span><span class="nf">Wait</span><span class="p">()</span><span class="w">
 </span></span></span></code></pre></td></tr></table>
 </div>
-</div><blockquote>
-<p>[!danger] <code>WaitGroup.Go</code> 的 f 不能 panic
-Go 1.26.5 的实现会 recover 后立即重新 panic，且故意不调用 <code>Done</code>，防止主 goroutine 的 <code>Wait</code> 抢先返回甚至退出进程。如果任务可能 panic，应在 <code>f</code> 内明确 recover 并转换为错误协议。</p>
-</blockquote>
+</div><p><strong>‼️ <code>WaitGroup.Go</code> 的 f 不能 panic</strong></p>
+<p>Go 1.26.5 的实现会 recover 后立即重新 panic，且故意不调用 <code>Done</code>，防止主 goroutine 的 <code>Wait</code> 抢先返回甚至退出进程。如果任务可能 panic，应在 <code>f</code> 内明确 recover 并转换为错误协议。</p>
 <h3 id="常见误用">常见误用</h3>
 <div class="highlight"><div class="chroma">
 <table class="lntable"><tr><td class="lntd">
@@ -759,15 +751,11 @@ Go 1.26.5 的实现会 recover 后立即重新 panic，且故意不调用 <code>
 <li><code>head/tail</code>：已经停放的 sudog 链表。</li>
 </ul>
 <p><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/sema.go#L584-L626"><code>notifyListWait</code></a> 先检查 ticket 是否已被通知，从而处理“Signal 发生在 waiter 真正 park 之前”的竞争。<a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/sema.go#L628-L663"><code>NotifyAll</code></a> 一次摘下全部链表再在锁外唤醒；<a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/sema.go#L665-L722"><code>NotifyOne</code></a> 查找对应 ticket 并唤醒一个 waiter。</p>
-<blockquote>
-<p>[!note] Signal 不提供调度优先级
-<code>Signal</code> 选中某个 waiter 不等于该 waiter 会立即取得 <code>L</code>。已经在 CPU 上运行并竞争 <code>L</code> 的 goroutine 可能先进入临界区。</p>
-</blockquote>
+<p><strong>📝 Signal 不提供调度优先级</strong></p>
+<p><code>Signal</code> 选中某个 waiter 不等于该 waiter 会立即取得 <code>L</code>。已经在 CPU 上运行并竞争 <code>L</code> 的 goroutine 可能先进入临界区。</p>
 <h1 id="syncmapgo-124-的并发-hash-trie"><code>sync.Map</code>：Go 1.24+ 的并发 Hash-Trie</h1>
-<blockquote>
-<p>[!warning] 旧的 read/dirty/misses 分析已过时
-Go 1.24 替换了 <code>sync.Map</code> 实现。Go 1.26.5 的公开 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/sync/map.go#L38-L42"><code>sync.Map</code></a> 只包装 <code>internal/sync.HashTrieMap[any, any]</code>。</p>
-</blockquote>
+<p><strong>⚠️ 旧的 read/dirty/misses 分析已过时</strong></p>
+<p>Go 1.24 替换了 <code>sync.Map</code> 实现。Go 1.26.5 的公开 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/sync/map.go#L38-L42"><code>sync.Map</code></a> 只包装 <code>internal/sync.HashTrieMap[any, any]</code>。</p>
 <h2 id="结构">结构</h2>
 <p><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/internal/sync/hashtriemap.go#L14-L28"><code>HashTrieMap</code></a> 保存根节点的原子指针、key 哈希函数、value 比较函数和随机 seed。每个间接节点有 16 个原子子指针，每层消耗哈希值的 4 bit：</p>
 <div class="mermaid">flowchart TD
@@ -862,10 +850,8 @@ Go 1.24 替换了 <code>sync.Map</code> 实现。Go 1.26.5 的公开 <a href="ht
 </span></span></span></code></pre></td></tr></table>
 </div>
 </div><p>如果协议要求“仅当仍为 0 时改成 1”，应使用 <code>CompareAndSwap(0, 1)</code>。如果需要同时维护多个字段的关系，通常应使用 Mutex 保护整个不变式，而不是把每个字段都换成 atomic。</p>
-<blockquote>
-<p>[!tip] 何时使用 atomic
-独立计数器、只读配置指针的原子发布、状态位以及经过严格证明的 lock-free 算法是常见场景。业务逻辑若需要轮询多个原子变量才能理解，往往已经应该换成锁或 channel。</p>
-</blockquote>
+<p><strong>💡 何时使用 atomic</strong></p>
+<p>独立计数器、只读配置指针的原子发布、状态位以及经过严格证明的 lock-free 算法是常见场景。业务逻辑若需要轮询多个原子变量才能理解，往往已经应该换成锁或 channel。</p>
 <h1 id="选型与实践">选型与实践</h1>
 <div class="mermaid">flowchart TD
     A["需要同步什么?" ] --> B{"是所有权/消息传递?"}
@@ -918,10 +904,8 @@ Go 1.24 替换了 <code>sync.Map</code> 实现。Go 1.26.5 的公开 <a href="ht
 </span></span><span class="line"><span class="cl">go tool pprof block.out
 </span></span></code></pre></td></tr></table>
 </div>
-</div><blockquote>
-<p>[!tip] 看 profile 时先优化临界区，再换锁
-缩小锁粒度、把慢 I/O 移出临界区、消除重复计算和减少共享状态，通常比盲目把 <code>Mutex</code> 换成 <code>RWMutex</code>/atomic 更有效。</p>
-</blockquote>
+</div><p><strong>💡 看 profile 时先优化临界区，再换锁</strong></p>
+<p>缩小锁粒度、把慢 I/O 移出临界区、消除重复计算和减少共享状态，通常比盲目把 <code>Mutex</code> 换成 <code>RWMutex</code>/atomic 更有效。</p>
 <h1 id="总结">总结</h1>
 <ol>
 <li><code>Mutex</code> 是 CAS 快路径、有限自旋、runtime 信号量停放和 1ms 饥饿交接的组合；</li>

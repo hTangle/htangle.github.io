@@ -66,7 +66,7 @@
 	<meta itemprop="description" content="Go 1.26.5 Channel 源码分析：hchan 结构、环形缓冲区、sendq/recvq、gopark/goready 与 GMP 调度">
 	<meta itemprop="datePublished" content="2026-08-06T11:00:00+08:00">
 	<meta itemprop="dateModified" content="2026-08-06T11:00:00+08:00">
-	<meta itemprop="wordCount" content="5161">
+	<meta itemprop="wordCount" content="5162">
 	<meta itemprop="keywords" content="Go,并发编程,Channel,Runtime,源码分析">
 	<meta name="twitter:card" content="summary">
 	<meta name="twitter:title" content="Channel：Go 1.26.5 源码分析">
@@ -158,7 +158,7 @@
         <div class="post-category">
             <a href="/categories/go/"> go </a>
             </div>
-          <span class="more-meta"> 5161 words </span>
+          <span class="more-meta"> 5162 words </span>
           <span class="more-meta"> 11 mins read </span>
         <span id="busuanzi_container_page_pv" class="more-meta"> <span id="busuanzi_value_page_pv"><img src="/img/spinner.svg" alt="spinner.svg"/></span> times read </span>
       </div>
@@ -368,10 +368,8 @@
 			</tr>
 	</tbody>
 </table>
-<blockquote>
-<p>[!warning] <code>len(ch)</code> 不能用于同步决策
-它只是某一瞬间的观察。检查完成后，其他 goroutine 可以立即发送或接收；正确同步应使用实际的 Channel 操作或 <code>select</code>。</p>
-</blockquote>
+<p><strong>⚠️ <code>len(ch)</code> 不能用于同步决策</strong></p>
+<p>它只是某一瞬间的观察。检查完成后，其他 goroutine 可以立即发送或接收；正确同步应使用实际的 Channel 操作或 <code>select</code>。</p>
 <h2 id="channel-建立的-happens-before">Channel 建立的 happens-before</h2>
 <div class="mermaid">sequenceDiagram
     participant S as Sender
@@ -502,10 +500,8 @@
 <li><code>chanparkcommit</code> 在提交休眠的同时解锁 Channel。</li>
 <li>被接收者或 <code>close</code> 唤醒后，检查 <code>sudog.success</code>；因关闭唤醒的发送者会 panic。</li>
 </ol>
-<blockquote>
-<p>[!note] 阻塞的是 G，不一定是 M
-<code>gopark</code> 把当前 goroutine 置为 waiting，M 返回调度循环，P 可以继续运行其他 G。这正是 Channel 能与 GMP 高效结合的原因，参见 <a href="/post/golang/gmp-source-analysis/">GMP（Go 1.26.5 源码分析）</a>。</p>
-</blockquote>
+<p><strong>📝 阻塞的是 G，不一定是 M</strong></p>
+<p><code>gopark</code> 把当前 goroutine 置为 waiting，M 返回调度循环，P 可以继续运行其他 G。这正是 Channel 能与 GMP 高效结合的原因，参见 <a href="/post/golang/gmp-source-analysis/">GMP（Go 1.26.5 源码分析）</a>。</p>
 <h1 id="接收value-ok---ch">接收：<code>value, ok := &lt;-ch</code></h1>
 <h2 id="总体路径-1">总体路径</h2>
 <div class="mermaid">flowchart TD
@@ -585,10 +581,8 @@
 <li><code>lockorder</code> 按 <code>hchan</code> 地址排序，所有 goroutine 以一致顺序加多把 Channel 锁，避免 AB-BA 死锁，见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/select.go#L206-L252"><code>L206-L252</code></a>。</li>
 <li>同一个 G 会为每个 case 建立 <code>sudog</code>。任意 case 成功后，用 <code>selectDone</code> CAS 决定唯一赢家，其他节点在第三阶段移除。</li>
 </ul>
-<blockquote>
-<p>[!tip] nil Channel 在 <code>select</code> 中很有用
-<code>selectgo</code> 会跳过 Channel 为 nil 的 case。把某个 Channel 变量设成 nil，可以动态禁用对应 case，而不会产生额外条件分支。</p>
-</blockquote>
+<p><strong>💡 nil Channel 在 <code>select</code> 中很有用</strong></p>
+<p><code>selectgo</code> 会跳过 Channel 为 nil 的 case。把某个 Channel 变量设成 nil，可以动态禁用对应 case，而不会产生额外条件分支。</p>
 <h1 id="timer-channel-的当前语义">Timer Channel 的当前语义</h1>
 <p>Go 1.23 起，<code>time.Timer</code> 和 <code>time.Ticker</code> 的 Channel 对用户呈现同步、无缓冲语义。runtime 内部仍保留 timer 与 Channel 的特殊协作：</p>
 <ul>
@@ -670,10 +664,8 @@
 </span></span><span class="line"><span class="cl"><span class="nv">GOEXPERIMENT</span><span class="o">=</span>goroutineleakprofile go <span class="nb">test</span> ./...
 </span></span></code></pre></td></tr></table>
 </div>
-</div><blockquote>
-<p>[!note] 泄漏剖析的边界
-Go 1.26 的 <code>goroutineleak</code> 是实验性 profile，依赖可达性判断，能识别大量永远无法解除的 Channel/锁等待，但不是所有逻辑泄漏都能被证明。</p>
-</blockquote>
+</div><p><strong>📝 泄漏剖析的边界</strong></p>
+<p>Go 1.26 的 <code>goroutineleak</code> 是实验性 profile，依赖可达性判断，能识别大量永远无法解除的 Channel/锁等待，但不是所有逻辑泄漏都能被证明。</p>
 <h1 id="总结">总结</h1>
 <ol>
 <li>Channel 的核心是 <code>hchan</code>：环形缓冲区、发送/接收等待队列和一把 runtime mutex。</li>

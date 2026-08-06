@@ -67,7 +67,7 @@
 	<meta itemprop="description" content="Go 1.26.5 GMP 调度器源码分析：G/M/P 结构、schedt、runq、findrunnable、sysmon">
 	<meta itemprop="datePublished" content="2026-08-06T13:00:00+08:00">
 	<meta itemprop="dateModified" content="2026-08-06T13:00:00+08:00">
-	<meta itemprop="wordCount" content="5980">
+	<meta itemprop="wordCount" content="5893">
 	<meta itemprop="keywords" content="Go,并发编程,GMP,Scheduler,Runtime,源码分析">
 	<meta name="twitter:card" content="summary">
 	<meta name="twitter:title" content="GMP 调度器：Go 1.26.5 源码分析">
@@ -159,7 +159,7 @@
         <div class="post-category">
             <a href="/categories/go/"> go </a>
             </div>
-          <span class="more-meta"> 5980 words </span>
+          <span class="more-meta"> 5893 words </span>
           <span class="more-meta"> 12 mins read </span>
         <span id="busuanzi_container_page_pv" class="more-meta"> <span id="busuanzi_value_page_pv"><img src="/img/spinner.svg" alt="spinner.svg"/></span> times read </span>
       </div>
@@ -226,11 +226,7 @@
     P1 --> Q["local runq / runnext"]
     S["全局调度器"] --> P1
     NP["netpoll"] --> P1
-    TM["timers"] --> P1</div><blockquote>
-<p>[!info] 版本与源码基线
-本文以 <strong>Go 1.26.5</strong> 为基准，源码链接固定到提交 <code>c19862e5f8415b4f24b189d065ed739517c548ba</code>。旧笔记 GMP 仅作历史参考，当前实现以 runtime 源码为准。</p>
-</blockquote>
-<h2 id="当前版本需要关注的变化">当前版本需要关注的变化</h2>
+    TM["timers"] --> P1</div><h2 id="当前版本需要关注的变化">当前版本需要关注的变化</h2>
 <table>
 	<thead>
 			<tr>
@@ -261,10 +257,8 @@
 			</tr>
 	</tbody>
 </table>
-<blockquote>
-<p>[!note] GC 不是调度器，但两者高度耦合
-P 持有分配缓存与 GC worker 状态，调度循环会优先运行 GC worker；STW、抢占和栈扫描也都需要调度器配合。因此理解 GMP 时不能完全绕开 GC。</p>
-</blockquote>
+<p><strong>📝 GC 不是调度器，但两者高度耦合</strong></p>
+<p>P 持有分配缓存与 GC worker 状态，调度循环会优先运行 GC worker；STW、抢占和栈扫描也都需要调度器配合。因此理解 GMP 时不能完全绕开 GC。</p>
 <h2 id="源码地图">源码地图</h2>
 <table>
 	<thead>
@@ -385,10 +379,8 @@ P 持有分配缓存与 GC worker 状态，调度循环会优先运行 GC worker
 <li>P 提供“运行 Go 代码的权利和本地资源”。</li>
 <li>调度器持续匹配三者，而不是把 G 永久绑定给某个 M 或 P。</li>
 </ul>
-<blockquote>
-<p>[!warning] 常见误解
-<code>GOMAXPROCS=1</code> 不是只有一个 M，也不是程序没有并发；它只限制同时执行普通 Go 代码的 P 数量为 1。阻塞系统调用、runtime 线程和 cgo 仍可能存在多个 M。</p>
-</blockquote>
+<p><strong>⚠️ 常见误解</strong></p>
+<p><code>GOMAXPROCS=1</code> 不是只有一个 M，也不是程序没有并发；它只限制同时执行普通 Go 代码的 P 数量为 1。阻塞系统调用、runtime 线程和 cgo 仍可能存在多个 M。</p>
 <h1 id="g-的状态机">G 的状态机</h1>
 <p>主要状态定义在 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/runtime2.go#L17-L120"><code>runtime2.go</code></a>：</p>
 <div class="mermaid">stateDiagram-v2
@@ -569,10 +561,8 @@ P 持有分配缓存与 GC worker 状态，调度循环会优先运行 GC worker
 <li>sysmon 读取外部限制后，不能自己直接 STW；它唤醒辅助 G 完成 P 数量调整。</li>
 <li>修改 P 数量需要 <code>procresize</code>，会影响运行队列、timer、mcache 等 per-P 状态。</li>
 </ul>
-<blockquote>
-<p>[!tip] 性能调优
-不要机械地把 <code>GOMAXPROCS</code> 设为宿主机核数。容器中应优先验证默认行为，再结合 CPU 配额、节流指标、延迟和吞吐测量决定是否显式覆盖。</p>
-</blockquote>
+<p><strong>💡 性能调优</strong></p>
+<p>不要机械地把 <code>GOMAXPROCS</code> 设为宿主机核数。容器中应优先验证默认行为，再结合 CPU 配额、节流指标、延迟和吞吐测量决定是否显式覆盖。</p>
 <h1 id="lockosthreadg-与-m-的例外绑定"><code>LockOSThread</code>：G 与 M 的例外绑定</h1>
 <p>普通 G 可在不同 M 之间迁移。<code>runtime.LockOSThread</code> 会建立 <code>lockedg/lockedm</code> 双向关系，使当前 G 后续继续在同一 OS thread 上运行，适用于线程局部状态、GUI 主线程或特定系统 API。</p>
 <p>代价是降低调度自由度；锁定的 G 阻塞时，runtime 可能需要额外 M 承载其他 P。每次 <code>LockOSThread</code> 必须匹配 <code>UnlockOSThread</code>，除非 goroutine 设计上永久占用该线程。</p>

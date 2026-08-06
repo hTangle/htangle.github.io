@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+	<channel>
+		<title>Å¹¶åç¼ç¨ on HLDay</title>
+		<link>/tags/%C3%A5%C3%A5%C3%A7%C3%A7/</link>
+		<description>Recent content in Å¹¶åç¼ç¨ on HLDay</description>
+		<generator>Hugo</generator>
+		<language>en</language>
+		
+		
+		
+		
+			<lastBuildDate>Thu, 06 Aug 2026 13:00:00 +0800</lastBuildDate>
+		
+			<atom:link href="/tags/%C3%A5%C3%A5%C3%A7%C3%A7/index.xml" rel="self" type="application/rss+xml" />
+			<item>
+				<title>GMP è°åº¦å¨ï¼Go 1.26.5 æºç åæ</title>
+				<link>/post/golang/gmp-source-analysis/</link>
+				<pubDate>Thu, 06 Aug 2026 13:00:00 +0800</pubDate>
+				<guid>/post/golang/gmp-source-analysis/</guid>
+				<description>Go 1.26.5 GMP è°åº¦å¨æºç åæï¼G/M/P ç»æãschedtãrunqãfindrunnableãsysmon</description>
+			</item>
+			<item>
+				<title>Contextï¼Go 1.26.5 æºç åæ</title>
+				<link>/post/golang/context-source-analysis/</link>
+				<pubDate>Thu, 06 Aug 2026 12:00:00 +0800</pubDate>
+				<guid>/post/golang/context-source-analysis/</guid>
+				<description>Go 1.26.5 Context æºç åæï¼value æ ãcancel/timeoutãDone Channel å³é­å¤é</description>
+			</item>
+			<item>
+				<title>Channelï¼Go 1.26.5 æºç åæ</title>
+				<link>/post/golang/channel-source-analysis/</link>
+				<pubDate>Thu, 06 Aug 2026 11:00:00 +0800</pubDate>
+				<guid>/post/golang/channel-source-analysis/</guid>
+				<description>Go 1.26.5 Channel æºç åæï¼hchan ç»æãç¯å½¢ç¼å²åºãsendq/recvqãgopark/goready ä¸ GMP è°åº¦</description>
+			</item>
+			<item>
+				<title>åæ­¥åéï¼Go 1.26.5 æºç åæ</title>
+				<link>/post/golang/sync-lock-source-analysis/</link>
+				<pubDate>Thu, 06 Aug 2026 10:00:00 +0800</pubDate>
+				<guid>/post/golang/sync-lock-source-analysis/</guid>
+				<description>Go 1.26.5 åæ­¥åè¯­ï¼Mutex/RWMutex/WaitGroup/Once/Cond/Map/Pool/atomicï¼æºç åæ</description>
+			</item>
+	</channel>
+</rss>
