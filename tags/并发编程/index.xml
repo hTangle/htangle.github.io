@@ -10,9 +10,16 @@
 		
 		
 		
-			<lastBuildDate>Thu, 06 Aug 2026 10:00:00 +0800</lastBuildDate>
+			<lastBuildDate>Thu, 06 Aug 2026 11:00:00 +0800</lastBuildDate>
 		
 			<atom:link href="/tags/%E5%B9%B6%E5%8F%91%E7%BC%96%E7%A8%8B/index.xml" rel="self" type="application/rss+xml" />
+			<item>
+				<title>Channel：Go 1.26.5 源码分析</title>
+				<link>/post/golang/channel-source-analysis/</link>
+				<pubDate>Thu, 06 Aug 2026 11:00:00 +0800</pubDate>
+				<guid>/post/golang/channel-source-analysis/</guid>
+				<description>Go 1.26.5 Channel 源码分析：hchan 结构、环形缓冲区、sendq/recvq、gopark/goready 与 GMP 调度</description>
+			</item>
 			<item>
 				<title>同步和锁：Go 1.26.5 源码分析</title>
 				<link>/post/golang/sync-lock-source-analysis/</link>
