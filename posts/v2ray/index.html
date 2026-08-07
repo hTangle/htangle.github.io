@@ -1,0 +1,180 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>使用V2ray测试代理服务器</title><script>
+      (function () {
+        var s = localStorage.getItem('theme');
+        if (s === 'light' || s === 'dark') {
+          document.documentElement.setAttribute('data-theme', s);
+        }
+      })();
+    </script><link rel="stylesheet" href="/_astro/Base.CUYrCnW9.css"></head><body><header class="topbar"><a href="/" class="brand">HLDay</a><nav><a href="/">书</a><a href="/posts/">博客</a><a href="https://github.com/hTangle" class="nav-github" aria-label="GitHub">GitHub</a></nav><button class="theme-toggle" id="themeToggle" type="button" title="切换主题（自动/浅色/深色）" aria-label="切换主题">🖥️</button></header><div class="layout"><aside class="booknav"><ul class="nav-tree"><li><p class="nav-group">Go</p><ul><li><p class="nav-subgroup">并发编程</p><ul><li class><a href="/gmp/">GMP 调度器</a></li><li class><a href="/sync-lock/">同步和锁</a></li><li class><a href="/channel/">Channel</a></li><li class><a href="/context/">Context</a></li></ul></li></ul></li><li><p class="nav-group">Agent 开发</p><ul><li><p class="nav-subgroup">核心协议与机制</p><ul><li class><a href="/mcp/">MCP</a></li><li class><a href="/skill/">Skill</a></li><li class><a href="/tool-call/">Tool Call</a></li></ul></li></ul></li></ul></aside><main class="prose"><h1>使用V2ray测试代理服务器</h1><p>V2Ray，是Victoria Raymond以及其社群团队开发的Project V下的一个工具。Project V是一个工具集合，号称可以帮助其使用者打造专属的基础通信网络。Project V的核心工具称为V2Ray，其主要负责网络协议和功能的实现，与其它Project V通信。</p>
+<h2 id="安装服务端">安装服务端</h2>
+<p>通过一行命令即可完成v2ray的服务端安装</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="shell"><code><span class="line"><span style="color:#B392F0">curl</span><span style="color:#79B8FF"> -Ls</span><span style="color:#9ECBFF"> https://raw.githubusercontent.com/v2fly/fhs-install-v2ray/master/install-release.sh</span><span style="color:#F97583"> |</span><span style="color:#B392F0"> sudo</span><span style="color:#9ECBFF"> bash</span></span></code></pre>
+<p>此时v2ray会安装到<code>/usr/local/bin/v2ray</code>，配置文件在<code>/usr/local/etc/v2ray/config.json</code></p>
+<p>然后需要编辑配置文件</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="shell"><code><span class="line"><span style="color:#B392F0">vim</span><span style="color:#9ECBFF"> /usr/local/etc/v2ray/config.json</span></span></code></pre>
+<p>一个典型的配置文件如下：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="json"><code><span class="line"><span style="color:#E1E4E8">{</span></span>
+<span class="line"><span style="color:#79B8FF">    "inbounds"</span><span style="color:#E1E4E8">: [</span></span>
+<span class="line"><span style="color:#E1E4E8">        {</span></span>
+<span class="line"><span style="color:#79B8FF">            "port"</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">6379</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">            "listen"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"127.0.0.1"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">            "protocol"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"vmess"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">            "settings"</span><span style="color:#E1E4E8">: {</span></span>
+<span class="line"><span style="color:#79B8FF">                "clients"</span><span style="color:#E1E4E8">: [</span></span>
+<span class="line"><span style="color:#E1E4E8">                    {</span></span>
+<span class="line"><span style="color:#79B8FF">                        "id"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"{使用uuid生成一个新的uuid}"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">                        "alterId"</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">64</span></span>
+<span class="line"><span style="color:#E1E4E8">                    }</span></span>
+<span class="line"><span style="color:#E1E4E8">                ]</span></span>
+<span class="line"><span style="color:#E1E4E8">            },</span></span>
+<span class="line"><span style="color:#79B8FF">            "streamSettings"</span><span style="color:#E1E4E8">: { </span><span style="color:#6A737D">//如果不配置https，则这一部分不需要</span></span>
+<span class="line"><span style="color:#79B8FF">                "network"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"ws"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">                "wsSettings"</span><span style="color:#E1E4E8">: {</span></span>
+<span class="line"><span style="color:#79B8FF">                    "path"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"/ray"</span><span style="color:#6A737D"> //注意这个路径</span></span>
+<span class="line"><span style="color:#E1E4E8">                }</span></span>
+<span class="line"><span style="color:#E1E4E8">            }</span></span>
+<span class="line"><span style="color:#E1E4E8">        }</span></span>
+<span class="line"><span style="color:#E1E4E8">    ],</span></span>
+<span class="line"><span style="color:#79B8FF">    "outbounds"</span><span style="color:#E1E4E8">: [</span></span>
+<span class="line"><span style="color:#E1E4E8">        {</span></span>
+<span class="line"><span style="color:#79B8FF">            "protocol"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"freedom"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">            "settings"</span><span style="color:#E1E4E8">: {}</span></span>
+<span class="line"><span style="color:#E1E4E8">        }</span></span>
+<span class="line"><span style="color:#E1E4E8">    ]</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>文件中需要替换的部分为</p>
+<p><code>port</code>：修改为自己的port，注意port需要能在公网访问到；</p>
+<p><code>id</code>： uuid生成的一个长度为36的uuid，需要自己生成；</p>
+<p>然后运行如下命令启动v2ray</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="shell"><code><span class="line"><span style="color:#B392F0">systemctl</span><span style="color:#9ECBFF"> start</span><span style="color:#9ECBFF"> v2ray</span></span>
+<span class="line"><span style="color:#B392F0">systemctl</span><span style="color:#9ECBFF"> status</span><span style="color:#9ECBFF"> v2ray</span></span></code></pre>
+<h2 id="配置域名访问websocket">配置域名访问+websocket</h2>
+<p>如果需要配置域名访问则需要执行配置域名访问这一步</p>
+<p>首先需要安装nginx</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="shell"><code><span class="line"><span style="color:#B392F0">apt-get</span><span style="color:#9ECBFF"> update</span><span style="color:#79B8FF"> --fix-missing</span></span>
+<span class="line"><span style="color:#B392F0">sudo</span><span style="color:#9ECBFF"> apt-get</span><span style="color:#9ECBFF"> install</span><span style="color:#9ECBFF"> libpcre3</span><span style="color:#9ECBFF"> libpcre3-dev</span><span style="color:#9ECBFF"> openssl</span><span style="color:#9ECBFF"> libssl-dev</span><span style="color:#9ECBFF"> build-essential</span><span style="color:#9ECBFF"> git</span><span style="color:#9ECBFF"> tree</span><span style="color:#9ECBFF"> zlib1g-dev</span></span>
+<span class="line"><span style="color:#6A737D"># 安装nginx</span></span>
+<span class="line"><span style="color:#B392F0">wget</span><span style="color:#9ECBFF"> http://nginx.org/download/nginx-1.20.2.tar.gz</span></span>
+<span class="line"><span style="color:#B392F0">tar</span><span style="color:#79B8FF"> -zxvf</span><span style="color:#9ECBFF"> nginx-1.20.2.tar.gz</span></span>
+<span class="line"><span style="color:#79B8FF">cd</span><span style="color:#9ECBFF"> nginx-1.20.2/</span></span>
+<span class="line"><span style="color:#B392F0">./configure</span><span style="color:#79B8FF"> --with-http_ssl_module</span></span>
+<span class="line"><span style="color:#B392F0">make</span><span style="color:#E1E4E8"> &#x26;&#x26; </span><span style="color:#B392F0">make</span><span style="color:#9ECBFF"> install</span></span>
+<span class="line"><span style="color:#6A737D"># 配置nginx环境变量</span></span>
+<span class="line"><span style="color:#79B8FF">echo</span><span style="color:#9ECBFF"> 'PATH=$PATH:/usr/local/nginx/sbin/'</span><span style="color:#F97583">>></span><span style="color:#9ECBFF">/etc/profile</span></span>
+<span class="line"><span style="color:#79B8FF">source</span><span style="color:#9ECBFF"> /etc/profile</span></span>
+<span class="line"><span style="color:#B392F0">nginx</span><span style="color:#79B8FF"> -v</span></span>
+<span class="line"><span style="color:#6A737D"># 编辑systemd文件</span></span>
+<span class="line"><span style="color:#B392F0">vim</span><span style="color:#9ECBFF"> /lib/systemd/system/nginx.service</span></span></code></pre>
+<p><code>nginx.service</code>文件如下</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="shell"><code><span class="line"><span style="color:#E1E4E8">[Unit]</span></span>
+<span class="line"><span style="color:#E1E4E8">Description</span><span style="color:#F97583">=</span><span style="color:#9ECBFF">nginx</span></span>
+<span class="line"><span style="color:#E1E4E8">After</span><span style="color:#F97583">=</span><span style="color:#9ECBFF">network.target</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#E1E4E8">[Service]</span></span>
+<span class="line"><span style="color:#E1E4E8">Type</span><span style="color:#F97583">=</span><span style="color:#9ECBFF">forking</span></span>
+<span class="line"><span style="color:#E1E4E8">ExecStart</span><span style="color:#F97583">=</span><span style="color:#9ECBFF">/usr/local/nginx/sbin/nginx</span></span>
+<span class="line"><span style="color:#E1E4E8">ExecReload</span><span style="color:#F97583">=</span><span style="color:#9ECBFF">/usr/local/nginx/sbin/nginx</span><span style="color:#B392F0"> -s</span><span style="color:#9ECBFF"> reload</span></span>
+<span class="line"><span style="color:#E1E4E8">ExecStop</span><span style="color:#F97583">=</span><span style="color:#9ECBFF">/usr/local/nginx/sbin/nginx</span><span style="color:#B392F0"> -s</span><span style="color:#9ECBFF"> quit</span></span>
+<span class="line"><span style="color:#E1E4E8">PrivateTmp</span><span style="color:#F97583">=</span><span style="color:#9ECBFF">true</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#E1E4E8">[Install]</span></span>
+<span class="line"><span style="color:#E1E4E8">WantedBy</span><span style="color:#F97583">=</span><span style="color:#9ECBFF">multi-user.target</span></span></code></pre>
+<p>然后启动nginx</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="shell"><code><span class="line"><span style="color:#B392F0">sudo</span><span style="color:#9ECBFF"> systemctl</span><span style="color:#9ECBFF"> enable</span><span style="color:#9ECBFF"> nginx</span></span>
+<span class="line"><span style="color:#B392F0">sudo</span><span style="color:#9ECBFF"> systemctl</span><span style="color:#9ECBFF"> start</span><span style="color:#9ECBFF"> nginx</span></span>
+<span class="line"><span style="color:#B392F0">sudo</span><span style="color:#9ECBFF"> systemctl</span><span style="color:#9ECBFF"> status</span><span style="color:#9ECBFF"> nginx</span></span>
+<span class="line"><span style="color:#6A737D"># 查看是否能够正常请求</span></span>
+<span class="line"><span style="color:#B392F0">curl</span><span style="color:#E1E4E8"> $(</span><span style="color:#B392F0">hostname</span><span style="color:#79B8FF"> -i</span><span style="color:#E1E4E8">)</span><span style="color:#9ECBFF">:80</span></span></code></pre>
+<p>编辑nginx的conf文件<code>vim /usr/local/nginx/conf/nginx.conf </code></p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="shell"><code><span class="line"><span style="color:#6A737D">#user  nobody;</span></span>
+<span class="line"><span style="color:#B392F0">worker_processes</span><span style="color:#79B8FF">  1</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D">#error_log  logs/error.log;</span></span>
+<span class="line"><span style="color:#6A737D">#error_log  logs/error.log  notice;</span></span>
+<span class="line"><span style="color:#6A737D">#error_log  logs/error.log  info;</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D">#pid        logs/nginx.pid;</span></span>
+<span class="line"></span>
+<span class="line"></span>
+<span class="line"><span style="color:#B392F0">events</span><span style="color:#9ECBFF"> {</span></span>
+<span class="line"><span style="color:#B392F0">    worker_connections</span><span style="color:#79B8FF">  1024</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span>
+<span class="line"></span>
+<span class="line"></span>
+<span class="line"><span style="color:#B392F0">http</span><span style="color:#9ECBFF"> {</span></span>
+<span class="line"><span style="color:#B392F0">    include</span><span style="color:#9ECBFF">       mime.types</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#B392F0">    default_type</span><span style="color:#9ECBFF">  application/octet-stream</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#B392F0">    sendfile</span><span style="color:#9ECBFF">        on</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#B392F0">    keepalive_timeout</span><span style="color:#79B8FF">  65</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#B392F0">    server</span><span style="color:#9ECBFF"> {</span></span>
+<span class="line"><span style="color:#B392F0">        listen</span><span style="color:#79B8FF">       80</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#B392F0">        server_name</span><span style="color:#9ECBFF">  localhost</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#B392F0">        location</span><span style="color:#9ECBFF"> /</span><span style="color:#9ECBFF"> {</span></span>
+<span class="line"><span style="color:#B392F0">            root</span><span style="color:#9ECBFF">   html</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#B392F0">            index</span><span style="color:#9ECBFF">  index.html</span><span style="color:#9ECBFF"> index.htm</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#E1E4E8">        }</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D">        #error_page  404              /404.html;</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D">        # redirect server error pages to the static page /50x.html</span></span>
+<span class="line"><span style="color:#6A737D">        #</span></span>
+<span class="line"><span style="color:#B392F0">        error_page</span><span style="color:#79B8FF">   500</span><span style="color:#79B8FF"> 502</span><span style="color:#79B8FF"> 503</span><span style="color:#79B8FF"> 504</span><span style="color:#9ECBFF">  /50x.html</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#B392F0">        location</span><span style="color:#9ECBFF"> =</span><span style="color:#9ECBFF"> /50x.html</span><span style="color:#9ECBFF"> {</span></span>
+<span class="line"><span style="color:#B392F0">            root</span><span style="color:#9ECBFF">   html</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#E1E4E8">        }</span></span>
+<span class="line"><span style="color:#E1E4E8">    }</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D">    # HTTPS server</span></span>
+<span class="line"><span style="color:#6A737D">    #</span></span>
+<span class="line"><span style="color:#B392F0">    server</span><span style="color:#9ECBFF"> {</span></span>
+<span class="line"><span style="color:#B392F0">        listen</span><span style="color:#79B8FF">       443</span><span style="color:#9ECBFF"> ssl</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#B392F0">        server_name</span><span style="color:#9ECBFF">  {换成自己的域名}</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#B392F0">        ssl_certificate</span><span style="color:#9ECBFF">      /usr/local/nginx/ssl/cert.pem</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#B392F0">        ssl_certificate_key</span><span style="color:#9ECBFF"> /usr/local/nginx/ssl/cert.key</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#B392F0">        ssl_session_cache</span><span style="color:#9ECBFF">    shared:SSL:1m</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#B392F0">        ssl_session_timeout</span><span style="color:#9ECBFF">  5m</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D">        #ssl_ciphers  HIGH:!aNULL:!MD5;</span></span>
+<span class="line"><span style="color:#B392F0">        ssl_prefer_server_ciphers</span><span style="color:#9ECBFF">  on</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#B392F0">        ssl_ciphers</span><span style="color:#9ECBFF"> ECDHE-RSA-AES128-GCM-SHA256:ECDHE:ECDH:AES:HIGH:!NULL:!aNULL:!MD5:!ADH:!RC4</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#B392F0">        ssl_protocols</span><span style="color:#9ECBFF"> TLSv1.1</span><span style="color:#9ECBFF"> TLSv1.2</span><span style="color:#9ECBFF"> TLSv1.3</span><span style="color:#E1E4E8">; </span><span style="color:#6A737D">#表示使用的TLS协议的类型。</span></span>
+<span class="line"><span style="color:#B392F0">        location</span><span style="color:#9ECBFF"> /ray</span><span style="color:#9ECBFF"> {</span><span style="color:#6A737D"> # 与 V2Ray 配置中的 path 保持一致</span></span>
+<span class="line"><span style="color:#B392F0">            proxy_redirect</span><span style="color:#9ECBFF"> off</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#B392F0">            proxy_pass</span><span style="color:#9ECBFF"> http://127.0.0.1:6379</span><span style="color:#E1E4E8">; </span><span style="color:#6A737D">#假设WebSocket监听在环回地址的6379端口上</span></span>
+<span class="line"><span style="color:#B392F0">            proxy_http_version</span><span style="color:#79B8FF"> 1.1</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#B392F0">            proxy_set_header</span><span style="color:#9ECBFF"> Upgrade</span><span style="color:#E1E4E8"> $http_upgrade;</span></span>
+<span class="line"><span style="color:#B392F0">            proxy_set_header</span><span style="color:#9ECBFF"> Connection</span><span style="color:#9ECBFF"> "upgrade"</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#B392F0">            proxy_set_header</span><span style="color:#9ECBFF"> Host</span><span style="color:#E1E4E8"> $http_host;</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D">        	# Show realip in v2ray access.log</span></span>
+<span class="line"><span style="color:#B392F0">            proxy_set_header</span><span style="color:#9ECBFF"> X-Real-IP</span><span style="color:#E1E4E8"> $remote_addr;</span></span>
+<span class="line"><span style="color:#B392F0">            proxy_set_header</span><span style="color:#9ECBFF"> X-Forwarded-For</span><span style="color:#E1E4E8"> $proxy_add_x_forwarded_for;</span></span>
+<span class="line"><span style="color:#E1E4E8">        }</span></span>
+<span class="line"><span style="color:#E1E4E8">    }</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span>
+<span class="line"></span></code></pre>
+<p>然后重启nginx</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="plaintext"><code><span class="line"><span>nginx -t</span></span>
+<span class="line"><span>nginx -s reload</span></span></code></pre>
+<h2 id="配置客户端">配置客户端</h2>
+<p>这里假设你已经下载了客户端了，打开客户端，添加服务器，编辑如下图：按照上面的配置来新增一个服务器。</p>
+<p><img src="https://ahsup.oss-cn-beijing.aliyuncs.com/image-20220314230524284.png" alt="image-20220314230524284"></p>
+<p>然后将代理设置为清除系统代理。这样就建立了从客户端到服务端的连接，但是此时浏览器还是不能够访问。需要按照一个Chrome代理插件SwitchyOmega，配置如下所示。</p>
+<p><img src="https://ahsup.oss-cn-beijing.aliyuncs.com/image-20220314231140129.png" alt="image-20220314231140129"></p>
+<p>然后就可以愉快的使用VPN了。</p>
+<p>如果使用的是OpenWrt，则可以直接使用OpenWrt提供的PassWall服务，一个典型的配置如下图</p>
+<p><img src="https://ahsup.oss-cn-beijing.aliyuncs.com/image-20220314231312979.png" alt="image-20220314231312979"></p>
+<p>通过OpenWrt的配置，可以无需其他工具，在设备上的所有应用程序均可以使用VPN网络。</p>
+<h2 id="总结">总结</h2>
+<ol>
+<li>需要按照步骤安装服务端和客户端；</li>
+<li>域名+ws的方式需要额外安装nginx和申请ssl证书；</li>
+<li>使用客户端需要额外的proxy插件才能连接上vpn；</li>
+<li>本文提供的步骤仅供测试使用；</li>
+</ol></main><aside class="toc"><p class="toc-title">本页目录</p><ul><li class="toc-d2"><a href="#安装服务端">安装服务端</a></li><li class="toc-d2"><a href="#配置域名访问websocket">配置域名访问+websocket</a></li><li class="toc-d2"><a href="#配置客户端">配置客户端</a></li><li class="toc-d2"><a href="#总结">总结</a></li></ul></aside></div><div class="lightbox" id="lightbox" aria-hidden="true"><img alt=""></div><script type="module" src="/_astro/Base.astro_astro_type_script_index_0_lang.7IsV0x-z.js"></script></body></html>

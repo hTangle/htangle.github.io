@@ -1,0 +1,178 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>使用RBAC鉴权</title><script>
+      (function () {
+        var s = localStorage.getItem('theme');
+        if (s === 'light' || s === 'dark') {
+          document.documentElement.setAttribute('data-theme', s);
+        }
+      })();
+    </script><link rel="stylesheet" href="/_astro/Base.CUYrCnW9.css"></head><body><header class="topbar"><a href="/" class="brand">HLDay</a><nav><a href="/">书</a><a href="/posts/">博客</a><a href="https://github.com/hTangle" class="nav-github" aria-label="GitHub">GitHub</a></nav><button class="theme-toggle" id="themeToggle" type="button" title="切换主题（自动/浅色/深色）" aria-label="切换主题">🖥️</button></header><div class="layout"><aside class="booknav"><ul class="nav-tree"><li><p class="nav-group">Go</p><ul><li><p class="nav-subgroup">并发编程</p><ul><li class><a href="/gmp/">GMP 调度器</a></li><li class><a href="/sync-lock/">同步和锁</a></li><li class><a href="/channel/">Channel</a></li><li class><a href="/context/">Context</a></li></ul></li></ul></li><li><p class="nav-group">Agent 开发</p><ul><li><p class="nav-subgroup">核心协议与机制</p><ul><li class><a href="/mcp/">MCP</a></li><li class><a href="/skill/">Skill</a></li><li class><a href="/tool-call/">Tool Call</a></li></ul></li></ul></li></ul></aside><main class="prose"><h1>使用RBAC鉴权</h1><p>基于角色（Role）的访问控制（RBAC）是一种基于组织中用户的角色来调节控制对 计算机或网络资源的访问的方法。RBAC 鉴权机制使用 <code>rbac.authorization.k8s.io</code>来驱动鉴权决定，允许你通过 Kubernetes API 动态配置策略。要启用 RBAC，在启动时将 <code>--authorization-mode</code> 参数设置为一个逗号分隔的列表并确保其中包含 <code>RBAC</code>。</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="shell"><code><span class="line"><span style="color:#B392F0">kube-apiserver</span><span style="color:#79B8FF"> --authorization-mode=Example,RBAC</span><span style="color:#79B8FF"> --</span><span style="color:#F97583">&#x3C;</span><span style="color:#79B8FF">其他选项</span><span style="color:#F97583">></span><span style="color:#79B8FF"> --</span><span style="color:#F97583">&#x3C;</span><span style="color:#79B8FF">其他选项</span><span style="color:#F97583">></span></span></code></pre>
+<p><a href="https://kubernetes.io/zh/docs/reference/access-authn-authz/rbac/" rel="noopener noreferrer" target="_blank">使用 RBAC 鉴权 | Kubernetes</a></p>
+<h2 id="api对象">Api对象</h2>
+<p>RBAC API 声明了四种 Kubernetes 对象： <em>Role</em> 、 <em>ClusterRole</em> 、<em>RoleBinding</em> 和  <em>ClusterRoleBinding</em> 。你可以像使用其他 Kubernetes 对象一样， 通过类似 <code>kubectl</code> 这类工具 <a href="https://kubernetes.io/zh/docs/concepts/overview/working-with-objects/kubernetes-objects/#understanding-kubernetes-objects" rel="noopener noreferrer" target="_blank">描述对象</a>, 或修补对象。</p>
+<h3 id="roleclusterrole">Role&#x26;ClusterRole</h3>
+<p>RBAC 的 <em>Role</em> 或 <em>ClusterRole</em> 中包含一组代表相关权限的规则。 这些权限是纯粹累加的（不存在拒绝某操作的规则）。Role 总是用来在某个namespace内设置访问权限；在你创建 Role 时，你必须指定该 Role 所属的namespace。</p>
+<p>与之相对，ClusterRole 则是一个集群作用域的资源。这两种资源的名字不同（Role 和 ClusterRole）是因为 Kubernetes 对象要么是名字空间作用域的，要么是集群作用域的， 不可两者兼具。</p>
+<p>ClusterRole 有若干用法。你可以用它来：</p>
+<ol>
+<li>定义对某名字空间域对象的访问权限，并将在各个名字空间内完成授权；</li>
+<li>为名字空间作用域的对象设置访问权限，并跨所有名字空间执行授权；</li>
+<li>为集群作用域的资源定义访问权限。</li>
+</ol>
+<p>如果你希望在名字空间内定义角色，应该使用 Role； 如果你希望定义集群范围的角色，应该使用 ClusterRole。</p>
+<h3 id="role">Role</h3>
+<p>如果需要授予对default namespace下pod的读权限，可以用如下定义</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="yaml"><code><span class="line"><span style="color:#85E89D">apiVersion</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">rbac.authorization.k8s.io/v1</span></span>
+<span class="line"><span style="color:#85E89D">kind</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">Role</span></span>
+<span class="line"><span style="color:#85E89D">metadata</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">  namespace</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">default</span></span>
+<span class="line"><span style="color:#85E89D">  name</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">pod-reader</span></span>
+<span class="line"><span style="color:#85E89D">rules</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#E1E4E8">- </span><span style="color:#85E89D">apiGroups</span><span style="color:#E1E4E8">: [</span><span style="color:#9ECBFF">""</span><span style="color:#E1E4E8">] </span><span style="color:#6A737D"># "" 标明 core API 组</span></span>
+<span class="line"><span style="color:#85E89D">  resources</span><span style="color:#E1E4E8">: [</span><span style="color:#9ECBFF">"pods"</span><span style="color:#E1E4E8">]</span></span>
+<span class="line"><span style="color:#85E89D">  verbs</span><span style="color:#E1E4E8">: [</span><span style="color:#9ECBFF">"get"</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">"watch"</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">"list"</span><span style="color:#E1E4E8">]</span></span></code></pre>
+<h3 id="clusterrole">ClusterRole</h3>
+<p>ClusterRole 可以和 Role 相同完成授权。 因为 ClusterRole 属于集群范围，所以它也可以为以下资源授予访问权限：</p>
+<ul>
+<li>集群范围资源（比如 [节点（Node）]</li>
+<li>非资源端点（比如 <code>/healthz</code>）</li>
+<li>跨名字空间访问的名字空间作用域的资源（如 Pods）
+比如，你可以使用 ClusterRole 来允许某特定用户执行 <code>kubectl get pods --all-namespaces</code></li>
+</ul>
+<p>下面是一个 ClusterRole 的示例，可用来为任一特定名字空间中的 <a href="https://kubernetes.io/zh/docs/concepts/configuration/secret/" rel="noopener noreferrer" target="_blank">Secret</a> 授予读访问权限， 或者跨名字空间的访问权限（取决于该角色是如何<a href="https://kubernetes.io/zh/docs/reference/access-authn-authz/rbac/#rolebinding-and-clusterrolebinding" rel="noopener noreferrer" target="_blank">绑定</a>的）：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="yaml"><code><span class="line"><span style="color:#85E89D">apiVersion</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">rbac.authorization.k8s.io/v1</span></span>
+<span class="line"><span style="color:#85E89D">kind</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">ClusterRole</span></span>
+<span class="line"><span style="color:#85E89D">metadata</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#6A737D">  # "namespace" 被忽略，因为 ClusterRoles 不受名字空间限制</span></span>
+<span class="line"><span style="color:#85E89D">  name</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">secret-reader</span></span>
+<span class="line"><span style="color:#85E89D">rules</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#E1E4E8">- </span><span style="color:#85E89D">apiGroups</span><span style="color:#E1E4E8">: [</span><span style="color:#9ECBFF">""</span><span style="color:#E1E4E8">]</span></span>
+<span class="line"><span style="color:#6A737D">  # 在 HTTP 层面，用来访问 Secret 对象的资源的名称为 "secrets"</span></span>
+<span class="line"><span style="color:#85E89D">  resources</span><span style="color:#E1E4E8">: [</span><span style="color:#9ECBFF">"secrets"</span><span style="color:#E1E4E8">]</span></span>
+<span class="line"><span style="color:#85E89D">  verbs</span><span style="color:#E1E4E8">: [</span><span style="color:#9ECBFF">"get"</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">"watch"</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">"list"</span><span style="color:#E1E4E8">]</span></span></code></pre>
+<h3 id="rolebinding--clusterrolebinding">RoleBinding &#x26; ClusterRoleBinding</h3>
+<p>角色绑定（Role Binding）是将角色中定义的权限赋予一个或者一组用户。 它包含若干  <strong>主体</strong> （用户、组或服务账户）的列表和对这些主体所获得的角色的引用。 RoleBinding 在指定的名字空间中执行授权，而 ClusterRoleBinding 在集群范围执行授权。</p>
+<p>一个 RoleBinding 可以引用同一的名字空间中的任何 Role。 或者，一个 RoleBinding 可以引用某 ClusterRole 并将该 ClusterRole 绑定到 RoleBinding 所在的名字空间。 如果你希望将某 ClusterRole 绑定到集群中所有名字空间，你要使用 ClusterRoleBinding。</p>
+<h3 id="rolebinding">RoleBinding</h3>
+<p>下面的例子中的 RoleBinding 将 “pod-reader” Role 授予在 “default” 名字空间中的用户 “jane”。 这样，用户 “jane” 就具有了读取 “default” 名字空间中 pods 的权限。</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="yaml"><code><span class="line"><span style="color:#85E89D">apiVersion</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">rbac.authorization.k8s.io/v1</span></span>
+<span class="line"><span style="color:#85E89D">kind</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">RoleBinding</span></span>
+<span class="line"><span style="color:#85E89D">metadata</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">  name</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">read-pods</span></span>
+<span class="line"><span style="color:#85E89D">  namespace</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">default</span></span>
+<span class="line"><span style="color:#85E89D">subjects</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#6A737D"># 你可以指定不止一个“subject（主体）”</span></span>
+<span class="line"><span style="color:#E1E4E8">- </span><span style="color:#85E89D">kind</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">User</span></span>
+<span class="line"><span style="color:#85E89D">  name</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">jane</span><span style="color:#6A737D"> # "name" 是区分大小写的</span></span>
+<span class="line"><span style="color:#85E89D">  apiGroup</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">rbac.authorization.k8s.io</span></span>
+<span class="line"><span style="color:#85E89D">roleRef</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#6A737D">  # "roleRef" 指定与某 Role 或 ClusterRole 的绑定关系</span></span>
+<span class="line"><span style="color:#85E89D">  kind</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">Role</span><span style="color:#6A737D"> # 此字段必须是 Role 或 ClusterRole</span></span>
+<span class="line"><span style="color:#85E89D">  name</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">pod-reader</span><span style="color:#6A737D">     # 此字段必须与你要绑定的 Role 或 ClusterRole 的名称匹配</span></span>
+<span class="line"><span style="color:#85E89D">  apiGroup</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">rbac.authorization.k8s.io</span></span></code></pre>
+<p>RoleBinding 也可以引用 ClusterRole，以将对应 ClusterRole 中定义的访问权限授予 RoleBinding 所在名字空间的资源。这种引用使得你可以跨整个集群定义一组通用的角色， 之后在多个名字空间中复用。</p>
+<p>例如，尽管下面的 RoleBinding 引用的是一个 ClusterRole，“dave”（这里的主体， 区分大小写）只能访问 “development” 名字空间中的 Secrets 对象，因为 RoleBinding 所在的名字空间（由其 metadata 决定）是 “development”。</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="yaml"><code><span class="line"><span style="color:#85E89D">apiVersion</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">rbac.authorization.k8s.io/v1</span></span>
+<span class="line"><span style="color:#6A737D"># 此角色绑定使得用户 "dave" 能够读取 "development" 名字空间中的 Secrets</span></span>
+<span class="line"><span style="color:#6A737D"># 你需要一个名为 "secret-reader" 的 ClusterRole</span></span>
+<span class="line"><span style="color:#85E89D">kind</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">RoleBinding</span></span>
+<span class="line"><span style="color:#85E89D">metadata</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">  name</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">read-secrets</span></span>
+<span class="line"><span style="color:#6A737D">  # RoleBinding 的名字空间决定了访问权限的授予范围。</span></span>
+<span class="line"><span style="color:#6A737D">  # 这里隐含授权仅在 "development" 名字空间内的访问权限。</span></span>
+<span class="line"><span style="color:#85E89D">  namespace</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">development</span></span>
+<span class="line"><span style="color:#85E89D">subjects</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#E1E4E8">- </span><span style="color:#85E89D">kind</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">User</span></span>
+<span class="line"><span style="color:#85E89D">  name</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">dave</span><span style="color:#6A737D"> # 'name' 是区分大小写的</span></span>
+<span class="line"><span style="color:#85E89D">  apiGroup</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">rbac.authorization.k8s.io</span></span>
+<span class="line"><span style="color:#85E89D">roleRef</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">  kind</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">ClusterRole</span></span>
+<span class="line"><span style="color:#85E89D">  name</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">secret-reader</span></span>
+<span class="line"><span style="color:#85E89D">  apiGroup</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">rbac.authorization.k8s.io</span></span></code></pre>
+<h3 id="clusterrolebinding">ClusterRoleBinding</h3>
+<p>要跨整个集群完成访问权限的授予，你可以使用一个 ClusterRoleBinding。 下面的 ClusterRoleBinding 允许 “manager” 组内的所有用户访问任何名字空间中的 Secrets。</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="yaml"><code><span class="line"><span style="color:#85E89D">apiVersion</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">rbac.authorization.k8s.io/v1</span></span>
+<span class="line"><span style="color:#6A737D"># 此集群角色绑定允许 “manager” 组中的任何人访问任何名字空间中的 secrets</span></span>
+<span class="line"><span style="color:#85E89D">kind</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">ClusterRoleBinding</span></span>
+<span class="line"><span style="color:#85E89D">metadata</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">  name</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">read-secrets-global</span></span>
+<span class="line"><span style="color:#85E89D">subjects</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#E1E4E8">- </span><span style="color:#85E89D">kind</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">Group</span></span>
+<span class="line"><span style="color:#85E89D">  name</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">manager</span><span style="color:#6A737D"> # 'name' 是区分大小写的</span></span>
+<span class="line"><span style="color:#85E89D">  apiGroup</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">rbac.authorization.k8s.io</span></span>
+<span class="line"><span style="color:#85E89D">roleRef</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">  kind</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">ClusterRole</span></span>
+<span class="line"><span style="color:#85E89D">  name</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">secret-reader</span></span>
+<span class="line"><span style="color:#85E89D">  apiGroup</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">rbac.authorization.k8s.io</span></span></code></pre>
+<p>创建了绑定之后，你不能再修改绑定对象所引用的 Role 或 ClusterRole。 试图改变绑定对象的 <code>roleRef</code> 将导致合法性检查错误。 如果你想要改变现有绑定对象中 <code>roleRef</code> 字段的内容，必须删除重新创建绑定对象。</p>
+<p>这种限制有两个主要原因：</p>
+<ol>
+<li>针对不同角色的绑定是完全不一样的绑定。要求通过删除/重建绑定来更改 <code>roleRef</code>, 这样可以确保要赋予绑定的所有主体会被授予新的角色（而不是在允许或者不小心修改 了 <code>roleRef</code> 的情况下导致所有现有主体未经验证即被授予新角色对应的权限）。</li>
+<li>将 <code>roleRef</code> 设置为不可以改变，这使得可以为用户授予对现有绑定对象的 <code>update</code> 权限， 这样可以让他们管理主体列表，同时不能更改被授予这些主体的角色。</li>
+</ol>
+<p>命令 <code>kubectl auth reconcile</code> 可以创建或者更新包含 RBAC 对象的清单文件， 并且在必要的情况下删除和重新创建绑定对象，以改变所引用的角色。</p>
+<h3 id="对资源的引用">对资源的引用</h3>
+<p>在 Kubernetes API 中，大多数资源都是使用对象名称的字符串表示来呈现与访问的。 例如，对于 Pod 应使用 “pods”。 RBAC 使用对应 API 端点的 URL 中呈现的名字来引用资源。 有一些 Kubernetes API 涉及 <strong>子资源（subresource）</strong>，例如 Pod 的日志。 对 Pod 日志的请求看起来像这样：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="http"><code><span class="line"><span style="color:#F97583">GET</span><span style="color:#E1E4E8"> /api/v1/namespaces/{namespace}/pods/{name}/log</span></span></code></pre>
+<p><code>pods</code> 对应名字空间作用域的 Pod 资源，而 <code>log</code> 是 <code>pods</code> 的子资源。 在 RBAC 角色表达子资源时，使用斜线（<code>/</code>）来分隔资源和子资源。 要允许某主体读取 <code>pods</code> 同时访问这些 Pod 的 <code>log</code> 子资源，你可以这么写：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="yaml"><code><span class="line"><span style="color:#85E89D">apiVersion</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">rbac.authorization.k8s.io/v1</span></span>
+<span class="line"><span style="color:#85E89D">kind</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">Role</span></span>
+<span class="line"><span style="color:#85E89D">metadata</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">  namespace</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">default</span></span>
+<span class="line"><span style="color:#85E89D">  name</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">pod-and-pod-logs-reader</span></span>
+<span class="line"><span style="color:#85E89D">rules</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#E1E4E8">- </span><span style="color:#85E89D">apiGroups</span><span style="color:#E1E4E8">: [</span><span style="color:#9ECBFF">""</span><span style="color:#E1E4E8">]</span></span>
+<span class="line"><span style="color:#85E89D">  resources</span><span style="color:#E1E4E8">: [</span><span style="color:#9ECBFF">"pods"</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">"pods/log"</span><span style="color:#E1E4E8">]</span></span>
+<span class="line"><span style="color:#85E89D">  verbs</span><span style="color:#E1E4E8">: [</span><span style="color:#9ECBFF">"get"</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">"list"</span><span style="color:#E1E4E8">]</span></span></code></pre>
+<p>对于某些请求，也可以通过 <code>resourceNames</code> 列表按名称引用资源。 在指定时，可以将请求限定为资源的单个实例。 下面的例子中限制可以 “get” 和 “update” 一个名为 <code>my-configmap</code> 的 <a href="https://kubernetes.io/zh/docs/tasks/configure-pod-container/configure-pod-configmap/" rel="noopener noreferrer" target="_blank">ConfigMap</a>：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="yaml"><code><span class="line"><span style="color:#85E89D">apiVersion</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">rbac.authorization.k8s.io/v1</span></span>
+<span class="line"><span style="color:#85E89D">kind</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">Role</span></span>
+<span class="line"><span style="color:#85E89D">metadata</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">  namespace</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">default</span></span>
+<span class="line"><span style="color:#85E89D">  name</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">configmap-updater</span></span>
+<span class="line"><span style="color:#85E89D">rules</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#E1E4E8">- </span><span style="color:#85E89D">apiGroups</span><span style="color:#E1E4E8">: [</span><span style="color:#9ECBFF">""</span><span style="color:#E1E4E8">]</span></span>
+<span class="line"><span style="color:#6A737D">  # 在 HTTP 层面，用来访问 ConfigMap 的资源的名称为 "configmaps"</span></span>
+<span class="line"><span style="color:#85E89D">  resources</span><span style="color:#E1E4E8">: [</span><span style="color:#9ECBFF">"configmaps"</span><span style="color:#E1E4E8">]</span></span>
+<span class="line"><span style="color:#85E89D">  resourceNames</span><span style="color:#E1E4E8">: [</span><span style="color:#9ECBFF">"my-configmap"</span><span style="color:#E1E4E8">]</span></span>
+<span class="line"><span style="color:#85E89D">  verbs</span><span style="color:#E1E4E8">: [</span><span style="color:#9ECBFF">"update"</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">"get"</span><span style="color:#E1E4E8">]</span></span></code></pre>
+<h2 id="默认roles和role-bindings">默认Roles和Role Bindings</h2>
+<p>API 服务器创建一组默认的 ClusterRole 和 ClusterRoleBinding 对象。 这其中许多是以 <code>system:</code> 为前缀的，用以标识对应资源是直接由集群控制面管理的。 所有的默认 ClusterRole 和 ClusterRoleBinding 都有 <code>kubernetes.io/bootstrapping=rbac-defaults</code> 标签。</p>
+<h3 id="自动协商">自动协商</h3>
+<p>在每次启动时，API 服务器都会更新默认 ClusterRole 以添加缺失的各种权限，并更新 默认的 ClusterRoleBinding 以增加缺失的各类主体。 这种自动协商机制允许集群去修复一些不小心发生的修改，并且有助于保证角色和角色绑定 在新的发行版本中有权限或主体变更时仍然保持最新。</p>
+<p>如果要禁止此功能，请将默认 ClusterRole 以及 ClusterRoleBinding 的 <code>rbac.authorization.kubernetes.io/autoupdate</code> 注解设置成 <code>false</code>。 注意，缺少默认权限和角色绑定主体可能会导致集群无法正常工作。</p>
+<p>如果基于 RBAC 的鉴权机制被启用，则自动协商功能默认是被启用的。</p>
+<h3 id="api发现角色">API发现角色</h3>
+<p>无论是经过身份验证的还是未经过身份验证的用户，默认的角色绑定都授权他们读取被认为 是可安全地公开访问的 API（ 包括 CustomResourceDefinitions）。 如果要禁用匿名的未经过身份验证的用户访问，请在 API 服务器配置中中添加 <code>--anonymous-auth=false</code> 的配置选项。</p>
+<p>通过运行命令 <code>kubectl</code> 可以查看这些角色的配置信息:</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="shell"><code><span class="line"><span style="color:#B392F0">kubectl</span><span style="color:#9ECBFF"> get</span><span style="color:#9ECBFF"> clusterroles</span><span style="color:#9ECBFF"> system:discovery</span><span style="color:#79B8FF"> -o</span><span style="color:#9ECBFF"> yaml</span></span></code></pre>
+<blockquote>
+<p><strong>说明：</strong></p>
+<p>如果你编辑该 ClusterRole，你所作的变更会被 API 服务器在重启时自动覆盖，这是通过 <a href="https://kubernetes.io/zh/docs/reference/access-authn-authz/rbac/#auto-reconciliation" rel="noopener noreferrer" target="_blank">自动协商</a>机制完成的。要避免这类覆盖操作， 要么不要手动编辑这些角色，要么禁止自动协商机制。</p>
+</blockquote>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>默认 ClusterRole</th><th>默认 ClusterRoleBinding</th><th>描述</th></tr></thead><tbody><tr><td><strong>system:basic-user</strong></td><td><strong>system:authenticated</strong> 组</td><td>允许用户以只读的方式去访问他们自己的基本信息。在 1.14 版本之前，这个角色在默认情况下也绑定在 <code>system:unauthenticated</code> 上。</td></tr><tr><td><strong>system:discovery</strong></td><td><strong>system:authenticated</strong> 组</td><td>允许以只读方式访问 API 发现端点，这些端点用来发现和协商 API 级别。 在 1.14 版本之前，这个角色在默认情况下绑定在 <code>system:unauthenticated</code> 上。</td></tr><tr><td><strong>system:public-info-viewer</strong></td><td><strong>system:authenticated</strong> 和 <strong>system:unauthenticated</strong> 组</td><td>允许对集群的非敏感信息进行只读访问，它是在 1.14 版本中引入的。</td></tr></tbody></table></main><aside class="toc"><p class="toc-title">本页目录</p><ul><li class="toc-d2"><a href="#api对象">Api对象</a></li><li class="toc-d3"><a href="#roleclusterrole">Role&amp;ClusterRole</a></li><li class="toc-d3"><a href="#role">Role</a></li><li class="toc-d3"><a href="#clusterrole">ClusterRole</a></li><li class="toc-d3"><a href="#rolebinding--clusterrolebinding">RoleBinding &amp; ClusterRoleBinding</a></li><li class="toc-d3"><a href="#rolebinding">RoleBinding</a></li><li class="toc-d3"><a href="#clusterrolebinding">ClusterRoleBinding</a></li><li class="toc-d3"><a href="#对资源的引用">对资源的引用</a></li><li class="toc-d2"><a href="#默认roles和role-bindings">默认Roles和Role Bindings</a></li><li class="toc-d3"><a href="#自动协商">自动协商</a></li><li class="toc-d3"><a href="#api发现角色">API发现角色</a></li></ul></aside></div><div class="lightbox" id="lightbox" aria-hidden="true"><img alt=""></div><script type="module" src="/_astro/Base.astro_astro_type_script_index_0_lang.7IsV0x-z.js"></script></body></html>

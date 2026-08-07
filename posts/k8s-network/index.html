@@ -1,0 +1,26 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>K8S集群网络系统</title><script>
+      (function () {
+        var s = localStorage.getItem('theme');
+        if (s === 'light' || s === 'dark') {
+          document.documentElement.setAttribute('data-theme', s);
+        }
+      })();
+    </script><link rel="stylesheet" href="/_astro/Base.CUYrCnW9.css"></head><body><header class="topbar"><a href="/" class="brand">HLDay</a><nav><a href="/">书</a><a href="/posts/">博客</a><a href="https://github.com/hTangle" class="nav-github" aria-label="GitHub">GitHub</a></nav><button class="theme-toggle" id="themeToggle" type="button" title="切换主题（自动/浅色/深色）" aria-label="切换主题">🖥️</button></header><div class="layout"><aside class="booknav"><ul class="nav-tree"><li><p class="nav-group">Go</p><ul><li><p class="nav-subgroup">并发编程</p><ul><li class><a href="/gmp/">GMP 调度器</a></li><li class><a href="/sync-lock/">同步和锁</a></li><li class><a href="/channel/">Channel</a></li><li class><a href="/context/">Context</a></li></ul></li></ul></li><li><p class="nav-group">Agent 开发</p><ul><li><p class="nav-subgroup">核心协议与机制</p><ul><li class><a href="/mcp/">MCP</a></li><li class><a href="/skill/">Skill</a></li><li class><a href="/tool-call/">Tool Call</a></li></ul></li></ul></li></ul></aside><main class="prose"><h1>K8S集群网络系统</h1><p>网络系统的的四个主要问题:</p>
+<ol>
+<li>高度耦合的容器间通信：这个已经被 Pods 和 localhost 通信解决了。</li>
+<li>Pod 间通信</li>
+<li>Pod 和服务间通信</li>
+<li>外部和服务间通信</li>
+</ol>
+<p>Kubernetes 的宗旨就是在应用之间共享机器。 通常来说，共享机器需要两个应用之间不能使用相同的端口，但是在多个应用开发者之间 去大规模地协调端口是件很困难的事情，尤其是还要让用户暴露在他们控制范围之外的集群级别的问题上。</p>
+<p>动态分配端口也会给系统带来很多复杂度 - 每个应用都需要设置一个端口的参数， 而 API 服务器还需要知道如何将动态端口数值插入到配置模块中，服务也需要知道如何找到对方等等。 与其去解决这些问题，Kubernetes 选择了其他不同的方法。</p>
+<h2 id="kubernetes-网络模型">Kubernetes 网络模型</h2>
+<p>每一个 Pod 都有它自己的IP地址，这就意味着你不需要显式地在每个 Pod 之间创建链接， 你几乎不需要处理容器端口到主机端口之间的映射。 这将创建一个干净的、向后兼容的模型，在这个模型里，从端口分配、命名、服务发现、 负载均衡、应用配置和迁移的角度来看，Pod 可以被视作虚拟机或者物理主机。</p>
+<p>Kubernetes 对所有网络设施的实施，都需要满足以下的基本要求:</p>
+<ul>
+<li>节点上的 Pod 可以不通过 NAT 和其他任何节点上的 Pod 通信</li>
+<li>节点上的代理（比如：系统守护进程、kubelet） 可以和节点上的所有Pod通信</li>
+<li>那些运行在节点的主机网络里的 Pod 可以不通过 NAT 和所有节点上的 Pod 通信(仅针对那些支持 Pods 在主机网络中运行的平台)</li>
+</ul>
+<p>Kubernetes 的 IP 地址存在于 Pod 范围内 - 容器共享它们的网络命名空间 - 包括它们的 IP 地址和 MAC 地址。 这就意味着 Pod 内的容器都可以通过 localhost 到达各个端口。 这也意味着 Pod 内的容器都需要相互协调端口的使用，但是这和虚拟机中的进程似乎没有什么不同， 这也被称为“一个 Pod 一个 IP” 模型。</p>
+<p>也可以在 node 本身通过端口去请求你的 Pod （称之为主机端口）， 但这是一个很特殊的操作。转发方式如何实现也是容器运行时的细节。 Pod 自己并不知道这些主机端口是否存在。</p></main><aside class="toc"><p class="toc-title">本页目录</p><ul><li class="toc-d2"><a href="#kubernetes-网络模型">Kubernetes 网络模型</a></li></ul></aside></div><div class="lightbox" id="lightbox" aria-hidden="true"><img alt=""></div><script type="module" src="/_astro/Base.astro_astro_type_script_index_0_lang.7IsV0x-z.js"></script></body></html>

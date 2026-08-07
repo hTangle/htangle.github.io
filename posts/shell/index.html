@@ -1,0 +1,124 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Shell一些tips</title><script>
+      (function () {
+        var s = localStorage.getItem('theme');
+        if (s === 'light' || s === 'dark') {
+          document.documentElement.setAttribute('data-theme', s);
+        }
+      })();
+    </script><link rel="stylesheet" href="/_astro/Base.CUYrCnW9.css"></head><body><header class="topbar"><a href="/" class="brand">HLDay</a><nav><a href="/">书</a><a href="/posts/">博客</a><a href="https://github.com/hTangle" class="nav-github" aria-label="GitHub">GitHub</a></nav><button class="theme-toggle" id="themeToggle" type="button" title="切换主题（自动/浅色/深色）" aria-label="切换主题">🖥️</button></header><div class="layout"><aside class="booknav"><ul class="nav-tree"><li><p class="nav-group">Go</p><ul><li><p class="nav-subgroup">并发编程</p><ul><li class><a href="/gmp/">GMP 调度器</a></li><li class><a href="/sync-lock/">同步和锁</a></li><li class><a href="/channel/">Channel</a></li><li class><a href="/context/">Context</a></li></ul></li></ul></li><li><p class="nav-group">Agent 开发</p><ul><li><p class="nav-subgroup">核心协议与机制</p><ul><li class><a href="/mcp/">MCP</a></li><li class><a href="/skill/">Skill</a></li><li class><a href="/tool-call/">Tool Call</a></li></ul></li></ul></li></ul></aside><main class="prose"><h1>Shell一些tips</h1><h2 id="数字大小比较">数字大小比较</h2>
+<h3 id="整数比较">整数比较</h3>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="shell"><code><span class="line"><span style="color:#6A737D">#!/bin/bash</span></span>
+<span class="line"><span style="color:#F97583">if</span><span style="color:#E1E4E8"> [ </span><span style="color:#FFAB70">$1</span><span style="color:#F97583"> -gt</span><span style="color:#FFAB70"> $2</span><span style="color:#E1E4E8"> ];</span><span style="color:#F97583">then</span><span style="color:#E1E4E8"> </span></span>
+<span class="line"><span style="color:#79B8FF">  echo</span><span style="color:#9ECBFF"> "参数</span><span style="color:#E1E4E8">$1大于参数</span><span style="color:#79B8FF">$2</span><span style="color:#9ECBFF">"</span></span>
+<span class="line"><span style="color:#F97583">else</span><span style="color:#E1E4E8"> </span></span>
+<span class="line"><span style="color:#79B8FF">  echo</span><span style="color:#9ECBFF"> "参数</span><span style="color:#E1E4E8">$1小于参数</span><span style="color:#79B8FF">$2</span><span style="color:#9ECBFF">"</span></span>
+<span class="line"><span style="color:#F97583">fi</span></span></code></pre>
+<p>数字判断一些命令：</p>
+<ul>
+<li>-gt：大于</li>
+<li>-lt：小于</li>
+<li>-eq：等于</li>
+<li>-ne：不等于</li>
+<li>-ge：大于等于</li>
+<li>-le：小于等于</li>
+</ul>
+<h3 id="小数与整数之间的比较">小数与整数之间的比较</h3>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="shell"><code><span class="line"><span style="color:#E1E4E8">a</span><span style="color:#F97583">=</span><span style="color:#9ECBFF">1.6</span></span>
+<span class="line"><span style="color:#E1E4E8">b</span><span style="color:#F97583">=</span><span style="color:#9ECBFF">6.1</span></span>
+<span class="line"><span style="color:#E1E4E8">c</span><span style="color:#F97583">=</span><span style="color:#9ECBFF">`</span><span style="color:#79B8FF">echo</span><span style="color:#9ECBFF"> "</span><span style="color:#E1E4E8">$a</span><span style="color:#9ECBFF"> > </span><span style="color:#E1E4E8">$b</span><span style="color:#9ECBFF">" </span><span style="color:#F97583">|</span><span style="color:#B392F0"> bc</span><span style="color:#9ECBFF">`</span></span>
+<span class="line"><span style="color:#6A737D"># 如果双引号内执行结果为真，c的值就是1，否则c的值就是0.</span></span></code></pre>
+<p>可以使用的比较符号：</p>
+<blockquote>
+<p>&#x3C; > == >= &#x3C;=</p>
+</blockquote>
+<h2 id="字符串比较">字符串比较</h2>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="shell"><code><span class="line"><span style="color:#E1E4E8">a</span><span style="color:#F97583">=</span><span style="color:#9ECBFF">"1"</span></span>
+<span class="line"><span style="color:#E1E4E8">b</span><span style="color:#F97583">=</span><span style="color:#9ECBFF">"2"</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">if</span><span style="color:#E1E4E8"> [[ </span><span style="color:#9ECBFF">"</span><span style="color:#E1E4E8">$a</span><span style="color:#9ECBFF">"</span><span style="color:#F97583"> ==</span><span style="color:#9ECBFF"> "</span><span style="color:#E1E4E8">$b</span><span style="color:#9ECBFF">"</span><span style="color:#E1E4E8"> ]]; </span><span style="color:#F97583">then</span></span>
+<span class="line"><span style="color:#79B8FF">    echo</span><span style="color:#9ECBFF"> "Strings are equal."</span></span>
+<span class="line"><span style="color:#F97583">else</span></span>
+<span class="line"><span style="color:#79B8FF">    echo</span><span style="color:#9ECBFF"> "Strings are not equal."</span></span>
+<span class="line"><span style="color:#F97583">fi</span></span>
+<span class="line"><span style="color:#E1E4E8">[[ </span><span style="color:#9ECBFF">"string1"</span><span style="color:#F97583"> ==</span><span style="color:#9ECBFF"> "string2"</span><span style="color:#E1E4E8"> ]] &#x26;&#x26; </span><span style="color:#79B8FF">echo</span><span style="color:#9ECBFF"> "Equal"</span><span style="color:#F97583"> ||</span><span style="color:#79B8FF"> echo</span><span style="color:#9ECBFF"> "Not equal"</span></span>
+<span class="line"><span style="color:#6A737D"># 判断字符串是否为空</span></span>
+<span class="line"><span style="color:#F97583">if</span><span style="color:#E1E4E8"> [[ </span><span style="color:#F97583">-z</span><span style="color:#E1E4E8"> $a ]]; </span><span style="color:#F97583">then</span></span>
+<span class="line"><span style="color:#79B8FF">  echo</span><span style="color:#9ECBFF"> "String is empty."</span></span>
+<span class="line"><span style="color:#F97583">fi</span></span>
+<span class="line"><span style="color:#6A737D"># 正则表达式</span></span>
+<span class="line"><span style="color:#F97583">if</span><span style="color:#E1E4E8"> [[ $a </span><span style="color:#F97583">=~</span><span style="color:#E1E4E8"> .</span><span style="color:#F97583">*</span><span style="color:#E1E4E8">Linux.</span><span style="color:#F97583">*</span><span style="color:#E1E4E8"> ]]; </span><span style="color:#F97583">then</span></span>
+<span class="line"><span style="color:#79B8FF">  echo</span><span style="color:#9ECBFF"> "It's there."</span></span>
+<span class="line"><span style="color:#F97583">fi</span></span>
+<span class="line"><span style="color:#6A737D"># 匹配*</span></span>
+<span class="line"><span style="color:#F97583">if</span><span style="color:#E1E4E8"> [[ $a </span><span style="color:#F97583">==</span><span style="color:#F97583"> *</span><span style="color:#9ECBFF">"Linux"</span><span style="color:#F97583">*</span><span style="color:#E1E4E8"> ]]; </span><span style="color:#F97583">then</span></span>
+<span class="line"><span style="color:#79B8FF">  echo</span><span style="color:#9ECBFF"> "It's there."</span></span>
+<span class="line"><span style="color:#F97583">fi</span></span></code></pre>
+<h2 id="在文件指定行后面加一列">在文件指定行后面加一列</h2>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="shell"><code><span class="line"><span style="color:#6A737D"># 例如需要在.ansible.cfg中添加deprecation_warnings = False的配置</span></span>
+<span class="line"><span style="color:#F97583">if</span><span style="color:#E1E4E8"> [ </span><span style="color:#F97583">-f</span><span style="color:#9ECBFF"> "</span><span style="color:#E1E4E8">$HOME</span><span style="color:#9ECBFF">/.ansible.cfg"</span><span style="color:#E1E4E8"> ];</span><span style="color:#F97583">then</span></span>
+<span class="line"><span style="color:#B392F0">  cp</span><span style="color:#9ECBFF"> "</span><span style="color:#E1E4E8">$HOME</span><span style="color:#9ECBFF">/.ansible.cfg"</span><span style="color:#9ECBFF"> "</span><span style="color:#E1E4E8">$HOME</span><span style="color:#9ECBFF">/.ansible.cfg.bak"</span></span>
+<span class="line"><span style="color:#79B8FF">  set</span><span style="color:#9ECBFF"> +e</span><span style="color:#6A737D"> # why：grep 没有的时候，返回码不是0，需要忽略这个错误</span></span>
+<span class="line"><span style="color:#E1E4E8">  deprecation_warnings</span><span style="color:#F97583">=</span><span style="color:#E1E4E8">$(</span><span style="color:#B392F0">cat</span><span style="color:#9ECBFF"> "</span><span style="color:#E1E4E8">$HOME</span><span style="color:#9ECBFF">/.ansible.cfg"</span><span style="color:#F97583">|</span><span style="color:#B392F0">grep</span><span style="color:#9ECBFF"> "deprecation_warnings = False"</span><span style="color:#F97583">|</span><span style="color:#B392F0">wc</span><span style="color:#79B8FF"> -l</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"><span style="color:#79B8FF">  set</span><span style="color:#79B8FF"> -e</span></span>
+<span class="line"><span style="color:#F97583">  if</span><span style="color:#E1E4E8"> [  $deprecation_warnings </span><span style="color:#F97583">-eq</span><span style="color:#79B8FF"> 0</span><span style="color:#E1E4E8"> ];</span><span style="color:#F97583">then</span></span>
+<span class="line"><span style="color:#B392F0">    sed</span><span style="color:#79B8FF"> -i</span><span style="color:#9ECBFF"> '/defaults]/a\\deprecation_warnings = False'</span><span style="color:#E1E4E8"> $HOME</span><span style="color:#9ECBFF">/.ansible.cfg</span></span>
+<span class="line"><span style="color:#F97583">  fi</span></span>
+<span class="line"><span style="color:#F97583">fi</span></span></code></pre>
+<h2 id="grep-反向过滤">grep 反向过滤</h2>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="shell"><code><span class="line"><span style="color:#6A737D"># 过滤掉包含abc的行</span></span>
+<span class="line"><span style="color:#B392F0">cat</span><span style="color:#9ECBFF"> a.log</span><span style="color:#F97583">|</span><span style="color:#B392F0">grep</span><span style="color:#79B8FF"> -v</span><span style="color:#9ECBFF"> "abc"</span></span></code></pre>
+<h2 id="去除字符串的前后空格">去除字符串的前后空格</h2>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="shell"><code><span class="line"><span style="color:#79B8FF">echo</span><span style="color:#9ECBFF"> " A B C "</span><span style="color:#F97583"> |</span><span style="color:#B392F0"> awk</span><span style="color:#9ECBFF"> '$1=$1'</span></span>
+<span class="line"><span style="color:#6A737D"># 这个方法是0的时候，就没有输出，要注意</span></span>
+<span class="line"><span style="color:#79B8FF">echo</span><span style="color:#9ECBFF"> ' A B C '</span><span style="color:#F97583"> |</span><span style="color:#B392F0"> awk</span><span style="color:#9ECBFF"> '{sub(/^ */, "");sub(/ *$/, "")}1'</span></span>
+<span class="line"><span style="color:#79B8FF">echo</span><span style="color:#9ECBFF"> ' A B C '</span><span style="color:#F97583"> |</span><span style="color:#B392F0"> sed</span><span style="color:#79B8FF"> -e</span><span style="color:#9ECBFF"> 's/^[ ]*//g'</span><span style="color:#F97583"> |</span><span style="color:#B392F0"> sed</span><span style="color:#79B8FF"> -e</span><span style="color:#9ECBFF"> 's/[ ]*$//g'</span></span>
+<span class="line"><span style="color:#79B8FF">eval</span><span style="color:#9ECBFF"> echo</span><span style="color:#9ECBFF"> " A B C "</span></span></code></pre>
+<p>为什么<code>'$1=$1'</code>有问题<a href="https://www.gnu.org/software/gawk/manual/html_node/Changing-Fields.html" rel="noopener noreferrer" target="_blank">Changing Fields (The GNU Awk User’s Guide)</a><a href="https://www.gnu.org/software/gawk/manual/html_node/Assignment-Ops.html" rel="noopener noreferrer" target="_blank">Assignment Ops (The GNU Awk User’s Guide)</a><a href="https://unix.stackexchange.com/questions/577726/why-does-awk-behave-differently-for-1-if-the-value-is-0-number-zero" rel="noopener noreferrer" target="_blank">Why does awk behave differently for $1 if the value is 0 (number zero)? - Unix &#x26; Linux Stack Exchange</a></p>
+<p>将<code>$1</code>赋值给<code>$1</code>的时候，awk会通过将通过默认OFS（默认为空格）连接字符串重新计算<code>$0</code></p>
+<p><code>'$1=$1'</code>是一个赋值操作，如果是0的话，这个表达式为false，所以不会执行print</p>
+<h2 id="vim中文乱码">vim中文乱码</h2>
+<p>将下述内容放到<code>$HOME/.vimrc</code>中</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="shell"><code><span class="line"><span style="color:#B392F0">syntax</span><span style="color:#9ECBFF"> on</span></span>
+<span class="line"><span style="color:#79B8FF">set</span><span style="color:#9ECBFF"> fileencodings=utf-8,gb2312,gb18030,gbk,ucs-bom,cp936,latin1</span></span>
+<span class="line"><span style="color:#79B8FF">set</span><span style="color:#9ECBFF"> enc=utf8</span></span>
+<span class="line"><span style="color:#79B8FF">set</span><span style="color:#9ECBFF"> fencs=utf8,gbk,gb2312,gb18030</span></span></code></pre>
+<h2 id="使用指令修复json">使用指令修复json</h2>
+<p>如果json因为修改失败，多了逗号，可以使用如下指令</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="shell"><code><span class="line"><span style="color:#B392F0">yq</span><span style="color:#9ECBFF"> eval</span><span style="color:#79B8FF"> -o</span><span style="color:#9ECBFF"> json</span><span style="color:#9ECBFF"> test.json</span><span style="color:#F97583"> |</span><span style="color:#B392F0">tee</span><span style="color:#9ECBFF"> test.json</span></span></code></pre>
+<h2 id="生成随机字符串">生成随机字符串</h2>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="shell"><code><span class="line"><span style="color:#B392F0">head</span><span style="color:#79B8FF"> -c</span><span style="color:#79B8FF"> 32</span><span style="color:#9ECBFF"> /dev/random</span><span style="color:#F97583"> |</span><span style="color:#B392F0"> base64</span><span style="color:#6A737D"> # 会阻塞</span></span>
+<span class="line"><span style="color:#B392F0">head</span><span style="color:#79B8FF"> -c</span><span style="color:#79B8FF"> 32</span><span style="color:#9ECBFF"> /dev/urandom</span><span style="color:#F97583"> |</span><span style="color:#B392F0"> base64</span><span style="color:#6A737D"> # 不会阻塞</span></span>
+<span class="line"><span style="color:#B392F0">openssl</span><span style="color:#9ECBFF"> rand</span><span style="color:#79B8FF"> -hex</span><span style="color:#79B8FF"> 10</span></span>
+<span class="line"><span style="color:#79B8FF">echo</span><span style="color:#E1E4E8"> $RANDOM </span><span style="color:#6A737D"># 得到的这个随机数是介于 0~32767 之间的一个整数</span></span></code></pre>
+<h2 id="查看操作系统信息">查看操作系统信息</h2>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="shell"><code><span class="line"><span style="color:#B392F0">uname</span><span style="color:#79B8FF"> -a</span></span>
+<span class="line"><span style="color:#B392F0">cat</span><span style="color:#9ECBFF"> /etc/os-release</span></span>
+<span class="line"><span style="color:#B392F0">cat</span><span style="color:#9ECBFF"> /proc/cpuinfo</span><span style="color:#6A737D"> #cup信息</span></span></code></pre>
+<h2 id="crontab日志">crontab日志</h2>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="plaintext"><code><span class="line"><span>sudo tail -f -n 200 /var/log/syslog|grep CRON</span></span></code></pre>
+<h1 id="ansible">ansible</h1>
+<h2 id="ansible取其他主机的变量">ansible取其他主机的变量</h2>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="shell"><code><span class="line"><span style="color:#6A737D"># 使用ansible中的A主机的B变量，通常用于目标主机并不存在于A的hosts中的情况</span></span>
+<span class="line"><span style="color:#B392F0">"{{hostvars[groups['A'][0]]['B']}}"</span></span></code></pre>
+<h2 id="ansible按照shell结果选择执行分支">ansible按照shell结果选择执行分支</h2>
+<p>使用<code>command</code>将结果注册为变量，判断变量的状态<a href="https://docs.ansible.com/ansible/latest/reference_appendices/common_return_values.html" rel="noopener noreferrer" target="_blank">Return Values — Ansible Documentation</a></p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="yaml"><code><span class="line"><span style="color:#E1E4E8">- </span><span style="color:#85E89D">name</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">exec</span></span>
+<span class="line"><span style="color:#85E89D">  hosts</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">A</span></span>
+<span class="line"><span style="color:#85E89D">  tasks</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#E1E4E8">    - </span><span style="color:#85E89D">name</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">Ensure a exit</span></span>
+<span class="line"><span style="color:#85E89D">      command</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">curl http://{{inventory_hostname}}:8080/healthz</span></span>
+<span class="line"><span style="color:#85E89D">      register</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">healthz</span></span>
+<span class="line"><span style="color:#85E89D">      failed_when</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">False</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#E1E4E8">    - </span><span style="color:#85E89D">name</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">exec run</span></span>
+<span class="line"><span style="color:#85E89D">      shell</span><span style="color:#E1E4E8">: </span><span style="color:#F97583">|</span></span>
+<span class="line"><span style="color:#9ECBFF">        docker run</span></span>
+<span class="line"><span style="color:#85E89D">      when</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">healthz.rc != 0</span></span></code></pre>
+<h1 id="git">git</h1>
+<h2 id="删除远程仓库文件不删除本地文件">删除远程仓库文件，不删除本地文件</h2>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="plaintext"><code><span class="line"><span>git rm -r --cached 文件/文件夹名称</span></span>
+<span class="line"><span>git commit -m "提交说明"</span></span>
+<span class="line"><span>git push origin master</span></span></code></pre>
+<h1 id="kubectl">kubectl</h1>
+<h2 id="手动运行一个cronjob">手动运行一个cronjob</h2>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="plaintext"><code><span class="line"><span>kubectl create job --from=cronjob/&#x3C;name of cronjob> &#x3C;name of job></span></span></code></pre></main><aside class="toc"><p class="toc-title">本页目录</p><ul><li class="toc-d2"><a href="#数字大小比较">数字大小比较</a></li><li class="toc-d3"><a href="#整数比较">整数比较</a></li><li class="toc-d3"><a href="#小数与整数之间的比较">小数与整数之间的比较</a></li><li class="toc-d2"><a href="#字符串比较">字符串比较</a></li><li class="toc-d2"><a href="#在文件指定行后面加一列">在文件指定行后面加一列</a></li><li class="toc-d2"><a href="#grep-反向过滤">grep 反向过滤</a></li><li class="toc-d2"><a href="#去除字符串的前后空格">去除字符串的前后空格</a></li><li class="toc-d2"><a href="#vim中文乱码">vim中文乱码</a></li><li class="toc-d2"><a href="#使用指令修复json">使用指令修复json</a></li><li class="toc-d2"><a href="#生成随机字符串">生成随机字符串</a></li><li class="toc-d2"><a href="#查看操作系统信息">查看操作系统信息</a></li><li class="toc-d2"><a href="#crontab日志">crontab日志</a></li><li class="toc-d2"><a href="#ansible取其他主机的变量">ansible取其他主机的变量</a></li><li class="toc-d2"><a href="#ansible按照shell结果选择执行分支">ansible按照shell结果选择执行分支</a></li><li class="toc-d2"><a href="#删除远程仓库文件不删除本地文件">删除远程仓库文件，不删除本地文件</a></li><li class="toc-d2"><a href="#手动运行一个cronjob">手动运行一个cronjob</a></li></ul></aside></div><div class="lightbox" id="lightbox" aria-hidden="true"><img alt=""></div><script type="module" src="/_astro/Base.astro_astro_type_script_index_0_lang.7IsV0x-z.js"></script></body></html>

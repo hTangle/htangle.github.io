@@ -1,0 +1,388 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Raft</title><script>
+      (function () {
+        var s = localStorage.getItem('theme');
+        if (s === 'light' || s === 'dark') {
+          document.documentElement.setAttribute('data-theme', s);
+        }
+      })();
+    </script><link rel="stylesheet" href="/_astro/Base.CUYrCnW9.css"></head><body><header class="topbar"><a href="/" class="brand">HLDay</a><nav><a href="/">书</a><a href="/posts/">博客</a><a href="https://github.com/hTangle" class="nav-github" aria-label="GitHub">GitHub</a></nav><button class="theme-toggle" id="themeToggle" type="button" title="切换主题（自动/浅色/深色）" aria-label="切换主题">🖥️</button></header><div class="layout"><aside class="booknav"><ul class="nav-tree"><li><p class="nav-group">Go</p><ul><li><p class="nav-subgroup">并发编程</p><ul><li class><a href="/gmp/">GMP 调度器</a></li><li class><a href="/sync-lock/">同步和锁</a></li><li class><a href="/channel/">Channel</a></li><li class><a href="/context/">Context</a></li></ul></li></ul></li><li><p class="nav-group">Agent 开发</p><ul><li><p class="nav-subgroup">核心协议与机制</p><ul><li class><a href="/mcp/">MCP</a></li><li class><a href="/skill/">Skill</a></li><li class><a href="/tool-call/">Tool Call</a></li></ul></li></ul></li></ul></aside><main class="prose"><h1>Raft</h1><h2 id="raft选举过程">Raft选举过程</h2>
+<h3 id="角色">角色</h3>
+<p>每个节点存在三种不同的角色：</p>
+<ul>
+<li>Follower</li>
+<li>Candidate</li>
+<li>Leader</li>
+</ul>
+<p>并且每个节点同一时刻只能是其中一种角色。</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">func</span><span style="color:#E1E4E8"> (</span><span style="color:#FFAB70">r </span><span style="color:#F97583">*</span><span style="color:#B392F0">Raft</span><span style="color:#E1E4E8">) </span><span style="color:#B392F0">run</span><span style="color:#E1E4E8">() {</span></span>
+<span class="line"><span style="color:#F97583">	for</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#6A737D">		// Check if we are doing a shutdown</span></span>
+<span class="line"><span style="color:#F97583">		select</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">		case</span><span style="color:#F97583"> &#x3C;-</span><span style="color:#E1E4E8">r.shutdownCh:</span></span>
+<span class="line"><span style="color:#6A737D">			// Clear the leader to prevent forwarding</span></span>
+<span class="line"><span style="color:#E1E4E8">			r.</span><span style="color:#B392F0">setLeader</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">""</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"><span style="color:#F97583">			return</span></span>
+<span class="line"><span style="color:#F97583">		default</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#E1E4E8">		}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D">		// Enter into a sub-FSM</span></span>
+<span class="line"><span style="color:#F97583">		switch</span><span style="color:#E1E4E8"> r.</span><span style="color:#B392F0">getState</span><span style="color:#E1E4E8">() {</span></span>
+<span class="line"><span style="color:#F97583">		case</span><span style="color:#E1E4E8"> Follower:</span></span>
+<span class="line"><span style="color:#E1E4E8">			r.</span><span style="color:#B392F0">runFollower</span><span style="color:#E1E4E8">()</span></span>
+<span class="line"><span style="color:#F97583">		case</span><span style="color:#E1E4E8"> Candidate:</span></span>
+<span class="line"><span style="color:#E1E4E8">			r.</span><span style="color:#B392F0">runCandidate</span><span style="color:#E1E4E8">()</span></span>
+<span class="line"><span style="color:#F97583">		case</span><span style="color:#E1E4E8"> Leader:</span></span>
+<span class="line"><span style="color:#E1E4E8">			r.</span><span style="color:#B392F0">runLeader</span><span style="color:#E1E4E8">()</span></span>
+<span class="line"><span style="color:#E1E4E8">		}</span></span>
+<span class="line"><span style="color:#E1E4E8">	}</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<h4 id="follower">Follower</h4>
+<p>节点处于Follower状态时，会首先初始化一个随机过期时间</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#E1E4E8">heartbeatTimer </span><span style="color:#F97583">:=</span><span style="color:#B392F0"> randomTimeout</span><span style="color:#E1E4E8">(r.conf.HeartbeatTimeout)</span></span></code></pre>
+<p>如果超过该时间没有和leader成功通信，则该节点会认为leader丢失，并尝试进入Candidate状态。</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">case</span><span style="color:#F97583"> &#x3C;-</span><span style="color:#E1E4E8">heartbeatTimer:</span></span>
+<span class="line"><span style="color:#6A737D">			// Restart the heartbeat timer</span></span>
+<span class="line"><span style="color:#E1E4E8">			heartbeatTimer </span><span style="color:#F97583">=</span><span style="color:#B392F0"> randomTimeout</span><span style="color:#E1E4E8">(r.conf.HeartbeatTimeout)</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D">			// Check if we have had a successful contact</span></span>
+<span class="line"><span style="color:#E1E4E8">			lastContact </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> r.</span><span style="color:#B392F0">LastContact</span><span style="color:#E1E4E8">()</span></span>
+<span class="line"><span style="color:#F97583">			if</span><span style="color:#E1E4E8"> time.</span><span style="color:#B392F0">Now</span><span style="color:#E1E4E8">().</span><span style="color:#B392F0">Sub</span><span style="color:#E1E4E8">(lastContact) </span><span style="color:#F97583">&#x3C;</span><span style="color:#E1E4E8"> r.conf.HeartbeatTimeout {</span></span>
+<span class="line"><span style="color:#F97583">				continue</span></span>
+<span class="line"><span style="color:#E1E4E8">			}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D">			// Heartbeat failed! Transition to the candidate state</span></span>
+<span class="line"><span style="color:#E1E4E8">			lastLeader </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> r.</span><span style="color:#B392F0">Leader</span><span style="color:#E1E4E8">()</span></span>
+<span class="line"><span style="color:#E1E4E8">			r.</span><span style="color:#B392F0">setLeader</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">""</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">			if</span><span style="color:#E1E4E8"> r.configurations.latestIndex </span><span style="color:#F97583">==</span><span style="color:#79B8FF"> 0</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">				r.logger.</span><span style="color:#B392F0">Warn</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">"no known peers, aborting election"</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"><span style="color:#F97583">				if</span><span style="color:#F97583"> !</span><span style="color:#E1E4E8">didWarn {</span></span>
+<span class="line"><span style="color:#E1E4E8">					r.logger.</span><span style="color:#B392F0">Warn</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">"no known peers, aborting election"</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"><span style="color:#E1E4E8">					didWarn </span><span style="color:#F97583">=</span><span style="color:#79B8FF"> true</span></span>
+<span class="line"><span style="color:#E1E4E8">				}</span></span>
+<span class="line"><span style="color:#E1E4E8">			} </span><span style="color:#F97583">else</span><span style="color:#F97583"> if</span><span style="color:#E1E4E8"> r.configurations.latestIndex </span><span style="color:#F97583">==</span><span style="color:#E1E4E8"> r.configurations.committedIndex </span><span style="color:#F97583">&#x26;&#x26;</span></span>
+<span class="line"><span style="color:#F97583">				!</span><span style="color:#B392F0">hasVote</span><span style="color:#E1E4E8">(r.configurations.latest, r.localID) {</span></span>
+<span class="line"><span style="color:#E1E4E8">				r.logger.</span><span style="color:#B392F0">Warn</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">"not part of stable configuration, aborting election"</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"><span style="color:#F97583">				if</span><span style="color:#F97583"> !</span><span style="color:#E1E4E8">didWarn {</span></span>
+<span class="line"><span style="color:#E1E4E8">					r.logger.</span><span style="color:#B392F0">Warn</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">"not part of stable configuration, aborting election"</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"><span style="color:#E1E4E8">					didWarn </span><span style="color:#F97583">=</span><span style="color:#79B8FF"> true</span></span>
+<span class="line"><span style="color:#E1E4E8">				}</span></span>
+<span class="line"><span style="color:#E1E4E8">			} </span><span style="color:#F97583">else</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">				r.logger.</span><span style="color:#B392F0">Warn</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">"heartbeat timeout reached, starting election"</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">"last-leader"</span><span style="color:#E1E4E8">, lastLeader)</span></span>
+<span class="line"><span style="color:#E1E4E8">				metrics.</span><span style="color:#B392F0">IncrCounter</span><span style="color:#E1E4E8">([]</span><span style="color:#F97583">string</span><span style="color:#E1E4E8">{</span><span style="color:#9ECBFF">"raft"</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">"transition"</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">"heartbeat_timeout"</span><span style="color:#E1E4E8">}, </span><span style="color:#79B8FF">1</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"><span style="color:#E1E4E8">				r.</span><span style="color:#B392F0">setState</span><span style="color:#E1E4E8">(Candidate)</span></span>
+<span class="line"><span style="color:#F97583">				return</span></span>
+<span class="line"><span style="color:#E1E4E8">			}</span></span></code></pre>
+<p>Follower节点会处理一些RPC请求</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">func</span><span style="color:#E1E4E8"> (</span><span style="color:#FFAB70">r </span><span style="color:#F97583">*</span><span style="color:#B392F0">Raft</span><span style="color:#E1E4E8">) </span><span style="color:#B392F0">processRPC</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">rpc</span><span style="color:#B392F0"> RPC</span><span style="color:#E1E4E8">) {</span></span>
+<span class="line"><span style="color:#F97583">	if</span><span style="color:#E1E4E8"> err </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> r.</span><span style="color:#B392F0">checkRPCHeader</span><span style="color:#E1E4E8">(rpc); err </span><span style="color:#F97583">!=</span><span style="color:#79B8FF"> nil</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">		rpc.</span><span style="color:#B392F0">Respond</span><span style="color:#E1E4E8">(</span><span style="color:#79B8FF">nil</span><span style="color:#E1E4E8">, err)</span></span>
+<span class="line"><span style="color:#F97583">		return</span></span>
+<span class="line"><span style="color:#E1E4E8">	}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">	switch</span><span style="color:#E1E4E8"> cmd </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> rpc.Command.(</span><span style="color:#F97583">type</span><span style="color:#E1E4E8">) {</span></span>
+<span class="line"><span style="color:#F97583">	case</span><span style="color:#F97583"> *</span><span style="color:#B392F0">AppendEntriesRequest</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#E1E4E8">		r.</span><span style="color:#B392F0">appendEntries</span><span style="color:#E1E4E8">(rpc, cmd)</span></span>
+<span class="line"><span style="color:#F97583">	case</span><span style="color:#F97583"> *</span><span style="color:#B392F0">RequestVoteRequest</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#E1E4E8">		r.</span><span style="color:#B392F0">requestVote</span><span style="color:#E1E4E8">(rpc, cmd)</span></span>
+<span class="line"><span style="color:#F97583">	case</span><span style="color:#F97583"> *</span><span style="color:#B392F0">InstallSnapshotRequest</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#E1E4E8">		r.</span><span style="color:#B392F0">installSnapshot</span><span style="color:#E1E4E8">(rpc, cmd)</span></span>
+<span class="line"><span style="color:#F97583">	case</span><span style="color:#F97583"> *</span><span style="color:#B392F0">TimeoutNowRequest</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#E1E4E8">		r.</span><span style="color:#B392F0">timeoutNow</span><span style="color:#E1E4E8">(rpc, cmd)</span></span>
+<span class="line"><span style="color:#F97583">	default</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#E1E4E8">		r.logger.</span><span style="color:#B392F0">Error</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">"got unexpected command"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#9ECBFF">			"command"</span><span style="color:#E1E4E8">, hclog.</span><span style="color:#B392F0">Fmt</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">"</span><span style="color:#79B8FF">%#v</span><span style="color:#9ECBFF">"</span><span style="color:#E1E4E8">, rpc.Command))</span></span>
+<span class="line"><span style="color:#E1E4E8">		rpc.</span><span style="color:#B392F0">Respond</span><span style="color:#E1E4E8">(</span><span style="color:#79B8FF">nil</span><span style="color:#E1E4E8">, fmt.</span><span style="color:#B392F0">Errorf</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">"unexpected command"</span><span style="color:#E1E4E8">))</span></span>
+<span class="line"><span style="color:#E1E4E8">	}</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>其中包括RequestVoteRequest，即请求成为leader的选举请求，如果节点发现</p>
+<ol>
+<li>存在leader且leader!=请求的节点且不处于leader切换阶段：拒绝选举请求</li>
+<li><code>req.Term &#x3C; r.getCurrentTerm()</code>：拒绝选举请求</li>
+<li><code>req.Term > r.getCurrentTerm()</code>: 进入Follower状态并将当前的Term设置为req.Term</li>
+<li><code>lastTerm > req.LastLogTerm</code>: 拒绝选举请求</li>
+<li><code>lastTerm == req.LastLogTerm &#x26;&#x26; lastIdx > req.LastLogIndex</code>：拒绝选举请求
+从以上5中情况可以看到，选举并不仅仅是根据时间来确定的（先到先得），而是根据时间，存储情况来决定节点是否投票给对应的Candidate，如果集群中一个节点的存储落后于集群中其他节点，即使该节点先发起Leader选举请求，也会被集群中其他节点拒绝。</li>
+</ol>
+<h4 id="candidate">Candidate</h4>
+<p>如果节点超时没有收到leader的心跳，则会进入Candidate状态。Candidate状态开始的时候，节点会首先给自己投一票并且初始化一个随机超时时间，随后会计算需要的投票的节点数</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#E1E4E8">voteCh </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> r.</span><span style="color:#B392F0">electSelf</span><span style="color:#E1E4E8">()</span></span>
+<span class="line"><span style="color:#E1E4E8">electionTimer </span><span style="color:#F97583">:=</span><span style="color:#B392F0"> randomTimeout</span><span style="color:#E1E4E8">(r.conf.ElectionTimeout)</span></span>
+<span class="line"><span style="color:#E1E4E8">votesNeeded </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> r.</span><span style="color:#B392F0">quorumSize</span><span style="color:#E1E4E8">()</span></span></code></pre>
+<p>votesNeeded的计算方式为配置中的最后的所有的节点数/2+1，如果集群中只存在两个活着的节点，则需要的最小投票数量为2</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">func</span><span style="color:#E1E4E8"> (</span><span style="color:#FFAB70">r </span><span style="color:#F97583">*</span><span style="color:#B392F0">Raft</span><span style="color:#E1E4E8">) </span><span style="color:#B392F0">quorumSize</span><span style="color:#E1E4E8">() </span><span style="color:#F97583">int</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">	voters </span><span style="color:#F97583">:=</span><span style="color:#79B8FF"> 0</span></span>
+<span class="line"><span style="color:#F97583">	for</span><span style="color:#E1E4E8"> _, server </span><span style="color:#F97583">:=</span><span style="color:#F97583"> range</span><span style="color:#E1E4E8"> r.configurations.latest.Servers {</span></span>
+<span class="line"><span style="color:#F97583">		if</span><span style="color:#E1E4E8"> server.Suffrage </span><span style="color:#F97583">==</span><span style="color:#E1E4E8"> Voter {</span></span>
+<span class="line"><span style="color:#E1E4E8">			voters</span><span style="color:#F97583">++</span></span>
+<span class="line"><span style="color:#E1E4E8">		}</span></span>
+<span class="line"><span style="color:#E1E4E8">	}</span></span>
+<span class="line"><span style="color:#F97583">	return</span><span style="color:#E1E4E8"> voters</span><span style="color:#F97583">/</span><span style="color:#79B8FF">2</span><span style="color:#F97583"> +</span><span style="color:#79B8FF"> 1</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>如果candidate收到rpc的回复，则会：</p>
+<ol>
+<li><code>vote.Term > r.getCurrentTerm()</code>：进入follower状态</li>
+<li><code>vote.Granted==true</code>：grantedVotes++，如果grantedVotes >= votesNeeded，则进入leader状态</li>
+</ol>
+<p>所以Candidate是一种中间状态，每次选举会存在三种结果</p>
+<ul>
+<li>超时重新进行选举；</li>
+<li>发现req.Term大于自己的term则进入Follower状态；</li>
+<li>获取足够多的投票进入Leader状态；</li>
+</ul>
+<h4 id="leader">Leader</h4>
+<p>Leader的运行逻辑比较简单，首先初始化一些leader的配置，然后运行一个死循环<code>r.leaderLoop()</code></p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">func</span><span style="color:#E1E4E8"> (</span><span style="color:#FFAB70">r </span><span style="color:#F97583">*</span><span style="color:#B392F0">Raft</span><span style="color:#E1E4E8">) </span><span style="color:#B392F0">leaderLoop</span><span style="color:#E1E4E8">() {</span></span>
+<span class="line"><span style="color:#6A737D">// stepDown is used to track if there is an inflight log that</span></span>
+<span class="line"><span style="color:#6A737D">	// would cause us to lose leadership (specifically a RemovePeer of</span></span>
+<span class="line"><span style="color:#6A737D">	// ourselves). If this is the case, we must not allow any logs to</span></span>
+<span class="line"><span style="color:#6A737D">	// be processed in parallel, otherwise we are basing commit on</span></span>
+<span class="line"><span style="color:#6A737D">	// only a single peer (ourself) and replicating to an undefined set</span></span>
+<span class="line"><span style="color:#6A737D">	// of peers.</span></span>
+<span class="line"><span style="color:#E1E4E8">	stepDown </span><span style="color:#F97583">:=</span><span style="color:#79B8FF"> false</span></span>
+<span class="line"><span style="color:#E1E4E8">	lease </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> time.</span><span style="color:#B392F0">After</span><span style="color:#E1E4E8">(r.conf.LeaderLeaseTimeout)</span></span>
+<span class="line"><span style="color:#F97583">	for</span><span style="color:#E1E4E8"> r.</span><span style="color:#B392F0">getState</span><span style="color:#E1E4E8">() </span><span style="color:#F97583">==</span><span style="color:#E1E4E8"> Leader {</span></span>
+<span class="line"><span style="color:#F97583">	select</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">		case</span><span style="color:#E1E4E8"> rpc </span><span style="color:#F97583">:=</span><span style="color:#F97583"> &#x3C;-</span><span style="color:#E1E4E8">r.rpcCh:</span></span>
+<span class="line"><span style="color:#F97583">		case</span><span style="color:#F97583"> &#x3C;-</span><span style="color:#E1E4E8">r.leaderState.stepDown:</span></span>
+<span class="line"><span style="color:#F97583">		case</span><span style="color:#E1E4E8"> future </span><span style="color:#F97583">:=</span><span style="color:#F97583"> &#x3C;-</span><span style="color:#E1E4E8">r.leadershipTransferCh:</span></span>
+<span class="line"><span style="color:#F97583">		case</span><span style="color:#F97583"> &#x3C;-</span><span style="color:#E1E4E8">r.leaderState.commitCh:</span></span>
+<span class="line"><span style="color:#F97583">		case</span><span style="color:#E1E4E8"> v </span><span style="color:#F97583">:=</span><span style="color:#F97583"> &#x3C;-</span><span style="color:#E1E4E8">r.verifyCh:</span></span>
+<span class="line"><span style="color:#F97583">		case</span><span style="color:#E1E4E8"> future </span><span style="color:#F97583">:=</span><span style="color:#F97583"> &#x3C;-</span><span style="color:#E1E4E8">r.userRestoreCh:</span></span>
+<span class="line"><span style="color:#F97583">		case</span><span style="color:#E1E4E8"> future </span><span style="color:#F97583">:=</span><span style="color:#F97583"> &#x3C;-</span><span style="color:#E1E4E8">r.configurationsCh:</span></span>
+<span class="line"><span style="color:#F97583">		case</span><span style="color:#E1E4E8"> future </span><span style="color:#F97583">:=</span><span style="color:#F97583"> &#x3C;-</span><span style="color:#E1E4E8">r.</span><span style="color:#B392F0">configurationChangeChIfStable</span><span style="color:#E1E4E8">():</span></span>
+<span class="line"><span style="color:#F97583">		case</span><span style="color:#E1E4E8"> b </span><span style="color:#F97583">:=</span><span style="color:#F97583"> &#x3C;-</span><span style="color:#E1E4E8">r.bootstrapCh:</span></span>
+<span class="line"><span style="color:#F97583">		case</span><span style="color:#E1E4E8"> newLog </span><span style="color:#F97583">:=</span><span style="color:#F97583"> &#x3C;-</span><span style="color:#E1E4E8">r.applyCh:</span></span>
+<span class="line"><span style="color:#F97583">		case</span><span style="color:#F97583"> &#x3C;-</span><span style="color:#E1E4E8">lease:</span></span>
+<span class="line"><span style="color:#F97583">		case</span><span style="color:#F97583"> &#x3C;-</span><span style="color:#E1E4E8">r.shutdownCh:</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>Leader需要处理各种RPC请求，写入数据，并检测集群的状态等。Leader可能会退化为Follower：</p>
+<ul>
+<li>如果在LeaderLeaseTimeout时间段内，Leader并未与集群中大多数节点成功通信，则Leader会退化为Follower；</li>
+<li>如果Leader接收到比当前term更大的term，则会退化为Follower</li>
+</ul>
+<p>所以上述三种状态可以用下图表示</p>
+<p><img src="https://ahsup.oss-cn-beijing.aliyuncs.com/71fa8524f2fdb96a804db1c20194352e.png" alt="20220308170158"></p>
+<p>同时term可以用下图来表示</p>
+<p><img src="https://ahsup.oss-cn-beijing.aliyuncs.com/1f881afea333cd0d531cac8c04dbec83.png" alt="20220308170249"></p>
+<h3 id="选举过程">选举过程</h3>
+<ol>
+<li>
+<p>节点在加入集群后处于follower状态；</p>
+</li>
+<li>
+<p>如果follower节点在超时时间（election timeout）后没有收到leader的心跳，会进入candidate状态（开启一个新的election term），candidate状态下会发起选举投票：</p>
+<ol>
+<li>candidate会首先给自己投票</li>
+<li>然后给所有节点发送一个投票消息</li>
+<li>如果收到半数以上节点的同意请求则进入leader状态、然后发送<code>Append Entries(会按照heartbeat timeout周期性的发送消息)</code>消息给所有节点</li>
+</ol>
+<p><img src="https://ahsup.oss-cn-beijing.aliyuncs.com//draw/raft-leader-selection-follower-candidate.png" alt="raft-leader-selection-follower-candidate"></p>
+<blockquote>
+<p>The election timeout is the amount of time a follower waits until becoming a candidate. The election timeout is randomized to be between 150ms and 300ms.</p>
+<p>通过随机的选举超时可以有效避免脑裂问题：5节点，宕机一个节点，如果两个candidate同时发起请求，而只收到两票，就都不会赢得选举，然后随机等待一个election timeout，然后再次发起请求，先发起请求的节点成为leader的概率要远大于后发起请求的节点；</p>
+</blockquote>
+</li>
+<li>
+<p>其他节点收到投票后会有两种选择：</p>
+<ol>
+<li>如果在election term没有投过票则同意选举请求、重置election timeout并进入follower状态</li>
+<li>拒绝选举请求</li>
+</ol>
+</li>
+</ol>
+<h2 id="log-replication">Log replication</h2>
+<h3 id="日志格式">日志格式</h3>
+<p>log的数据结构如下</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">type</span><span style="color:#B392F0"> Log</span><span style="color:#F97583"> struct</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#6A737D">	// Index holds the index of the log entry.</span></span>
+<span class="line"><span style="color:#E1E4E8">	Index </span><span style="color:#F97583">uint64</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D">	// Term holds the election term of the log entry.</span></span>
+<span class="line"><span style="color:#E1E4E8">	Term </span><span style="color:#F97583">uint64</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D">	// Type holds the type of the log entry.</span></span>
+<span class="line"><span style="color:#E1E4E8">	Type </span><span style="color:#B392F0">LogType</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D">	// Data holds the log entry's type-specific data.</span></span>
+<span class="line"><span style="color:#E1E4E8">	Data []</span><span style="color:#F97583">byte</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D">	// Extensions holds an opaque byte slice of information for middleware. It</span></span>
+<span class="line"><span style="color:#6A737D">	// is up to the client of the library to properly modify this as it adds</span></span>
+<span class="line"><span style="color:#6A737D">	// layers and remove those layers when appropriate. This value is a part of</span></span>
+<span class="line"><span style="color:#6A737D">	// the log, so very large values could cause timing issues.</span></span>
+<span class="line"><span style="color:#6A737D">	//</span></span>
+<span class="line"><span style="color:#6A737D">	// N.B. It is _up to the client_ to handle upgrade paths. For instance if</span></span>
+<span class="line"><span style="color:#6A737D">	// using this with go-raftchunking, the client should ensure that all Raft</span></span>
+<span class="line"><span style="color:#6A737D">	// peers are using a version that can handle that extension before ever</span></span>
+<span class="line"><span style="color:#6A737D">	// actually triggering chunking behavior. It is sometimes sufficient to</span></span>
+<span class="line"><span style="color:#6A737D">	// ensure that non-leaders are upgraded first, then the current leader is</span></span>
+<span class="line"><span style="color:#6A737D">	// upgraded, but a leader changeover during this process could lead to</span></span>
+<span class="line"><span style="color:#6A737D">	// trouble, so gating extension behavior via some flag in the client</span></span>
+<span class="line"><span style="color:#6A737D">	// program is also a good idea.</span></span>
+<span class="line"><span style="color:#E1E4E8">	Extensions []</span><span style="color:#F97583">byte</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>log由index，term，type和data组成</p>
+<h3 id="日志处理流程">日志处理流程</h3>
+<ol>
+<li>
+<p>所有的请求都需要有Leader处理，并且都会被追加到Leader的log中，如下图所示，client发送了<code>set a=1</code>的请求，leader接收到请求后将数据存储到log中，但是此时并没有commit，所以leader不会更新当前a的值。</p>
+<p><img src="https://ahsup.oss-cn-beijing.aliyuncs.com//draw/raft-log-replica-set-to-leader.png" alt="raft-log-replica-set-to-leader"></p>
+</li>
+<li>
+<p>为了完成commit，Leader首先向所有的Follower发送replicate请求，然后等待集群中大多数节点返回确认信息</p>
+<p><img src="https://ahsup.oss-cn-beijing.aliyuncs.com//draw/raft-log-replica-leader-req.png" alt="raft-log-replica-leader-req"></p>
+</li>
+<li>
+<p>大多数节点返回了确认信息后，Leader可以commit并将a设置为1，然后Leader发送请求给Follower说明a=1已经commit，Follower接收到请求后将执行commit操作，此时整个系统就a的值处于一致性状态</p>
+<p><img src="https://ahsup.oss-cn-beijing.aliyuncs.com//draw/raft-log-replica-leader-commit.png" alt="raft-log-replica-leader-commit"></p>
+</li>
+</ol>
+<h2 id="一些问题">一些问题</h2>
+<h3 id="通过k8s部署的3节点consul先后挂掉两个节点后无法正常工作">通过k8s部署的3节点consul先后挂掉两个节点后无法正常工作</h3>
+<ol>
+<li>
+<p>初始状态下，consul集群工作正常</p>
+<p><img src="https://ahsup.oss-cn-beijing.aliyuncs.com//draw/consul-raft-failed-two-node-1.png" alt="consul-raft-failed-two-node-1"></p>
+</li>
+<li>
+<p>刚开始如果1挂掉，此时consul依然能够正常工作，因为活着的两个节点知道彼此的存在，此时0和2上的last_configuration变成了0和2，去掉了挂掉的1节点，但是注意，此时1节点上存储的last_configuration还是0、1、2；</p>
+<p><img src="https://ahsup.oss-cn-beijing.aliyuncs.com//draw/consul-raft-failed-two-node-2.png" alt="consul-raft-failed-two-node-2"></p>
+</li>
+<li>
+<p>如果此时1节点起来，然后在1节点加入集群之前，2节点挂掉，此时整个集群的信息如下，因为1还没有加入集群，所以0节点的last_configuration还是存储的0、2；所以如果0要发起投票，只能给2发（但是此时2已经挂掉了），所以0不能依靠投票成为leader；1节点存储了正确的节点信息0、1、2，所以0节点能够正常发起投票，但是1的last_index小于0的last_index，所以1给0发起的投票会被0拒绝，因此1节点也无法通过投票成为leader；此时整个consul集群处于无法工作的状态；</p>
+<p><img src="https://ahsup.oss-cn-beijing.aliyuncs.com//draw/consul-raft-failed-two-node-3.png" alt="consul-raft-failed-two-node-3"></p>
+<p>看raft的代码</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">func</span><span style="color:#E1E4E8"> (</span><span style="color:#FFAB70">r </span><span style="color:#F97583">*</span><span style="color:#B392F0">Raft</span><span style="color:#E1E4E8">) </span><span style="color:#B392F0">requestVote</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">rpc</span><span style="color:#B392F0"> RPC</span><span style="color:#E1E4E8">, </span><span style="color:#FFAB70">req</span><span style="color:#F97583"> *</span><span style="color:#B392F0">RequestVoteRequest</span><span style="color:#E1E4E8">) {</span></span>
+<span class="line"><span style="color:#F97583">	defer</span><span style="color:#E1E4E8"> metrics.</span><span style="color:#B392F0">MeasureSince</span><span style="color:#E1E4E8">([]</span><span style="color:#F97583">string</span><span style="color:#E1E4E8">{</span><span style="color:#9ECBFF">"raft"</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">"rpc"</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">"requestVote"</span><span style="color:#E1E4E8">}, time.</span><span style="color:#B392F0">Now</span><span style="color:#E1E4E8">())</span></span>
+<span class="line"><span style="color:#E1E4E8">	r.</span><span style="color:#B392F0">observe</span><span style="color:#E1E4E8">(</span><span style="color:#F97583">*</span><span style="color:#E1E4E8">req)</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D">	// Setup a response</span></span>
+<span class="line"><span style="color:#E1E4E8">	resp </span><span style="color:#F97583">:=</span><span style="color:#F97583"> &#x26;</span><span style="color:#B392F0">RequestVoteResponse</span><span style="color:#E1E4E8">{</span></span>
+<span class="line"><span style="color:#E1E4E8">		RPCHeader: r.</span><span style="color:#B392F0">getRPCHeader</span><span style="color:#E1E4E8">(),</span></span>
+<span class="line"><span style="color:#E1E4E8">		Term:      r.</span><span style="color:#B392F0">getCurrentTerm</span><span style="color:#E1E4E8">(),</span></span>
+<span class="line"><span style="color:#E1E4E8">		Granted:   </span><span style="color:#79B8FF">false</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">	}</span></span>
+<span class="line"><span style="color:#F97583">	var</span><span style="color:#E1E4E8"> rpcErr </span><span style="color:#F97583">error</span></span>
+<span class="line"><span style="color:#F97583">	defer</span><span style="color:#F97583"> func</span><span style="color:#E1E4E8">() {</span></span>
+<span class="line"><span style="color:#E1E4E8">		rpc.</span><span style="color:#B392F0">Respond</span><span style="color:#E1E4E8">(resp, rpcErr)</span></span>
+<span class="line"><span style="color:#E1E4E8">	}()</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D">	// Version 0 servers will panic unless the peers is present. It's only</span></span>
+<span class="line"><span style="color:#6A737D">	// used on them to produce a warning message.</span></span>
+<span class="line"><span style="color:#F97583">	if</span><span style="color:#E1E4E8"> r.protocolVersion </span><span style="color:#F97583">&#x3C;</span><span style="color:#79B8FF"> 2</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">		resp.Peers </span><span style="color:#F97583">=</span><span style="color:#B392F0"> encodePeers</span><span style="color:#E1E4E8">(r.configurations.latest, r.trans)</span></span>
+<span class="line"><span style="color:#E1E4E8">	}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D">	// Check if we have an existing leader [who's not the candidate] and also</span></span>
+<span class="line"><span style="color:#6A737D">	// check the LeadershipTransfer flag is set. Usually votes are rejected if</span></span>
+<span class="line"><span style="color:#6A737D">	// there is a known leader. But if the leader initiated a leadership transfer,</span></span>
+<span class="line"><span style="color:#6A737D">	// vote!</span></span>
+<span class="line"><span style="color:#F97583">	var</span><span style="color:#E1E4E8"> candidate </span><span style="color:#B392F0">ServerAddress</span></span>
+<span class="line"><span style="color:#F97583">	var</span><span style="color:#E1E4E8"> candidateBytes []</span><span style="color:#F97583">byte</span></span>
+<span class="line"><span style="color:#F97583">	if</span><span style="color:#B392F0"> len</span><span style="color:#E1E4E8">(req.RPCHeader.Addr) </span><span style="color:#F97583">></span><span style="color:#79B8FF"> 0</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">		candidate </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> r.trans.</span><span style="color:#B392F0">DecodePeer</span><span style="color:#E1E4E8">(req.RPCHeader.Addr)</span></span>
+<span class="line"><span style="color:#E1E4E8">		candidateBytes </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> req.RPCHeader.Addr</span></span>
+<span class="line"><span style="color:#E1E4E8">	} </span><span style="color:#F97583">else</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">		candidate </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> r.trans.</span><span style="color:#B392F0">DecodePeer</span><span style="color:#E1E4E8">(req.Candidate)</span></span>
+<span class="line"><span style="color:#E1E4E8">		candidateBytes </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> req.Candidate</span></span>
+<span class="line"><span style="color:#E1E4E8">	}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D">	// For older raft version ID is not part of the packed message</span></span>
+<span class="line"><span style="color:#6A737D">	// We assume that the peer is part of the configuration and skip this check</span></span>
+<span class="line"><span style="color:#F97583">	if</span><span style="color:#B392F0"> len</span><span style="color:#E1E4E8">(req.ID) </span><span style="color:#F97583">></span><span style="color:#79B8FF"> 0</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">		candidateID </span><span style="color:#F97583">:=</span><span style="color:#B392F0"> ServerID</span><span style="color:#E1E4E8">(req.ID)</span></span>
+<span class="line"><span style="color:#6A737D">		// if the Servers list is empty that mean the cluster is very likely trying to bootstrap,</span></span>
+<span class="line"><span style="color:#6A737D">		// Grant the vote</span></span>
+<span class="line"><span style="color:#F97583">		if</span><span style="color:#B392F0"> len</span><span style="color:#E1E4E8">(r.configurations.latest.Servers) </span><span style="color:#F97583">></span><span style="color:#79B8FF"> 0</span><span style="color:#F97583"> &#x26;&#x26;</span><span style="color:#F97583"> !</span><span style="color:#B392F0">hasVote</span><span style="color:#E1E4E8">(r.configurations.latest, candidateID) {</span></span>
+<span class="line"><span style="color:#E1E4E8">			r.logger.</span><span style="color:#B392F0">Warn</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">"rejecting vote request since node is not a voter"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#9ECBFF">				"from"</span><span style="color:#E1E4E8">, candidate)</span></span>
+<span class="line"><span style="color:#F97583">			return</span></span>
+<span class="line"><span style="color:#E1E4E8">		}</span></span>
+<span class="line"><span style="color:#E1E4E8">	}</span></span>
+<span class="line"><span style="color:#F97583">	if</span><span style="color:#E1E4E8"> leaderAddr, leaderID </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> r.</span><span style="color:#B392F0">LeaderWithID</span><span style="color:#E1E4E8">(); leaderAddr </span><span style="color:#F97583">!=</span><span style="color:#9ECBFF"> ""</span><span style="color:#F97583"> &#x26;&#x26;</span><span style="color:#E1E4E8"> leaderAddr </span><span style="color:#F97583">!=</span><span style="color:#E1E4E8"> candidate </span><span style="color:#F97583">&#x26;&#x26;</span><span style="color:#F97583"> !</span><span style="color:#E1E4E8">req.LeadershipTransfer {</span></span>
+<span class="line"><span style="color:#E1E4E8">		r.logger.</span><span style="color:#B392F0">Warn</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">"rejecting vote request since we have a leader"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#9ECBFF">			"from"</span><span style="color:#E1E4E8">, candidate,</span></span>
+<span class="line"><span style="color:#9ECBFF">			"leader"</span><span style="color:#E1E4E8">, leaderAddr,</span></span>
+<span class="line"><span style="color:#9ECBFF">			"leader-id"</span><span style="color:#E1E4E8">, </span><span style="color:#F97583">string</span><span style="color:#E1E4E8">(leaderID))</span></span>
+<span class="line"><span style="color:#F97583">		return</span></span>
+<span class="line"><span style="color:#E1E4E8">	}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D">	// Ignore an older term</span></span>
+<span class="line"><span style="color:#F97583">	if</span><span style="color:#E1E4E8"> req.Term </span><span style="color:#F97583">&#x3C;</span><span style="color:#E1E4E8"> r.</span><span style="color:#B392F0">getCurrentTerm</span><span style="color:#E1E4E8">() {</span></span>
+<span class="line"><span style="color:#F97583">		return</span></span>
+<span class="line"><span style="color:#E1E4E8">	}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D">	// Increase the term if we see a newer one</span></span>
+<span class="line"><span style="color:#F97583">	if</span><span style="color:#E1E4E8"> req.Term </span><span style="color:#F97583">></span><span style="color:#E1E4E8"> r.</span><span style="color:#B392F0">getCurrentTerm</span><span style="color:#E1E4E8">() {</span></span>
+<span class="line"><span style="color:#6A737D">		// Ensure transition to follower</span></span>
+<span class="line"><span style="color:#E1E4E8">		r.logger.</span><span style="color:#B392F0">Debug</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">"lost leadership because received a requestVote with a newer term"</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"><span style="color:#E1E4E8">		r.</span><span style="color:#B392F0">setState</span><span style="color:#E1E4E8">(Follower)</span></span>
+<span class="line"><span style="color:#E1E4E8">		r.</span><span style="color:#B392F0">setCurrentTerm</span><span style="color:#E1E4E8">(req.Term)</span></span>
+<span class="line"><span style="color:#E1E4E8">		resp.Term </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> req.Term</span></span>
+<span class="line"><span style="color:#E1E4E8">	}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D">	// Check if we have voted yet</span></span>
+<span class="line"><span style="color:#E1E4E8">	lastVoteTerm, err </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> r.stable.</span><span style="color:#B392F0">GetUint64</span><span style="color:#E1E4E8">(keyLastVoteTerm)</span></span>
+<span class="line"><span style="color:#F97583">	if</span><span style="color:#E1E4E8"> err </span><span style="color:#F97583">!=</span><span style="color:#79B8FF"> nil</span><span style="color:#F97583"> &#x26;&#x26;</span><span style="color:#E1E4E8"> err.</span><span style="color:#B392F0">Error</span><span style="color:#E1E4E8">() </span><span style="color:#F97583">!=</span><span style="color:#9ECBFF"> "not found"</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">		r.logger.</span><span style="color:#B392F0">Error</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">"failed to get last vote term"</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">"error"</span><span style="color:#E1E4E8">, err)</span></span>
+<span class="line"><span style="color:#F97583">		return</span></span>
+<span class="line"><span style="color:#E1E4E8">	}</span></span>
+<span class="line"><span style="color:#E1E4E8">	lastVoteCandBytes, err </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> r.stable.</span><span style="color:#B392F0">Get</span><span style="color:#E1E4E8">(keyLastVoteCand)</span></span>
+<span class="line"><span style="color:#F97583">	if</span><span style="color:#E1E4E8"> err </span><span style="color:#F97583">!=</span><span style="color:#79B8FF"> nil</span><span style="color:#F97583"> &#x26;&#x26;</span><span style="color:#E1E4E8"> err.</span><span style="color:#B392F0">Error</span><span style="color:#E1E4E8">() </span><span style="color:#F97583">!=</span><span style="color:#9ECBFF"> "not found"</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">		r.logger.</span><span style="color:#B392F0">Error</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">"failed to get last vote candidate"</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">"error"</span><span style="color:#E1E4E8">, err)</span></span>
+<span class="line"><span style="color:#F97583">		return</span></span>
+<span class="line"><span style="color:#E1E4E8">	}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D">	// Check if we've voted in this election before</span></span>
+<span class="line"><span style="color:#F97583">	if</span><span style="color:#E1E4E8"> lastVoteTerm </span><span style="color:#F97583">==</span><span style="color:#E1E4E8"> req.Term </span><span style="color:#F97583">&#x26;&#x26;</span><span style="color:#E1E4E8"> lastVoteCandBytes </span><span style="color:#F97583">!=</span><span style="color:#79B8FF"> nil</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">		r.logger.</span><span style="color:#B392F0">Info</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">"duplicate requestVote for same term"</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">"term"</span><span style="color:#E1E4E8">, req.Term)</span></span>
+<span class="line"><span style="color:#F97583">		if</span><span style="color:#E1E4E8"> bytes.</span><span style="color:#B392F0">Compare</span><span style="color:#E1E4E8">(lastVoteCandBytes, candidateBytes) </span><span style="color:#F97583">==</span><span style="color:#79B8FF"> 0</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">			r.logger.</span><span style="color:#B392F0">Warn</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">"duplicate requestVote from"</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">"candidate"</span><span style="color:#E1E4E8">, candidate)</span></span>
+<span class="line"><span style="color:#E1E4E8">			resp.Granted </span><span style="color:#F97583">=</span><span style="color:#79B8FF"> true</span></span>
+<span class="line"><span style="color:#E1E4E8">		}</span></span>
+<span class="line"><span style="color:#F97583">		return</span></span>
+<span class="line"><span style="color:#E1E4E8">	}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D">	// Reject if their term is older</span></span>
+<span class="line"><span style="color:#E1E4E8">	lastIdx, lastTerm </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> r.</span><span style="color:#B392F0">getLastEntry</span><span style="color:#E1E4E8">()</span></span>
+<span class="line"><span style="color:#F97583">	if</span><span style="color:#E1E4E8"> lastTerm </span><span style="color:#F97583">></span><span style="color:#E1E4E8"> req.LastLogTerm {</span></span>
+<span class="line"><span style="color:#E1E4E8">		r.logger.</span><span style="color:#B392F0">Warn</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">"rejecting vote request since our last term is greater"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#9ECBFF">			"candidate"</span><span style="color:#E1E4E8">, candidate,</span></span>
+<span class="line"><span style="color:#9ECBFF">			"last-term"</span><span style="color:#E1E4E8">, lastTerm,</span></span>
+<span class="line"><span style="color:#9ECBFF">			"last-candidate-term"</span><span style="color:#E1E4E8">, req.LastLogTerm)</span></span>
+<span class="line"><span style="color:#F97583">		return</span></span>
+<span class="line"><span style="color:#E1E4E8">	}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">	if</span><span style="color:#E1E4E8"> lastTerm </span><span style="color:#F97583">==</span><span style="color:#E1E4E8"> req.LastLogTerm </span><span style="color:#F97583">&#x26;&#x26;</span><span style="color:#E1E4E8"> lastIdx </span><span style="color:#F97583">></span><span style="color:#E1E4E8"> req.LastLogIndex {</span></span>
+<span class="line"><span style="color:#E1E4E8">		r.logger.</span><span style="color:#B392F0">Warn</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">"rejecting vote request since our last index is greater"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#9ECBFF">			"candidate"</span><span style="color:#E1E4E8">, candidate,</span></span>
+<span class="line"><span style="color:#9ECBFF">			"last-index"</span><span style="color:#E1E4E8">, lastIdx,</span></span>
+<span class="line"><span style="color:#9ECBFF">			"last-candidate-index"</span><span style="color:#E1E4E8">, req.LastLogIndex)</span></span>
+<span class="line"><span style="color:#F97583">		return</span></span>
+<span class="line"><span style="color:#E1E4E8">	}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D">	// Persist a vote for safety</span></span>
+<span class="line"><span style="color:#F97583">	if</span><span style="color:#E1E4E8"> err </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> r.</span><span style="color:#B392F0">persistVote</span><span style="color:#E1E4E8">(req.Term, candidateBytes); err </span><span style="color:#F97583">!=</span><span style="color:#79B8FF"> nil</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">		r.logger.</span><span style="color:#B392F0">Error</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">"failed to persist vote"</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">"error"</span><span style="color:#E1E4E8">, err)</span></span>
+<span class="line"><span style="color:#F97583">		return</span></span>
+<span class="line"><span style="color:#E1E4E8">	}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#E1E4E8">	resp.Granted </span><span style="color:#F97583">=</span><span style="color:#79B8FF"> true</span></span>
+<span class="line"><span style="color:#E1E4E8">	r.</span><span style="color:#B392F0">setLastContact</span><span style="color:#E1E4E8">()</span></span>
+<span class="line"><span style="color:#F97583">	return</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>如果<code>if lastTerm == req.LastLogTerm &#x26;&#x26; lastIdx > req.LastLogIndex</code> ，则会拒绝投票请求；但是lastIndex是通过<code>appendEntries</code>来更新的，<code>appendEntries</code>只能由leader发起。</p>
+</li>
+</ol>
+<p>k8s部署的consul有如下几个坑：</p>
+<ul>
+<li>通过statefulset部署的consul集群，在一个宿主机挂掉时间过长的情况下，可能会发送pod漂移，consul pod会迁移到其他节点上去，此时如果使用的存储不是分布式存储而是localpv，会发生丢数据的问题（可以不在server上存储数据来解决这个问题，也可以使用<a href="https://github.com/kubemod/kubemod" rel="noopener noreferrer" target="_blank">kubemod/kubemod: Universal Kubernetes mutating operator (github.com)</a>）；</li>
+<li>需要指定node-id，要不然会出现pod重启到其他节点，node-id和pod-ip均发生变化而导致很多奇怪的问题；</li>
+<li>部署在k8s中，由于pod-ip不确定，则consul会强依赖k8s的域名解析；</li>
+<li>有些分布式存储会在网络或节点压力大的情况下变为<code>read only</code>，注意，这个会导致consul集群直接不工作！挂在的pv变为<code>read only</code>时需要手动删除pod重建pod。</li>
+</ul>
+<h2 id="有用的链接">有用的链接</h2>
+<ul>
+<li><a href="http://thesecretlivesofdata.com/raft/" rel="noopener noreferrer" target="_blank">raft</a></li>
+</ul></main><aside class="toc"><p class="toc-title">本页目录</p><ul><li class="toc-d2"><a href="#raft选举过程">Raft选举过程</a></li><li class="toc-d3"><a href="#角色">角色</a></li><li class="toc-d3"><a href="#选举过程">选举过程</a></li><li class="toc-d2"><a href="#log-replication">Log replication</a></li><li class="toc-d3"><a href="#日志格式">日志格式</a></li><li class="toc-d3"><a href="#日志处理流程">日志处理流程</a></li><li class="toc-d2"><a href="#一些问题">一些问题</a></li><li class="toc-d3"><a href="#通过k8s部署的3节点consul先后挂掉两个节点后无法正常工作">通过k8s部署的3节点consul先后挂掉两个节点后无法正常工作</a></li><li class="toc-d2"><a href="#有用的链接">有用的链接</a></li></ul></aside></div><div class="lightbox" id="lightbox" aria-hidden="true"><img alt=""></div><script type="module" src="/_astro/Base.astro_astro_type_script_index_0_lang.7IsV0x-z.js"></script></body></html>

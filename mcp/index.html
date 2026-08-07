@@ -1,0 +1,710 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>MCP：连接模型与外部世界的标准协议</title><script>
+      (function () {
+        var s = localStorage.getItem('theme');
+        if (s === 'light' || s === 'dark') {
+          document.documentElement.setAttribute('data-theme', s);
+        }
+      })();
+    </script><link rel="stylesheet" href="/_astro/Base.CUYrCnW9.css"></head><body><header class="topbar"><a href="/" class="brand">HLDay</a><nav><a href="/">书</a><a href="/posts/">博客</a><a href="https://github.com/hTangle" class="nav-github" aria-label="GitHub">GitHub</a></nav><button class="theme-toggle" id="themeToggle" type="button" title="切换主题（自动/浅色/深色）" aria-label="切换主题">🖥️</button></header><div class="layout"><aside class="booknav"><ul class="nav-tree"><li><p class="nav-group">Go</p><ul><li><p class="nav-subgroup">并发编程</p><ul><li class><a href="/gmp/">GMP 调度器</a></li><li class><a href="/sync-lock/">同步和锁</a></li><li class><a href="/channel/">Channel</a></li><li class><a href="/context/">Context</a></li></ul></li></ul></li><li><p class="nav-group">Agent 开发</p><ul><li><p class="nav-subgroup">核心协议与机制</p><ul><li class="active"><a href="/mcp/">MCP</a></li><li class><a href="/skill/">Skill</a></li><li class><a href="/tool-call/">Tool Call</a></li></ul></li></ul></li></ul></aside><main class="prose"><h1>MCP：连接模型与外部世界的标准协议</h1><p><strong>📋 一句话定义</strong></p>
+<p>**MCP（Model Context Protocol，模型上下文协议）是一套让 AI 应用以统一方式发现、读取和调用外部能力的客户端—服务器协议。**它解决的不是“模型会不会思考”，而是“模型应用怎样用同一种接口接入文件、数据库、搜索、业务系统等不同能力”。</p>
+<p><img src="/images/agent/mcp-architecture.png" alt="mcp-architecture.png"></p>
+<p>把 AI 应用想成一台笔记本电脑：每个外部系统原本都有不同插头，接一个系统就要写一套适配代码。MCP 更像 <strong>USB-C 标准</strong>——它规定连接、握手、能力发现、请求与响应的共同语言。设备仍由各自厂商实现，MCP 只让“怎么接”变得一致。</p>
+<h2 id="1-mcp-到底解决什么问题">1. MCP 到底解决什么问题</h2>
+<p>没有 MCP 时，AI 应用接入 $N$ 个模型和 $M$ 个数据/工具系统，最坏可能维护接近 $N \times M$ 套定制集成：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="mermaid"><code><span class="line"><span style="color:#F97583">flowchart</span><span style="color:#B392F0"> LR</span></span>
+<span class="line"><span style="color:#FFAB70">    A1</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"AI 应用 A"</span><span style="color:#F97583">]</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> X1</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"文件系统专用适配"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    A1 </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> X2</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"数据库专用适配"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    A1 </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> X3</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"搜索服务专用适配"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    A2</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"AI 应用 B"</span><span style="color:#F97583">]</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> Y1</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"另一套文件适配"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    A2 </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> Y2</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"另一套数据库适配"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    A2 </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> Y3</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"另一套搜索适配"</span><span style="color:#F97583">]</span></span></code></pre>
+<p>MCP 把集成边界收敛成协议：AI 应用实现 MCP 客户端，能力提供方实现 MCP 服务器。只要双方遵循同一契约，就可以组合使用。</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="mermaid"><code><span class="line"><span style="color:#F97583">flowchart</span><span style="color:#B392F0"> LR</span></span>
+<span class="line"><span style="color:#FFAB70">    Host</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"MCP Host&#x3C;br/>AI 应用"</span><span style="color:#F97583">]</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> C1</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"MCP Client"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    Host </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> C2</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"MCP Client"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    C1 </span><span style="color:#F97583">&#x3C;--></span><span style="color:#E1E4E8">|"</span><span style="color:#FFAB70">MCP</span><span style="color:#E1E4E8">"| </span><span style="color:#FFAB70">S1</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"文件服务器"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    C2 </span><span style="color:#F97583">&#x3C;--></span><span style="color:#E1E4E8">|"</span><span style="color:#FFAB70">MCP</span><span style="color:#E1E4E8">"| </span><span style="color:#FFAB70">S2</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"业务系统服务器"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    S1 </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> FS</span><span style="color:#F97583">[(</span><span style="color:#9ECBFF">"本地文件"</span><span style="color:#F97583">)]</span></span>
+<span class="line"><span style="color:#FFAB70">    S2 </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> API</span><span style="color:#F97583">[(</span><span style="color:#9ECBFF">"数据库 / API"</span><span style="color:#F97583">)]</span></span></code></pre>
+<p><strong>💡 关键价值</strong></p>
+<p>MCP 降低的是<strong>集成的组合复杂度</strong>，同时给能力发现、权限边界、错误返回和生命周期管理提供共同语义。</p>
+<h2 id="2-三个核心角色hostclientserver">2. 三个核心角色：Host、Client、Server</h2>
+<h3 id="21-host承载用户体验与决策">2.1 Host：承载用户体验与决策</h3>
+<p>Host 是用户真正使用的 AI 应用，例如桌面助手、IDE、聊天应用或 Agent Runtime。它通常负责：</p>
+<ul>
+<li>管理对话、模型与用户授权；</li>
+<li>决定允许连接哪些 MCP Server；</li>
+<li>汇总上下文并把结果交给模型；</li>
+<li>隔离不同服务器，避免无意共享敏感信息。</li>
+</ul>
+<h3 id="22-client一条连接的协议代理">2.2 Client：一条连接的协议代理</h3>
+<p>MCP Client 位于 Host 内部，负责与某个 Server 建立并维护会话、协商能力、收发协议消息。概念上通常是<strong>一个 Client 对应一个 Server 连接</strong>。</p>
+<h3 id="23-server对外暴露能力">2.3 Server：对外暴露能力</h3>
+<p>MCP Server 把某个本地或远程系统包装成标准能力。它可以只是一个很薄的适配层，也可以包含鉴权、缓存、审计和业务逻辑。</p>
+<p><strong>⚠️ Server 不等于数据源</strong></p>
+<p>MCP Server 是协议边界；真正的数据或动作可能位于文件系统、数据库、SaaS API 或企业内网服务中。</p>
+<h2 id="3-server-暴露的三类核心原语">3. Server 暴露的三类核心原语</h2>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>原语</th><th>直觉</th><th>典型操作</th><th>控制权倾向</th></tr></thead><tbody><tr><td><strong>Tools</strong></td><td>可执行的动作</td><td>搜索、发消息、创建工单、执行查询</td><td>模型提出调用，应用审批/执行</td></tr><tr><td><strong>Resources</strong></td><td>可读取的上下文</td><td>文件、表结构、日志、知识库条目</td><td>应用按 URI 选择和读取</td></tr><tr><td><strong>Prompts</strong></td><td>可复用的交互模板</td><td>代码审查模板、故障分析模板</td><td>用户或应用显式选择</td></tr></tbody></table>
+<p>可以把它们记成：<strong>Tool 是动词，Resource 是名词，Prompt 是做事的模板。</strong></p>
+<p>部分实现还会支持由 Server 向 Host 请求模型推理或用户补充信息等能力。它们仍然需要 Host 控制授权，Server 不应绕过用户直接获得无限模型或数据访问权。</p>
+<h2 id="4-一次完整-mcp-会话怎样发生">4. 一次完整 MCP 会话怎样发生</h2>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="mermaid"><code><span class="line"><span style="color:#F97583">sequenceDiagram</span></span>
+<span class="line"><span style="color:#F97583">    participant</span><span style="color:#FFAB70"> H</span><span style="color:#F97583"> as</span><span style="color:#9ECBFF"> Host</span></span>
+<span class="line"><span style="color:#F97583">    participant</span><span style="color:#FFAB70"> C</span><span style="color:#F97583"> as</span><span style="color:#9ECBFF"> MCP Client</span></span>
+<span class="line"><span style="color:#F97583">    participant</span><span style="color:#FFAB70"> S</span><span style="color:#F97583"> as</span><span style="color:#9ECBFF"> MCP Server</span></span>
+<span class="line"><span style="color:#F97583">    participant</span><span style="color:#FFAB70"> D</span><span style="color:#F97583"> as</span><span style="color:#9ECBFF"> 外部系统</span></span>
+<span class="line"><span style="color:#FFAB70">    H</span><span style="color:#F97583">->></span><span style="color:#FFAB70">C</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> 创建连接</span></span>
+<span class="line"><span style="color:#FFAB70">    C</span><span style="color:#F97583">->></span><span style="color:#FFAB70">S</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> initialize（协议版本与能力）</span></span>
+<span class="line"><span style="color:#FFAB70">    S</span><span style="color:#F97583">-->></span><span style="color:#FFAB70">C</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> Server 能力</span></span>
+<span class="line"><span style="color:#FFAB70">    C</span><span style="color:#F97583">->></span><span style="color:#FFAB70">S</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> initialized</span></span>
+<span class="line"><span style="color:#FFAB70">    C</span><span style="color:#F97583">->></span><span style="color:#FFAB70">S</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> tools/list</span></span>
+<span class="line"><span style="color:#FFAB70">    S</span><span style="color:#F97583">-->></span><span style="color:#FFAB70">C</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> 工具及输入 Schema</span></span>
+<span class="line"><span style="color:#FFAB70">    H</span><span style="color:#F97583">->></span><span style="color:#FFAB70">C</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> 请求调用 search_docs</span></span>
+<span class="line"><span style="color:#FFAB70">    C</span><span style="color:#F97583">->></span><span style="color:#FFAB70">S</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> tools/call + 参数</span></span>
+<span class="line"><span style="color:#FFAB70">    S</span><span style="color:#F97583">->></span><span style="color:#FFAB70">D</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> 执行真实查询</span></span>
+<span class="line"><span style="color:#FFAB70">    D</span><span style="color:#F97583">-->></span><span style="color:#FFAB70">S</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> 查询结果</span></span>
+<span class="line"><span style="color:#FFAB70">    S</span><span style="color:#F97583">-->></span><span style="color:#FFAB70">C</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> 结构化结果或错误</span></span>
+<span class="line"><span style="color:#FFAB70">    C</span><span style="color:#F97583">-->></span><span style="color:#FFAB70">H</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> 交给模型继续推理</span></span></code></pre>
+<p>这条链路可拆成四个阶段：</p>
+<ol>
+<li><strong>初始化</strong>：协商协议版本与双方能力；</li>
+<li><strong>发现</strong>：Client 查询 Server 提供哪些 tools、resources、prompts；</li>
+<li><strong>使用</strong>：读取资源、获取提示模板或发起工具调用；</li>
+<li><strong>关闭</strong>：会话结束，释放子进程、网络连接与临时资源。</li>
+</ol>
+<p>MCP 消息通常采用 JSON-RPC 2.0 风格。一个工具调用在协议层可能长这样：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="json"><code><span class="line"><span style="color:#E1E4E8">{</span></span>
+<span class="line"><span style="color:#79B8FF">  "jsonrpc"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"2.0"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">  "id"</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">42</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">  "method"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"tools/call"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">  "params"</span><span style="color:#E1E4E8">: {</span></span>
+<span class="line"><span style="color:#79B8FF">    "name"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"search_docs"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">    "arguments"</span><span style="color:#E1E4E8">: {</span></span>
+<span class="line"><span style="color:#79B8FF">      "query"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"什么是 MCP？"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">      "limit"</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">5</span></span>
+<span class="line"><span style="color:#E1E4E8">    }</span></span>
+<span class="line"><span style="color:#E1E4E8">  }</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>重点不是字段长什么样，而是：<strong>调用有唯一 ID、明确方法、结构化参数，以及与请求对应的结果或错误。</strong></p>
+<h2 id="5-transport消息怎样从-client-到-server">5. Transport：消息怎样从 Client 到 Server</h2>
+<p>MCP 把“消息语义”和“传输方式”分开：</p>
+<ul>
+<li><strong>stdio</strong>：Host 启动本地 Server 子进程，通过标准输入/输出通信；适合本地工具，部署简单，权限边界要谨慎。</li>
+<li><strong>Streamable HTTP</strong>：通过 HTTP 支持远程服务与流式响应；适合集中部署、跨网络访问、统一鉴权与审计。</li>
+</ul>
+<p>因此，MCP 不是“只能跑本地”的协议，也不是某个固定网络服务。Transport 决定消息怎么运送，协议决定消息表达什么。</p>
+<h2 id="6-能力发现为何重要">6. 能力发现为何重要</h2>
+<p>传统工具集成常把工具列表写死在应用代码里。MCP 允许 Client 在运行时询问 Server：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="mermaid"><code><span class="line"><span style="color:#F97583">flowchart</span><span style="color:#B392F0"> TD</span></span>
+<span class="line"><span style="color:#FFAB70">    A</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"连接 Server"</span><span style="color:#F97583">]</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> B</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"协商 capabilities"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    B </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> C</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"tools/list"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    B </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> D</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"resources/list"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    B </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> E</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"prompts/list"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    C </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> F</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"把名称、描述、Schema 提供给模型"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    D </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> G</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"按 URI 选择上下文"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    E </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> H</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"按需获取工作模板"</span><span style="color:#F97583">]</span></span></code></pre>
+<p>这使工具可以独立升级，但也带来一个工程要求：**描述与 Schema 必须稳定、精确、可理解。**如果两个工具描述含糊，模型就可能选错；如果 Schema 太宽松，错误会延迟到真实执行阶段。</p>
+<h2 id="7-安全边界标准连接不等于自动可信">7. 安全边界：标准连接不等于自动可信</h2>
+<p>MCP 统一了接口，却不会自动解决所有安全问题。至少要控制：</p>
+<ul>
+<li><strong>最小权限</strong>：Server 只能访问完成任务必需的目录、表或 API；</li>
+<li><strong>用户同意</strong>：发送消息、删除数据、付款等高风险操作需要清晰确认；</li>
+<li><strong>输入校验</strong>：Server 不应因为参数来自模型就默认安全；</li>
+<li><strong>输出隔离</strong>：来自 Resource 或 Tool 的内容可能包含提示注入；</li>
+<li><strong>凭证管理</strong>：令牌由受控运行时保存，不写进提示词、日志或返回结果；</li>
+<li><strong>审计追踪</strong>：记录谁在何时调用了什么能力，但对敏感参数做脱敏；</li>
+<li><strong>网络防护</strong>：远程 Server 要防 SSRF、越权访问、重放与会话劫持。</li>
+</ul>
+<p><strong>‼️ 最常见的误解</strong></p>
+<p>“接入了 MCP”只表示双方能按共同协议通信，不表示 Server 是可信的，也不表示工具可以跳过审批直接执行。</p>
+<h2 id="8-什么时候值得使用-mcp">8. 什么时候值得使用 MCP</h2>
+<p>适合：</p>
+<ul>
+<li>同一能力要被多个 AI Host 使用；</li>
+<li>一个 Host 要连接许多不同系统；</li>
+<li>希望能力能被动态发现、独立部署和升级；</li>
+<li>需要统一鉴权、审计、错误与生命周期语义。</li>
+</ul>
+<p>不一定适合：</p>
+<ul>
+<li>应用里只有一个不会复用的简单函数；</li>
+<li>调用完全发生在同一进程，且没有协议隔离需求；</li>
+<li>极端低延迟路径无法接受序列化、进程或网络开销。</li>
+</ul>
+<p>此时普通函数调用或内部 Tool API 可能更直接。</p>
+<h2 id="9-常见误区">9. 常见误区</h2>
+<p><strong>❓ - MCP 是一个 Agent 框架吗？</strong></p>
+<p>不是。它不规定 Agent 怎样规划、记忆或反思，只规定应用与能力提供方怎样交换上下文和调用能力。</p>
+<p><strong>❓ - MCP Server 自己一定包含大模型吗？</strong></p>
+<p>不一定。多数 Server 只是把外部系统包装成协议能力，本身可以完全不运行模型。</p>
+<p><strong>❓ - MCP Tool 和普通 Tool 是两种完全不同的东西吗？</strong></p>
+<p>语义上都表示可调用能力；区别在于 MCP Tool 通过 MCP 的发现、Schema 和调用消息暴露，普通 Tool 可能只是进程内函数或框架私有接口。</p>
+<p><strong>❓ - 模型会直接连接 MCP Server 吗？</strong></p>
+<p>通常不会。Host/Client 才负责连接、权限与真实 I/O；模型看到的是整理后的工具描述、上下文与调用结果。</p>
+<h2 id="10-协议层深挖requestresponse-与-notification">10. 协议层深挖：Request、Response 与 Notification</h2>
+<p>截至 2026-08，MCP 当前正式协议修订版是 <code>2025-11-25</code>。它以 JSON-RPC 2.0 为消息基础，但面试时不能只回答“就是 JSON-RPC”：JSON-RPC 解决消息相关性，MCP 在其上定义了生命周期、能力、领域方法和安全语义。</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>消息类型</th><th align="right">是否有 <code>id</code></th><th align="right">是否期待响应</th><th>示例</th></tr></thead><tbody><tr><td>Request</td><td align="right">是</td><td align="right">是</td><td><code>initialize</code>、<code>tools/list</code>、<code>tools/call</code></td></tr><tr><td>Response</td><td align="right">与 Request 相同</td><td align="right">—</td><td><code>result</code> 或协议级 <code>error</code></td></tr><tr><td>Notification</td><td align="right">否</td><td align="right">否</td><td><code>notifications/initialized</code>、<code>notifications/tools/list_changed</code></td></tr></tbody></table>
+<h3 id="101-协议错误与工具执行错误必须分开">10.1 协议错误与工具执行错误必须分开</h3>
+<p>这是高级面试的高频点：</p>
+<ul>
+<li><strong>Protocol Error</strong>：方法不存在、JSON-RPC 参数结构不合法、协议状态不允许。调用方通常不应让模型“猜着重试”。</li>
+<li><strong>Tool Execution Error</strong>：工具已被正确路由，但业务参数、权限、依赖或执行过程失败。应以工具结果中的错误语义返回，让模型能够修正参数、换策略或向用户解释。</li>
+</ul>
+<p>例如，<code>tools/call</code> 缺少协议要求的 <code>name</code> 属于协议/参数错误；<code>name=book_flight</code> 合法，但座位售罄属于工具执行错误。把两者都返回 <code>-32603 Internal error</code> 会损害可恢复性和可观测性。</p>
+<h3 id="102-notification-不是无所谓的消息">10.2 Notification 不是“无所谓的消息”</h3>
+<p>通知没有响应通道，因此适合表达状态变化，而不适合需要确认的关键业务动作。典型用途包括：</p>
+<ul>
+<li>工具、资源、Prompt 列表变化；</li>
+<li>资源内容变化；</li>
+<li>Roots 变化；</li>
+<li>长请求进度；</li>
+<li>取消信号。</li>
+</ul>
+<p>Server 声明 <code>listChanged</code> 后才应发送对应列表变化通知；Client 收到后重新拉取并更新缓存。==Capability 是契约，Notification 是契约允许后的事件。==</p>
+<h2 id="11-初始化状态机与能力协商">11. 初始化状态机与能力协商</h2>
+<p>MCP 连接不是“连上就调用”，而是一个严格状态机：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="mermaid"><code><span class="line"><span style="color:#F97583">stateDiagram-v2</span></span>
+<span class="line"><span style="color:#F97583">    [*]</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> Disconnected</span></span>
+<span class="line"><span style="color:#FFAB70">    Disconnected</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> Initializing</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> 建立 transport</span></span>
+<span class="line"><span style="color:#FFAB70">    Initializing</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> Negotiated</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> initialize / InitializeResult</span></span>
+<span class="line"><span style="color:#FFAB70">    Negotiated</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> Ready</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> notifications/initialized</span></span>
+<span class="line"><span style="color:#FFAB70">    Ready</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> Ready</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> requests / notifications</span></span>
+<span class="line"><span style="color:#FFAB70">    Ready</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> Closing</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> EOF / DELETE / fatal error</span></span>
+<span class="line"><span style="color:#FFAB70">    Closing</span><span style="color:#F97583"> --></span><span style="color:#F97583"> [*]</span></span></code></pre>
+<p><code>initialize</code> 至少交换：</p>
+<ul>
+<li><code>protocolVersion</code>：Client 提议版本，Server 返回希望采用的版本；Client 不支持则断开；</li>
+<li><code>clientInfo</code> / <code>serverInfo</code>：实现名称与版本；</li>
+<li><code>capabilities</code>：双方承诺支持的功能；</li>
+<li>Server 可返回 <code>instructions</code>，作为 Host 理解该 Server 的提示，但它不是更高优先级的安全策略。</li>
+</ul>
+<p>能力协商的工程原则：</p>
+<ol>
+<li><strong>只调用对方明确声明的能力</strong>，不要根据 SDK 是否有方法来推测；</li>
+<li><strong>未知能力向前兼容</strong>，记录但不崩溃；</li>
+<li><strong>实验能力显式隔离</strong>，不要把它当稳定契约；</li>
+<li><strong>版本与能力都进入连接缓存键</strong>，避免复用错误结果；</li>
+<li><strong>Server instructions 与 Tool annotations 都视为不可信输入</strong>，不能覆盖 Host 安全规则。</li>
+</ol>
+<h2 id="12-mcp-是双向协议不只是server-给模型工具">12. MCP 是双向协议，不只是“Server 给模型工具”</h2>
+<p>基础介绍容易只讲 Server Features。完整心智模型还包括 Client 向 Server 提供的能力：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="mermaid"><code><span class="line"><span style="color:#F97583">flowchart</span><span style="color:#B392F0"> LR</span></span>
+<span class="line"><span style="color:#F97583">    subgraph</span><span style="color:#B392F0"> ServerFeatures</span><span style="color:#E1E4E8">["</span><span style="color:#FFAB70">Server </span><span style="color:#E1E4E8">→ </span><span style="color:#FFAB70">Client</span><span style="color:#E1E4E8">"]</span></span>
+<span class="line"><span style="color:#FFAB70">        T</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"Tools"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">        R</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"Resources"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">        P</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"Prompts"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">        L</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"Logging"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#F97583">    end</span></span>
+<span class="line"><span style="color:#F97583">    subgraph</span><span style="color:#B392F0"> ClientFeatures</span><span style="color:#E1E4E8">["</span><span style="color:#FFAB70">Client </span><span style="color:#E1E4E8">→ </span><span style="color:#FFAB70">Server</span><span style="color:#E1E4E8">"]</span></span>
+<span class="line"><span style="color:#FFAB70">        RO</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"Roots"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">        S</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"Sampling"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">        E</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"Elicitation"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#F97583">    end</span></span>
+<span class="line"><span style="color:#FFAB70">    Srv</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"MCP Server"</span><span style="color:#F97583">]</span><span style="color:#F97583"> --</span><span style="color:#9ECBFF">> ServerFeatures </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> Cli</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"MCP Client / Host"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    Srv </span><span style="color:#F97583">--</span><span style="color:#9ECBFF">> ClientFeatures </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> Cli</span></span></code></pre>
+<h3 id="121-roots">12.1 Roots</h3>
+<p>Roots 告诉 Server：Host 愿意暴露哪些文件系统边界。它是<strong>可见范围提示与协作边界</strong>，不是操作系统级沙箱。Server 仍应被进程权限、容器挂载和路径校验限制；不能因为 URI 在 Root 下就跳过授权。</p>
+<h3 id="122-sampling">12.2 Sampling</h3>
+<p>Sampling 允许 Server 请求 Client 侧模型生成内容。好处是 Server 不必绑定某个模型供应商，模型选择与凭证仍由 Host 控制。风险是递归调用、成本失控和数据泄露，因此要限制：最大递归深度、token 预算、可用工具、可见上下文和用户审批。</p>
+<h3 id="123-elicitation">12.3 Elicitation</h3>
+<p>Elicitation 允许 Server 请求额外用户输入。适合缺少字段或需要业务确认的场景。敏感凭证不应通过普通表单随意收集；URL 模式需要防止钓鱼、开放重定向与不可信域跳转。</p>
+<h3 id="124-tasks实验能力">12.4 Tasks（实验能力）</h3>
+<p><code>2025-11-25</code> 引入实验性 Tasks，用于长耗时、可轮询、可延迟取结果的请求。典型状态是：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="mermaid"><code><span class="line"><span style="color:#F97583">stateDiagram-v2</span></span>
+<span class="line"><span style="color:#F97583">    [*]</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> working</span></span>
+<span class="line"><span style="color:#FFAB70">    working</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> input_required</span></span>
+<span class="line"><span style="color:#FFAB70">    input_required</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> working</span></span>
+<span class="line"><span style="color:#FFAB70">    working</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> completed</span></span>
+<span class="line"><span style="color:#FFAB70">    working</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> failed</span></span>
+<span class="line"><span style="color:#FFAB70">    working</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> cancelled</span></span>
+<span class="line"><span style="color:#FFAB70">    input_required</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> cancelled</span></span></code></pre>
+<p>面试时应强调：Tasks 不是把所有同步 Tool Call 自动变成异步任务。双方先协商 task capability，具体 Tool 还可声明 <code>required</code>、<code>optional</code> 或 <code>forbidden</code>；同时要处理 TTL、任务 ID 授权、轮询退避和结果清理。</p>
+<h2 id="13-toolresourceprompt-的高级建模">13. Tool、Resource、Prompt 的高级建模</h2>
+<p>三类原语的差异不只在“动词/名词”：</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>设计维度</th><th>Tool</th><th>Resource</th><th>Prompt</th></tr></thead><tbody><tr><td>控制模型</td><td>倾向模型选择</td><td>倾向应用选择</td><td>倾向用户选择</td></tr><tr><td>寻址方式</td><td>工具名</td><td>URI / URI Template</td><td>Prompt 名称 + 参数</td></tr><tr><td>副作用</td><td>可能有</td><td>应以读取上下文为主</td><td>无直接副作用</td></tr><tr><td>更新模型</td><td><code>tools/list_changed</code></td><td>list changed、subscribe/update</td><td><code>prompts/list_changed</code></td></tr><tr><td>返回形态</td><td>text/image/audio/resource/structuredContent</td><td>text 或 blob</td><td>一组角色消息</td></tr><tr><td>典型缓存</td><td>工具清单与 Schema</td><td>内容按 URI/etag/版本</td><td>模板按名称/版本</td></tr></tbody></table>
+<h3 id="131-什么应建模成-resource而不是-tool">13.1 什么应建模成 Resource，而不是 Tool</h3>
+<p>若核心语义是“按稳定标识读取上下文”，优先 Resource，例如 <code>repo://project/README.md</code>。如果建成 <code>read_file(path)</code> Tool，模型需要生成路径，权限和缓存都更难做；但当读取过程需要复杂查询、权限决策或计算时，Tool 可能更合适。</p>
+<h3 id="132-tool-的输入与输出-schema">13.2 Tool 的输入与输出 Schema</h3>
+<p>生产级 Tool 不只定义 <code>inputSchema</code>，还应在适用时定义 <code>outputSchema</code> 并返回 <code>structuredContent</code>。结构化输出可让 Host 做二次校验、UI 渲染和下游组合。为兼容旧 Client，Server 可能还需返回序列化后的 text content。</p>
+<p>Tool annotations（例如只读、破坏性、幂等倾向）只能帮助 UI 与调度，<strong>不能当作安全证明</strong>。真正权限必须在执行路径验证。</p>
+<h2 id="14-transport-与生产级会话设计">14. Transport 与生产级会话设计</h2>
+<h3 id="141-stdio-的真实边界">14.1 stdio 的真实边界</h3>
+<p>stdio 适合本地进程：Client 启动 Server，stdout 只能输出合法协议消息，日志走 stderr。其风险不是互联网攻击面，而是本地进程继承了过多环境变量、文件权限或网络权限。</p>
+<h3 id="142-streamable-http-的状态模型">14.2 Streamable HTTP 的状态模型</h3>
+<p>Streamable HTTP 使用单一 MCP Endpoint 支持 POST/GET，可借 SSE 传递流式消息。Server 可在初始化响应中签发 <code>MCP-Session-Id</code>；后续请求携带该 ID。生产实现需考虑：</p>
+<ul>
+<li>Session ID 高熵、不可预测、禁止写入 URL；</li>
+<li>多实例部署时使用粘性路由或共享状态；</li>
+<li>404 Session Not Found 触发重新初始化，而不是无限重试旧会话；</li>
+<li>客户端离开时可用 DELETE 结束会话；</li>
+<li>每个后续 HTTP 请求携带协商后的 <code>MCP-Protocol-Version</code>；</li>
+<li>校验 <code>Origin</code>，本地 Server 只绑定 loopback，防 DNS rebinding。</li>
+</ul>
+<h3 id="143-断线重连不是简单重放">14.3 断线重连不是简单重放</h3>
+<p>只读请求可重新发起；有副作用 Tool 的请求若在“Server 已执行、响应丢失”处断线，客户端无法仅凭超时判断是否执行。解决思路与分布式系统一致：业务幂等键、状态查询、去重存储和补偿动作，而不是寄希望于传输层提供 exactly-once。</p>
+<h2 id="15-authorization-与威胁模型">15. Authorization 与威胁模型</h2>
+<p>HTTP MCP 的授权框架把受保护 MCP Server 视为 OAuth Resource Server，MCP Client 是 OAuth Client，Authorization Server 负责发 token。高级回答应覆盖：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="mermaid"><code><span class="line"><span style="color:#F97583">sequenceDiagram</span></span>
+<span class="line"><span style="color:#F97583">    participant</span><span style="color:#FFAB70"> C</span><span style="color:#F97583"> as</span><span style="color:#9ECBFF"> MCP Client</span></span>
+<span class="line"><span style="color:#F97583">    participant</span><span style="color:#FFAB70"> R</span><span style="color:#F97583"> as</span><span style="color:#9ECBFF"> MCP Server / Resource Server</span></span>
+<span class="line"><span style="color:#F97583">    participant</span><span style="color:#FFAB70"> A</span><span style="color:#F97583"> as</span><span style="color:#9ECBFF"> Authorization Server</span></span>
+<span class="line"><span style="color:#FFAB70">    C</span><span style="color:#F97583">->></span><span style="color:#FFAB70">R</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> 未授权请求</span></span>
+<span class="line"><span style="color:#FFAB70">    R</span><span style="color:#F97583">-->></span><span style="color:#FFAB70">C</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> 401 + Protected Resource Metadata 位置</span></span>
+<span class="line"><span style="color:#FFAB70">    C</span><span style="color:#F97583">->></span><span style="color:#FFAB70">R</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> 读取 Resource Metadata</span></span>
+<span class="line"><span style="color:#FFAB70">    R</span><span style="color:#F97583">-->></span><span style="color:#FFAB70">C</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> authorization_servers + scopes</span></span>
+<span class="line"><span style="color:#FFAB70">    C</span><span style="color:#F97583">->></span><span style="color:#FFAB70">A</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> Authorization Code + PKCE + resource</span></span>
+<span class="line"><span style="color:#FFAB70">    A</span><span style="color:#F97583">-->></span><span style="color:#FFAB70">C</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> audience-bound access token</span></span>
+<span class="line"><span style="color:#FFAB70">    C</span><span style="color:#F97583">->></span><span style="color:#FFAB70">R</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> Bearer token</span></span>
+<span class="line"><span style="color:#FFAB70">    R</span><span style="color:#F97583">->></span><span style="color:#FFAB70">R</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> 校验 issuer / audience / expiry / scope</span></span></code></pre>
+<p>关键安全结论：</p>
+<ul>
+<li><strong>禁止 token passthrough</strong>：MCP Server 不能把 Client 给它的 token 原样转发给下游 API；下游 token 应是另一条独立授权关系。</li>
+<li><strong>Audience binding</strong>：Client 请求 token 时带 <code>resource</code>，Server 只接受签发给自己的 token，防 confused deputy。</li>
+<li><strong>PKCE</strong>：授权码流程必须防截获；重定向 URI 精确匹配并校验 <code>state</code>。</li>
+<li><strong>最小 scope 与渐进授权</strong>：只在某 Tool 真正需要时提升权限。</li>
+<li><strong>提示注入隔离</strong>：Tool/Resource 返回的是不可信数据，不得把其中“忽略规则、发送密钥”等文本当系统指令。</li>
+<li><strong>Server 身份与供应链</strong>：安装本地 Server 等价于运行第三方代码，要固定版本、校验来源并最小化进程权限。</li>
+</ul>
+<h2 id="16-生产架构缓存与可观测性">16. 生产架构、缓存与可观测性</h2>
+<h3 id="161-mcp-gateway-什么时候有价值">16.1 MCP Gateway 什么时候有价值</h3>
+<p>企业环境常在 Host 与 Servers 之间增加 Gateway，用于统一认证、策略、审计、配额和服务发现。但 Gateway 不能只做透明转发：它需要保持 request ID、session、流式消息与取消语义，并防止不同租户的工具列表、缓存和凭证串用。</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="mermaid"><code><span class="line"><span style="color:#F97583">flowchart</span><span style="color:#B392F0"> LR</span></span>
+<span class="line"><span style="color:#FFAB70">    H1</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"IDE Host"</span><span style="color:#F97583">]</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> G</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"MCP Gateway"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    H2</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"Chat Host"</span><span style="color:#F97583">]</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> G</span></span>
+<span class="line"><span style="color:#FFAB70">    G </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> P</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"Policy / AuthZ"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    G </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> O</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"Audit / Trace"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    G </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> S1</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"Repo Server"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    G </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> S2</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"Ticket Server"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    G </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> S3</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"Data Server"</span><span style="color:#F97583">]</span></span></code></pre>
+<h3 id="162-缓存策略">16.2 缓存策略</h3>
+<ul>
+<li>工具/资源/Prompt 列表按 <code>server identity + user/tenant + scope + protocol version</code> 缓存；</li>
+<li>收到 <code>list_changed</code> 后失效，而不是静默长期缓存；</li>
+<li>Tool 结果只有在语义只读、输入规范化且数据时效允许时缓存；</li>
+<li>不缓存短期 token、用户确认结果或跨租户敏感数据；</li>
+<li>稳定排序工具列表可提升模型 prompt cache 命中率。</li>
+</ul>
+<h3 id="163-可观测性">16.3 可观测性</h3>
+<p>至少记录以下关联字段：</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>层级</th><th>关键字段/指标</th></tr></thead><tbody><tr><td>连接</td><td>server、transport、protocol_version、session_id_hash、初始化耗时</td></tr><tr><td>发现</td><td>tool_count、list latency、cache hit、list_changed 次数</td></tr><tr><td>调用</td><td>request_id、tool_name、argument_hash、审批状态、耗时、结果类型</td></tr><tr><td>可靠性</td><td>协议错误率、执行错误率、超时率、取消率、重试次数</td></tr><tr><td>安全</td><td>scope、策略决策、拒绝原因、脱敏审计事件</td></tr></tbody></table>
+<p>不要默认记录完整参数与结果；可观测性必须与数据分级和脱敏策略一起设计。</p>
+<h2 id="17-生产环境落地从-demo-到可运营服务">17. 生产环境落地：从 Demo 到可运营服务</h2>
+<p>Demo 通常只需要“Server 能启动、Client 能列出 Tool”；生产环境还必须回答：谁能调用、调用了什么、失败能否恢复、版本是否兼容、资源是否隔离。</p>
+<h3 id="171-本地-stdio-server-的部署经验">17.1 本地 stdio Server 的部署经验</h3>
+<p>stdio 最常见的问题不是协议，而是<strong>进程生命周期</strong>：</p>
+<ul>
+<li>Host 启动 Server 时设置启动超时，例如 10 秒；超过阈值杀掉整个进程组，避免残留子进程；</li>
+<li>Server 崩溃采用有上限的指数退避，避免错误配置导致每秒重启；</li>
+<li>stdout 只允许 MCP JSON-RPC，任何启动 Banner、debug <code>print</code> 都写 stderr；</li>
+<li>不把 Host 的完整环境变量透传给 Server，只注入明确 allowlist；</li>
+<li>限制 Server 可见目录、网络和系统调用；“配置了 roots”不能替代操作系统沙箱；</li>
+<li>Host 退出时先发送正常关闭信号，超时后再强制终止；</li>
+<li>每个 Server 进程设置 RSS、CPU 和打开文件数上限。</li>
+</ul>
+<p>一个实用的监督策略：</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>项目</th><th align="right">建议起始值</th><th>说明</th></tr></thead><tbody><tr><td>启动超时</td><td align="right">10s</td><td>超时视为不可用，不无限等待</td></tr><tr><td>连续崩溃阈值</td><td align="right">5 次/5min</td><td>触发熔断并提示用户修配置</td></tr><tr><td>重启退避</td><td align="right">1s → 30s</td><td>加随机抖动</td></tr><tr><td>单次调用默认超时</td><td align="right">30s</td><td>每个 Tool 可单独覆盖</td></tr><tr><td>stdout 单消息上限</td><td align="right">8–16 MiB</td><td>防内存爆炸，按业务调整</td></tr><tr><td>优雅退出窗口</td><td align="right">5s</td><td>随后杀进程组</td></tr></tbody></table>
+<p>这些不是协议强制值，而是上线时可讨论、可压测的基线。</p>
+<h3 id="172-远程-streamable-http-的部署经验">17.2 远程 Streamable HTTP 的部署经验</h3>
+<p>远程 MCP 常被普通 API Gateway 或负载均衡器“好心破坏”：</p>
+<ul>
+<li>代理缓冲 SSE，导致 Server 已发送进度但 Client 长时间收不到；</li>
+<li>LB idle timeout 小于长任务时长，流被中途切断；</li>
+<li>POST 与后续 GET 被分配到不同实例，但 Session 只存在进程内；</li>
+<li>WAF 拦截 <code>MCP-Session-Id</code> 或 <code>MCP-Protocol-Version</code> 自定义 Header；</li>
+<li>自动重试 POST，重复触发有副作用 Tool；</li>
+<li>压缩或响应大小限制截断大 Tool Result。</li>
+</ul>
+<p>上线前要验证整条链路，而不只直连 Pod：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="text"><code><span class="line"><span>真实 Client</span></span>
+<span class="line"><span>  → DNS/CDN</span></span>
+<span class="line"><span>  → WAF</span></span>
+<span class="line"><span>  → Load Balancer</span></span>
+<span class="line"><span>  → API Gateway</span></span>
+<span class="line"><span>  → MCP Server</span></span>
+<span class="line"><span>  → 下游系统</span></span></code></pre>
+<p>如果 Session 存内存，使用粘性路由且明确实例摘除行为；更稳妥的是把必要会话状态放共享存储，但不要把完整敏感上下文无期限持久化。扩容、滚动升级和故障迁移时必须测试 Session 404 后的重新初始化。</p>
+<h3 id="173-工具目录不能无界增长">17.3 工具目录不能无界增长</h3>
+<p>生产系统常在 <code>tools/list</code> 堆积几百个工具，结果是 prompt 成本上涨、模型选错、缓存频繁失效。经验上应：</p>
+<ol>
+<li>按用户 scope 过滤，不把无权限工具暴露给模型；</li>
+<li>按当前任务域或产品模块过滤；</li>
+<li>对描述相近的 Tool 做离线混淆测试；</li>
+<li>保证列表稳定排序，非必要不改变 Schema 文本；</li>
+<li>列表变化使用通知失效缓存，不让 Client 每轮全量拉取；</li>
+<li>对大工具集使用分层发现或 tool search；</li>
+<li>记录每个 Tool 的曝光次数、选择次数、成功率和误选率，长期不用的 Tool 下线。</li>
+</ol>
+<h3 id="174-下游依赖必须做隔离">17.4 下游依赖必须做隔离</h3>
+<p>一个 Server 往往连接多个下游。不要让慢数据库拖死所有 Tool：</p>
+<ul>
+<li>每个下游独立连接池、超时、并发上限和熔断器；</li>
+<li>Tool 入口做 bulkhead 隔离，高成本 Tool 使用独立队列；</li>
+<li>下游 429 尊重 <code>Retry-After</code>，不要所有实例同步重试；</li>
+<li>只读 Tool 可短期缓存，写 Tool 不做模糊缓存；</li>
+<li>取消信号尽量传播到下游，避免 Client 已离开但任务继续消耗资源；</li>
+<li>对长任务使用 Tasks 或业务异步任务，不长期占用 HTTP 请求。</li>
+</ul>
+<h2 id="18-生产事故模式与排障-runbook">18. 生产事故模式与排障 Runbook</h2>
+<h3 id="181-server-一直显示连接失败">18.1 Server 一直显示“连接失败”</h3>
+<p>按层排查：</p>
+<ol>
+<li>进程是否启动、工作目录和可执行文件是否正确；</li>
+<li>stdout 是否混入日志或 Banner；</li>
+<li>第一条 <code>initialize</code> 是否到达；</li>
+<li>协议版本是否能协商；</li>
+<li><code>initialized</code> 通知后再调用业务方法；</li>
+<li>远程链路是否被代理、TLS、Origin、WAF 拦截；</li>
+<li>用 request ID 对齐 Client 与 Server 日志。</li>
+</ol>
+<p><strong>🐛 高频事故：stdout 污染</strong></p>
+<p>Python/Node 依赖在启动时输出一行提示，Client 把它当 JSON-RPC 解析，表现为“初始化随机失败”。修复是日志统一走 stderr，并在 CI 做协议流纯净性测试。</p>
+<h3 id="182-调用偶发重复执行">18.2 调用偶发重复执行</h3>
+<p>典型链路：Tool 已完成写操作 → 响应在代理层丢失 → Client 超时重试 → 重复创建。排查时不要只看 Client timeout；用业务幂等键、MCP request ID 与下游 transaction ID 串联日志。</p>
+<p>修复优先级：</p>
+<ol>
+<li>写 Tool 增加业务幂等键；</li>
+<li>Server 保存幂等结果并检测同键不同参数；</li>
+<li>Client 对非幂等 Tool 默认不自动重试；</li>
+<li>超时后先查询业务状态；</li>
+<li>为无法幂等的动作提供补偿与人工处理入口。</li>
+</ol>
+<h3 id="183-sse-在测试环境正常生产环境卡住">18.3 SSE 在测试环境正常、生产环境卡住</h3>
+<p>检查 LB/Ingress 是否启用响应缓冲、idle timeout、最大连接时长、HTTP/2 转换和压缩。用定期进度或 ping 验证连接存活，但 heartbeat 不能掩盖真正卡死的下游。监控“Server 写出时间”和“Client 收到时间”的差值，才能定位缓冲发生在哪一层。</p>
+<h3 id="184-更新-server-后模型仍调用旧参数">18.4 更新 Server 后模型仍调用旧参数</h3>
+<p>原因通常是 Tool Schema 缓存、prompt cache 或滚动升级期间新旧实例并存。处理方式：</p>
+<ul>
+<li>兼容期内新增字段而不立刻删除旧字段；</li>
+<li>Tool 名或 Schema 发生破坏变化时创建新版本，例如 <code>create_ticket_v2</code>；</li>
+<li>让 list change 通知和缓存 TTL 配合；</li>
+<li>确保同一服务池实例返回一致工具清单；</li>
+<li>灰度时按 Host/tenant 固定版本，不让一次会话跨版本漂移。</li>
+</ul>
+<h3 id="185-返回没有数据其实是下游失败">18.5 返回“没有数据”，其实是下游失败</h3>
+<p>不要把 timeout、403、解析失败统一转换为空数组。Dashboard 上“Tool 调用成功率 99.9%”可能只是错误被吞掉。Tool Result 必须区分：</p>
+<ul>
+<li><code>success + empty</code>：真实空数据；</li>
+<li><code>business_error</code>：业务不允许；</li>
+<li><code>dependency_error</code>：下游失败；</li>
+<li><code>cancelled/timeout</code>：执行未完成；</li>
+<li><code>partial</code>：只得到部分数据。</li>
+</ul>
+<h2 id="19-发布灰度slo-与上线检查单">19. 发布、灰度、SLO 与上线检查单</h2>
+<h3 id="191-推荐发布顺序">19.1 推荐发布顺序</h3>
+<ol>
+<li>在 CI 校验 Schema、协议用例和安全扫描；</li>
+<li>用录制的 Client 会话做兼容回放；</li>
+<li>部署影子实例，只接发现/只读流量；</li>
+<li>按内部账号或 tenant 灰度 1% → 10% → 50%；</li>
+<li>观察 Tool 选择、协议错误、执行错误、p95 与下游压力；</li>
+<li>再开放写 Tool；高风险 Tool 单独灰度；</li>
+<li>保留可快速回滚的旧 Server 和 Schema；</li>
+<li>稳定后再清理兼容字段。</li>
+</ol>
+<h3 id="192-建议-slo">19.2 建议 SLO</h3>
+<p>SLO 必须按 Tool 类型拆分，不能用一个平均值掩盖长任务：</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>SLI</th><th align="right">示例目标</th><th>备注</th></tr></thead><tbody><tr><td>initialize 成功率</td><td align="right">≥ 99.9%</td><td>排除用户主动取消</td></tr><tr><td>tools/list p95</td><td align="right">&#x3C; 500ms</td><td>命中缓存时应更低</td></tr><tr><td>只读 Tool 可用性</td><td align="right">≥ 99.9%</td><td>以业务成功定义</td></tr><tr><td>写 Tool 重复副作用率</td><td align="right">接近 0</td><td>单独作为安全指标</td></tr><tr><td>Tool p95</td><td align="right">按工具设定</td><td>不用全局平均</td></tr><tr><td>非用户原因取消率</td><td align="right">&#x3C; 0.1%</td><td>反映代理/会话稳定性</td></tr></tbody></table>
+<p>错误预算耗尽时，停止扩大发布，优先修复可靠性；不要通过放宽“成功”定义维持漂亮数字。</p>
+<h3 id="193-上线前检查单">19.3 上线前检查单</h3>
+<ul class="contains-task-list">
+<li class="task-list-item"><input type="checkbox" disabled> 协议版本和 capabilities 在连接日志中可见；</li>
+<li class="task-list-item"><input type="checkbox" disabled> stdio stdout 纯净，日志只走 stderr；</li>
+<li class="task-list-item"><input type="checkbox" disabled> HTTP Origin、TLS、OAuth audience、scope 校验完成；</li>
+<li class="task-list-item"><input type="checkbox" disabled> 每个 Tool 明确只读/写入、幂等、超时、取消和重试语义；</li>
+<li class="task-list-item"><input type="checkbox" disabled> 非幂等 Tool 有幂等键或状态查询方案；</li>
+<li class="task-list-item"><input type="checkbox" disabled> tools/list 按 tenant/user/scope 隔离并稳定排序；</li>
+<li class="task-list-item"><input type="checkbox" disabled> Session 在扩容、摘除、重启后行为已压测；</li>
+<li class="task-list-item"><input type="checkbox" disabled> SSE 穿过真实 LB/WAF/Ingress 验证过；</li>
+<li class="task-list-item"><input type="checkbox" disabled> 日志可按 request/call/session/业务 ID 串联且已脱敏；</li>
+<li class="task-list-item"><input type="checkbox" disabled> 下游有超时、熔断、bulkhead 和容量保护；</li>
+<li class="task-list-item"><input type="checkbox" disabled> 高风险 Tool 有明确审批 UI 与审计；</li>
+<li class="task-list-item"><input type="checkbox" disabled> 有灰度、回滚、故障演练和 On-call Runbook。</li>
+</ul>
+<h2 id="20-一些额外的qa">20. 一些额外的QA</h2>
+<p><strong>❓ - Q1：MCP 与 REST API 的本质区别是什么？</strong></p>
+<p>REST 主要规范资源型 HTTP 接口；MCP 是面向 AI Host 的有状态能力协议，包含初始化、能力发现、双向请求、通知、上下文原语与多种 Transport。MCP Server 背后仍可调用 REST。若只有一个固定服务和明确调用方，REST 更简单；若要让多个 AI Host 动态发现并统一使用能力，MCP 更有价值。</p>
+<p><strong>❓ - Q2：为什么 MCP 不能替代 Agent Framework？</strong></p>
+<p>MCP 不负责计划、记忆、停止条件、模型选择和多 Agent 协作。它提供能力与上下文的标准边界；Agent Framework 决定何时使用这些能力以及如何形成执行循环。</p>
+<p><strong>❓ - Q3：如何做多租户 MCP Server？</strong></p>
+<p>身份必须来自经过验证的请求凭证，而不是模型参数；工具列表、Resource、缓存和限流都以 tenant/user/scope 分区；下游凭证独立交换；审计保留 request/session 关联；任何连接级状态都不能成为跨租户身份来源。</p>
+<p><strong>❓ - Q4：如何处理 tools/list 很大导致上下文昂贵？</strong></p>
+<p>先按权限和任务域裁剪，再做分层发现或工具搜索；Schema 保持短而精确、排序稳定；缓存清单但响应 list_changed；用离线 eval 评估召回率与误选率，而不是简单把几百个工具全塞给模型。</p>
+<p><strong>❓ - Q5：一次 tools/call 超时，能否直接重试？</strong></p>
+<p>先区分只读、幂等写和非幂等写。非幂等动作可能已经生效但响应丢失，应使用业务幂等键或查询状态；只有明确可重试的暂时性错误才指数退避，并设置次数和总预算。</p>
+<p><strong>❓ - Q6：Capability negotiation 和 API versioning 各解决什么？</strong></p>
+<p>协议版本描述消息契约的共同基线；Capability 描述该连接上双方实际支持的可选功能。相同协议版本的两个实现仍可能拥有不同能力，因此两者都必须检查。</p>
+<p><strong>❓ - Q7：MCP 最危险的安全误区是什么？</strong></p>
+<p>把“协议兼容”误认为“服务可信”。Server 描述、Tool annotation 和返回内容都可能恶意；Host 仍需建立来源信任、沙箱、最小权限、用户确认、token audience 校验与提示注入隔离。</p>
+<h2 id="21-参考资料">21. 参考资料</h2>
+<ul>
+<li><a href="https://modelcontextprotocol.io/specification/2025-11-25" rel="noopener noreferrer" target="_blank">MCP 2025-11-25 规范总览</a></li>
+<li><a href="https://modelcontextprotocol.io/specification/2025-11-25/schema" rel="noopener noreferrer" target="_blank">MCP Schema Reference</a></li>
+<li><a href="https://modelcontextprotocol.io/specification/2025-11-25/basic/transports" rel="noopener noreferrer" target="_blank">MCP Transports</a></li>
+<li><a href="https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization" rel="noopener noreferrer" target="_blank">MCP Authorization</a></li>
+<li><a href="https://modelcontextprotocol.io/docs/tutorials/security/security_best_practices" rel="noopener noreferrer" target="_blank">MCP Security Best Practices</a></li>
+</ul>
+<h2 id="22-与-skilltool-call-的对比">22. 与 Skill、Tool Call 的对比</h2>
+<p>相关笔记：<a href="/skill/">Skill - 给 Agent 的可复用工作手册</a> · <a href="/tool-call/">Tool Call - 模型调用工具的一次结构化握手</a></p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>维度</th><th>MCP</th><th>Skill</th><th>Tool Call</th></tr></thead><tbody><tr><td>本质</td><td>跨进程/跨系统的<strong>标准协议与集成边界</strong></td><td>注入给 Agent 的<strong>可复用知识与工作流程</strong></td><td>模型在某一时刻发出的<strong>一次结构化调用请求</strong></td></tr><tr><td>解决的问题</td><td>不同 Host 如何统一接入外部能力</td><td>Agent 应该按什么方法、规范和步骤做事</td><td>这一步要调用哪个工具、传什么参数</td></tr><tr><td>是否直接执行动作</td><td>协议本身不执行；Server 的实现执行</td><td>不执行，只指导模型与运行时</td><td>调用请求本身不执行；Runtime/Tool 执行</td></tr><tr><td>生命周期</td><td>连接建立到关闭，可持续多轮</td><td>被发现、加载并在任务期间影响行为</td><td>单次请求 → 执行 → 单次结果</td></tr><tr><td>典型载体</td><td>JSON-RPC 消息、Schema、Transport</td><td><code>SKILL.md</code>、脚本、模板、参考资料</td><td><code>tool_name + arguments + call_id</code></td></tr><tr><td>三者关系</td><td>MCP 可以<strong>暴露 Tool</strong>，承载 Tool Call 的远程执行</td><td>Skill 可以指导 Agent <strong>何时、怎样调用 Tool</strong></td><td>Tool Call 是把计划变成实际外部操作的那一次握手</td></tr></tbody></table>
+<p><strong>📝 最短记忆法</strong></p>
+<p><strong>MCP 是插座标准，Skill 是操作手册，Tool Call 是按下某个按钮的一次动作请求。</strong></p></main><aside class="toc"><p class="toc-title">本页目录</p><ul><li class="toc-d2"><a href="#1-mcp-到底解决什么问题">1. MCP 到底解决什么问题</a></li><li class="toc-d2"><a href="#2-三个核心角色hostclientserver">2. 三个核心角色：Host、Client、Server</a></li><li class="toc-d3"><a href="#21-host承载用户体验与决策">2.1 Host：承载用户体验与决策</a></li><li class="toc-d3"><a href="#22-client一条连接的协议代理">2.2 Client：一条连接的协议代理</a></li><li class="toc-d3"><a href="#23-server对外暴露能力">2.3 Server：对外暴露能力</a></li><li class="toc-d2"><a href="#3-server-暴露的三类核心原语">3. Server 暴露的三类核心原语</a></li><li class="toc-d2"><a href="#4-一次完整-mcp-会话怎样发生">4. 一次完整 MCP 会话怎样发生</a></li><li class="toc-d2"><a href="#5-transport消息怎样从-client-到-server">5. Transport：消息怎样从 Client 到 Server</a></li><li class="toc-d2"><a href="#6-能力发现为何重要">6. 能力发现为何重要</a></li><li class="toc-d2"><a href="#7-安全边界标准连接不等于自动可信">7. 安全边界：标准连接不等于自动可信</a></li><li class="toc-d2"><a href="#8-什么时候值得使用-mcp">8. 什么时候值得使用 MCP</a></li><li class="toc-d2"><a href="#9-常见误区">9. 常见误区</a></li><li class="toc-d2"><a href="#10-协议层深挖requestresponse-与-notification">10. 协议层深挖：Request、Response 与 Notification</a></li><li class="toc-d3"><a href="#101-协议错误与工具执行错误必须分开">10.1 协议错误与工具执行错误必须分开</a></li><li class="toc-d3"><a href="#102-notification-不是无所谓的消息">10.2 Notification 不是“无所谓的消息”</a></li><li class="toc-d2"><a href="#11-初始化状态机与能力协商">11. 初始化状态机与能力协商</a></li><li class="toc-d2"><a href="#12-mcp-是双向协议不只是server-给模型工具">12. MCP 是双向协议，不只是“Server 给模型工具”</a></li><li class="toc-d3"><a href="#121-roots">12.1 Roots</a></li><li class="toc-d3"><a href="#122-sampling">12.2 Sampling</a></li><li class="toc-d3"><a href="#123-elicitation">12.3 Elicitation</a></li><li class="toc-d3"><a href="#124-tasks实验能力">12.4 Tasks（实验能力）</a></li><li class="toc-d2"><a href="#13-toolresourceprompt-的高级建模">13. Tool、Resource、Prompt 的高级建模</a></li><li class="toc-d3"><a href="#131-什么应建模成-resource而不是-tool">13.1 什么应建模成 Resource，而不是 Tool</a></li><li class="toc-d3"><a href="#132-tool-的输入与输出-schema">13.2 Tool 的输入与输出 Schema</a></li><li class="toc-d2"><a href="#14-transport-与生产级会话设计">14. Transport 与生产级会话设计</a></li><li class="toc-d3"><a href="#141-stdio-的真实边界">14.1 stdio 的真实边界</a></li><li class="toc-d3"><a href="#142-streamable-http-的状态模型">14.2 Streamable HTTP 的状态模型</a></li><li class="toc-d3"><a href="#143-断线重连不是简单重放">14.3 断线重连不是简单重放</a></li><li class="toc-d2"><a href="#15-authorization-与威胁模型">15. Authorization 与威胁模型</a></li><li class="toc-d2"><a href="#16-生产架构缓存与可观测性">16. 生产架构、缓存与可观测性</a></li><li class="toc-d3"><a href="#161-mcp-gateway-什么时候有价值">16.1 MCP Gateway 什么时候有价值</a></li><li class="toc-d3"><a href="#162-缓存策略">16.2 缓存策略</a></li><li class="toc-d3"><a href="#163-可观测性">16.3 可观测性</a></li><li class="toc-d2"><a href="#17-生产环境落地从-demo-到可运营服务">17. 生产环境落地：从 Demo 到可运营服务</a></li><li class="toc-d3"><a href="#171-本地-stdio-server-的部署经验">17.1 本地 stdio Server 的部署经验</a></li><li class="toc-d3"><a href="#172-远程-streamable-http-的部署经验">17.2 远程 Streamable HTTP 的部署经验</a></li><li class="toc-d3"><a href="#173-工具目录不能无界增长">17.3 工具目录不能无界增长</a></li><li class="toc-d3"><a href="#174-下游依赖必须做隔离">17.4 下游依赖必须做隔离</a></li><li class="toc-d2"><a href="#18-生产事故模式与排障-runbook">18. 生产事故模式与排障 Runbook</a></li><li class="toc-d3"><a href="#181-server-一直显示连接失败">18.1 Server 一直显示“连接失败”</a></li><li class="toc-d3"><a href="#182-调用偶发重复执行">18.2 调用偶发重复执行</a></li><li class="toc-d3"><a href="#183-sse-在测试环境正常生产环境卡住">18.3 SSE 在测试环境正常、生产环境卡住</a></li><li class="toc-d3"><a href="#184-更新-server-后模型仍调用旧参数">18.4 更新 Server 后模型仍调用旧参数</a></li><li class="toc-d3"><a href="#185-返回没有数据其实是下游失败">18.5 返回“没有数据”，其实是下游失败</a></li><li class="toc-d2"><a href="#19-发布灰度slo-与上线检查单">19. 发布、灰度、SLO 与上线检查单</a></li><li class="toc-d3"><a href="#191-推荐发布顺序">19.1 推荐发布顺序</a></li><li class="toc-d3"><a href="#192-建议-slo">19.2 建议 SLO</a></li><li class="toc-d3"><a href="#193-上线前检查单">19.3 上线前检查单</a></li><li class="toc-d2"><a href="#20-一些额外的qa">20. 一些额外的QA</a></li><li class="toc-d2"><a href="#21-参考资料">21. 参考资料</a></li><li class="toc-d2"><a href="#22-与-skilltool-call-的对比">22. 与 Skill、Tool Call 的对比</a></li></ul></aside></div><div class="lightbox" id="lightbox" aria-hidden="true"><img alt=""></div><script type="module" src="/_astro/Base.astro_astro_type_script_index_0_lang.7IsV0x-z.js"></script></body></html>

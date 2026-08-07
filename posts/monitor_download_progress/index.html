@@ -1,0 +1,68 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>GO使用io.TeeReader显示下载进度</title><script>
+      (function () {
+        var s = localStorage.getItem('theme');
+        if (s === 'light' || s === 'dark') {
+          document.documentElement.setAttribute('data-theme', s);
+        }
+      })();
+    </script><link rel="stylesheet" href="/_astro/Base.CUYrCnW9.css"></head><body><header class="topbar"><a href="/" class="brand">HLDay</a><nav><a href="/">书</a><a href="/posts/">博客</a><a href="https://github.com/hTangle" class="nav-github" aria-label="GitHub">GitHub</a></nav><button class="theme-toggle" id="themeToggle" type="button" title="切换主题（自动/浅色/深色）" aria-label="切换主题">🖥️</button></header><div class="layout"><aside class="booknav"><ul class="nav-tree"><li><p class="nav-group">Go</p><ul><li><p class="nav-subgroup">并发编程</p><ul><li class><a href="/gmp/">GMP 调度器</a></li><li class><a href="/sync-lock/">同步和锁</a></li><li class><a href="/channel/">Channel</a></li><li class><a href="/context/">Context</a></li></ul></li></ul></li><li><p class="nav-group">Agent 开发</p><ul><li><p class="nav-subgroup">核心协议与机制</p><ul><li class><a href="/mcp/">MCP</a></li><li class><a href="/skill/">Skill</a></li><li class><a href="/tool-call/">Tool Call</a></li></ul></li></ul></li></ul></aside><main class="prose"><h1>GO使用io.TeeReader显示下载进度</h1><h2 id="目标">目标</h2>
+<p>使用go原生http库下载时，显示实时下载进度。</p>
+<h2 id="how">How</h2>
+<p>Go的Http是一个流，通过截取流的信息可以完成显示下载进度的目的。</p>
+<ol>
+<li>首先定义一个接口</li>
+</ol>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">type</span><span style="color:#B392F0"> Counter</span><span style="color:#F97583"> interface</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#B392F0">	Write</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">p</span><span style="color:#E1E4E8"> []</span><span style="color:#F97583">byte</span><span style="color:#E1E4E8">) (</span><span style="color:#F97583">int</span><span style="color:#E1E4E8">, </span><span style="color:#F97583">error</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"><span style="color:#B392F0">	SetTotal</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">total</span><span style="color:#F97583"> int64</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<ol start="2">
+<li>定义接口实现</li>
+</ol>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">type</span><span style="color:#B392F0"> WriteCounter</span><span style="color:#F97583"> struct</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">	Total   </span><span style="color:#F97583">int64</span><span style="color:#9ECBFF">  `json:"total"`</span></span>
+<span class="line"><span style="color:#E1E4E8">	Current </span><span style="color:#F97583">int64</span><span style="color:#9ECBFF">  `json:"current"`</span></span>
+<span class="line"><span style="color:#E1E4E8">	Rate    </span><span style="color:#F97583">int64</span><span style="color:#9ECBFF">  `json:"rate"`</span></span>
+<span class="line"><span style="color:#E1E4E8">	Package </span><span style="color:#F97583">string</span><span style="color:#9ECBFF"> `json:"package"`</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">func</span><span style="color:#E1E4E8"> (</span><span style="color:#FFAB70">w </span><span style="color:#F97583">*</span><span style="color:#B392F0">WriteCounter</span><span style="color:#E1E4E8">) </span><span style="color:#B392F0">Write</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">p</span><span style="color:#E1E4E8"> []</span><span style="color:#F97583">byte</span><span style="color:#E1E4E8">) (</span><span style="color:#F97583">int</span><span style="color:#E1E4E8">, </span><span style="color:#F97583">error</span><span style="color:#E1E4E8">) {</span></span>
+<span class="line"><span style="color:#E1E4E8">	n </span><span style="color:#F97583">:=</span><span style="color:#B392F0"> len</span><span style="color:#E1E4E8">(p)</span></span>
+<span class="line"><span style="color:#E1E4E8">	w.Current </span><span style="color:#F97583">+=</span><span style="color:#F97583"> int64</span><span style="color:#E1E4E8">(n)</span></span>
+<span class="line"><span style="color:#E1E4E8">	w.Rate </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> w.Current </span><span style="color:#F97583">*</span><span style="color:#79B8FF"> 100</span><span style="color:#F97583"> /</span><span style="color:#E1E4E8"> w.Total</span></span>
+<span class="line"><span style="color:#E1E4E8">  fmt.</span><span style="color:#B392F0">Printf</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">"</span><span style="color:#79B8FF">\r</span><span style="color:#9ECBFF">Downloading[</span><span style="color:#79B8FF">%s</span><span style="color:#9ECBFF">][ </span><span style="color:#79B8FF">%s%%</span><span style="color:#9ECBFF"> ][</span><span style="color:#79B8FF">%d</span><span style="color:#9ECBFF">/</span><span style="color:#79B8FF">%d</span><span style="color:#9ECBFF">] B complete"</span><span style="color:#E1E4E8">,w.Package,w.Rate, w.Current,w.Total)</span></span>
+<span class="line"><span style="color:#F97583">	return</span><span style="color:#E1E4E8"> n, </span><span style="color:#79B8FF">nil</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">func</span><span style="color:#E1E4E8"> (</span><span style="color:#FFAB70">w </span><span style="color:#F97583">*</span><span style="color:#B392F0">WriteCounter</span><span style="color:#E1E4E8">) </span><span style="color:#B392F0">SetTotal</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">total</span><span style="color:#F97583"> int64</span><span style="color:#E1E4E8">) {</span></span>
+<span class="line"><span style="color:#E1E4E8">	d.Total </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> total</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<ol start="3">
+<li>定义下载逻辑</li>
+</ol>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">func</span><span style="color:#B392F0"> Download</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">counter</span><span style="color:#B392F0"> IOCounter</span><span style="color:#E1E4E8">, </span><span style="color:#FFAB70">url</span><span style="color:#E1E4E8">, </span><span style="color:#FFAB70">path</span><span style="color:#F97583"> string</span><span style="color:#E1E4E8">) </span><span style="color:#F97583">error</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">	resp, err </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> http.</span><span style="color:#B392F0">Get</span><span style="color:#E1E4E8">(url)</span></span>
+<span class="line"><span style="color:#F97583">	if</span><span style="color:#E1E4E8"> err </span><span style="color:#F97583">!=</span><span style="color:#79B8FF"> nil</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">		logger.</span><span style="color:#B392F0">Errorf</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">"request </span><span style="color:#79B8FF">%s</span><span style="color:#9ECBFF"> error: </span><span style="color:#79B8FF">%v</span><span style="color:#9ECBFF">"</span><span style="color:#E1E4E8">, url, err)</span></span>
+<span class="line"><span style="color:#F97583">		return</span><span style="color:#E1E4E8"> err</span></span>
+<span class="line"><span style="color:#E1E4E8">	}</span></span>
+<span class="line"><span style="color:#F97583">	defer</span><span style="color:#F97583"> func</span><span style="color:#E1E4E8">() {</span></span>
+<span class="line"><span style="color:#E1E4E8">		closeError </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> resp.Body.</span><span style="color:#B392F0">Close</span><span style="color:#E1E4E8">()</span></span>
+<span class="line"><span style="color:#F97583">		if</span><span style="color:#E1E4E8"> closeError </span><span style="color:#F97583">!=</span><span style="color:#79B8FF"> nil</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">			logger.</span><span style="color:#B392F0">Errorf</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">"close error: </span><span style="color:#79B8FF">%v</span><span style="color:#9ECBFF">"</span><span style="color:#E1E4E8">, closeError)</span></span>
+<span class="line"><span style="color:#F97583">			return</span></span>
+<span class="line"><span style="color:#E1E4E8">		}</span></span>
+<span class="line"><span style="color:#E1E4E8">	}()</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#E1E4E8">	counter.</span><span style="color:#B392F0">SetTotal</span><span style="color:#E1E4E8">(resp.ContentLength)</span></span>
+<span class="line"><span style="color:#E1E4E8">	out, err </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> os.</span><span style="color:#B392F0">Create</span><span style="color:#E1E4E8">(path)</span></span>
+<span class="line"><span style="color:#F97583">	if</span><span style="color:#E1E4E8"> err </span><span style="color:#F97583">!=</span><span style="color:#79B8FF"> nil</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">		return</span><span style="color:#E1E4E8"> err</span></span>
+<span class="line"><span style="color:#E1E4E8">	}</span></span>
+<span class="line"><span style="color:#F97583">	defer</span><span style="color:#E1E4E8"> out.</span><span style="color:#B392F0">Close</span><span style="color:#E1E4E8">()</span></span>
+<span class="line"><span style="color:#F97583">	if</span><span style="color:#E1E4E8"> _, err </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> io.</span><span style="color:#B392F0">Copy</span><span style="color:#E1E4E8">(out, io.</span><span style="color:#B392F0">TeeReader</span><span style="color:#E1E4E8">(resp.Body, counter)); err </span><span style="color:#F97583">!=</span><span style="color:#79B8FF"> nil</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">		logger.</span><span style="color:#B392F0">Errorf</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">"write error: </span><span style="color:#79B8FF">%v</span><span style="color:#9ECBFF">"</span><span style="color:#E1E4E8">, err)</span></span>
+<span class="line"><span style="color:#E1E4E8">	}</span></span>
+<span class="line"><span style="color:#E1E4E8">	logger.</span><span style="color:#B392F0">Infof</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">"download [ </span><span style="color:#79B8FF">%v</span><span style="color:#9ECBFF"> ]->[ </span><span style="color:#79B8FF">%s</span><span style="color:#9ECBFF"> ] success"</span><span style="color:#E1E4E8">, url, path)</span></span>
+<span class="line"><span style="color:#F97583">	return</span><span style="color:#79B8FF"> nil</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre></main><aside class="toc"><p class="toc-title">本页目录</p><ul><li class="toc-d2"><a href="#目标">目标</a></li><li class="toc-d2"><a href="#how">How</a></li></ul></aside></div><div class="lightbox" id="lightbox" aria-hidden="true"><img alt=""></div><script type="module" src="/_astro/Base.astro_astro_type_script_index_0_lang.7IsV0x-z.js"></script></body></html>

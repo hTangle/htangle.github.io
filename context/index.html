@@ -1,0 +1,449 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Context：Go 1.26.5 源码分析</title><script>
+      (function () {
+        var s = localStorage.getItem('theme');
+        if (s === 'light' || s === 'dark') {
+          document.documentElement.setAttribute('data-theme', s);
+        }
+      })();
+    </script><link rel="stylesheet" href="/_astro/Base.CUYrCnW9.css"></head><body><header class="topbar"><a href="/" class="brand">HLDay</a><nav><a href="/">书</a><a href="/posts/">博客</a><a href="https://github.com/hTangle" class="nav-github" aria-label="GitHub">GitHub</a></nav><button class="theme-toggle" id="themeToggle" type="button" title="切换主题（自动/浅色/深色）" aria-label="切换主题">🖥️</button></header><div class="layout"><aside class="booknav"><ul class="nav-tree"><li><p class="nav-group">Go</p><ul><li><p class="nav-subgroup">并发编程</p><ul><li class><a href="/gmp/">GMP 调度器</a></li><li class><a href="/sync-lock/">同步和锁</a></li><li class><a href="/channel/">Channel</a></li><li class="active"><a href="/context/">Context</a></li></ul></li></ul></li><li><p class="nav-group">Agent 开发</p><ul><li><p class="nav-subgroup">核心协议与机制</p><ul><li class><a href="/mcp/">MCP</a></li><li class><a href="/skill/">Skill</a></li><li class><a href="/tool-call/">Tool Call</a></li></ul></li></ul></li></ul></aside><main class="prose"><h1>Context：Go 1.26.5 源码分析</h1><p><code>context.Context</code> 是 Go 中跨 API 边界传递 <strong>取消信号、截止时间、取消原因和请求域数据</strong> 的标准协议。它本身不创建“控制中心”，而是通过一棵不可变的派生链，把取消从父节点广播到所有仍然注册的子节点。</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="mermaid"><code><span class="line"><span style="color:#F97583">flowchart</span><span style="color:#B392F0"> LR</span></span>
+<span class="line"><span style="color:#FFAB70">    R</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"Background / TODO"</span><span style="color:#F97583">]</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> C</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"cancelCtx"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    C </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> T</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"timerCtx"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    T </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> V1</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"valueCtx"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    C </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> V2</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"valueCtx"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    C </span><span style="color:#F97583">-.</span><span style="color:#9ECBFF">关闭 Done</span><span style="color:#F97583">.-></span><span style="color:#FFAB70"> G1</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"goroutine / RPC / DB"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    T </span><span style="color:#F97583">-.</span><span style="color:#9ECBFF">超时或取消</span><span style="color:#F97583">.-></span><span style="color:#FFAB70"> G2</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"下游任务"</span><span style="color:#F97583">]</span></span></code></pre>
+<h2 id="版本变化">版本变化</h2>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>版本</th><th>Context 相关变化</th></tr></thead><tbody><tr><td>Go 1.7</td><td><code>context</code> 进入标准库</td></tr><tr><td>Go 1.20</td><td><code>WithCancelCause</code>、<code>CancelCauseFunc</code>、<code>Cause</code>，取消不再只有两个哨兵错误</td></tr><tr><td>Go 1.21</td><td><code>AfterFunc</code>、<code>WithoutCancel</code>、<code>WithDeadlineCause</code>、<code>WithTimeoutCause</code></td></tr><tr><td>Go 1.25</td><td>修复 <code>context</code> 边界问题；API 主体不变</td></tr><tr><td>Go 1.26</td><td>本文基线；内部仍是接口包装链、<code>cancelCtx</code> 子树和 <code>timerCtx</code> 定时取消</td></tr></tbody></table>
+<h2 id="源码地图">源码地图</h2>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>内容</th><th>Go 1.26.5 源码</th></tr></thead><tbody><tr><td><code>Context</code> 接口与包级约定</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/context/context.go#L5-L168" rel="noopener noreferrer" target="_blank"><code>context.go#L5-L168</code></a></td></tr><tr><td><code>Background</code> / <code>TODO</code></td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/context/context.go#L181-L225" rel="noopener noreferrer" target="_blank"><code>context.go#L181-L225</code></a></td></tr><tr><td><code>WithCancel</code> / <code>WithCancelCause</code> / <code>Cause</code></td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/context/context.go#L231-L300" rel="noopener noreferrer" target="_blank"><code>context.go#L231-L300</code></a></td></tr><tr><td><code>AfterFunc</code></td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/context/context.go#L302-L368" rel="noopener noreferrer" target="_blank"><code>context.go#L302-L368</code></a></td></tr><tr><td><code>cancelCtx</code></td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/context/context.go#L431-L579" rel="noopener noreferrer" target="_blank"><code>context.go#L431-L579</code></a></td></tr><tr><td><code>WithoutCancel</code></td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/context/context.go#L581-L616" rel="noopener noreferrer" target="_blank"><code>context.go#L581-L616</code></a></td></tr><tr><td><code>timerCtx</code>、deadline、timeout</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/context/context.go#L618-L712" rel="noopener noreferrer" target="_blank"><code>context.go#L618-L712</code></a></td></tr><tr><td><code>valueCtx</code> 与迭代查找</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/context/context.go#L714-L821" rel="noopener noreferrer" target="_blank"><code>context.go#L714-L821</code></a></td></tr></tbody></table>
+<h1 id="四个方法定义了一份协作协议">四个方法定义了一份协作协议</h1>
+<p><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/context/context.go#L71-L156" rel="noopener noreferrer" target="_blank"><code>Context</code> 接口</a> 只有四个方法：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">type</span><span style="color:#B392F0"> Context</span><span style="color:#F97583"> interface</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#B392F0">    Deadline</span><span style="color:#E1E4E8">() (</span><span style="color:#FFAB70">deadline</span><span style="color:#B392F0"> time</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">Time</span><span style="color:#E1E4E8">, </span><span style="color:#FFAB70">ok</span><span style="color:#F97583"> bool</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"><span style="color:#B392F0">    Done</span><span style="color:#E1E4E8">() </span><span style="color:#F97583">&#x3C;-chan</span><span style="color:#F97583"> struct</span><span style="color:#E1E4E8">{}</span></span>
+<span class="line"><span style="color:#B392F0">    Err</span><span style="color:#E1E4E8">() </span><span style="color:#F97583">error</span></span>
+<span class="line"><span style="color:#B392F0">    Value</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">key</span><span style="color:#B392F0"> any</span><span style="color:#E1E4E8">) </span><span style="color:#B392F0">any</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="mermaid"><code><span class="line"><span style="color:#F97583">flowchart</span><span style="color:#B392F0"> TB</span></span>
+<span class="line"><span style="color:#FFAB70">    C</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"Context"</span><span style="color:#F97583">]</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> D</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"Deadline：何时必须停止"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    C </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> O</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"Done：广播停止事件"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    C </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> E</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"Err：为何停止的稳定分类"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    C </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> V</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"Value：请求域元数据"</span><span style="color:#F97583">]</span></span></code></pre>
+<h2 id="方法契约">方法契约</h2>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>方法</th><th>核心语义</th><th>容易误解的点</th></tr></thead><tbody><tr><td><code>Deadline</code></td><td>返回最迟完成时间</td><td><code>ok=false</code> 表示没有截止时间，不表示无限资源</td></tr><tr><td><code>Done</code></td><td>取消时关闭的只读 Channel</td><td>可能返回 nil；关闭是广播，不携带原因</td></tr><tr><td><code>Err</code></td><td>取消后返回 <code>Canceled</code> 或 <code>DeadlineExceeded</code></td><td>取消前必须返回 nil；原因细节看 <code>Cause</code></td></tr><tr><td><code>Value</code></td><td>沿父链查询请求域键值</td><td>不应用于可选参数、依赖注入或业务配置</td></tr></tbody></table>
+<p>同一个 Context 的方法可以被多个 goroutine 并发调用。调用方不应自行实现一个返回行为不稳定的 Context，也不应把 Context 保存进结构体后跨请求复用。</p>
+<h1 id="context-是一条包装链也是一棵取消树">Context 是一条包装链，也是一棵取消树</h1>
+<p>每次 <code>With...</code> 返回一个包装父 Context 的新对象；父节点不会被修改：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="mermaid"><code><span class="line"><span style="color:#F97583">flowchart</span><span style="color:#B392F0"> TD</span></span>
+<span class="line"><span style="color:#FFAB70">    B</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"backgroundCtx"</span><span style="color:#F97583">]</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> C1</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"cancelCtx A"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    C1 </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> T1</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"timerCtx B"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    T1 </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> V1</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"valueCtx C"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    C1 </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> C2</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"cancelCtx D"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    C2 </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> V2</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"valueCtx E"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    C1 </span><span style="color:#F97583">-.</span><span style="color:#9ECBFF">cancel</span><span style="color:#F97583">.-></span><span style="color:#FFAB70"> T1</span></span>
+<span class="line"><span style="color:#FFAB70">    C1 </span><span style="color:#F97583">-.</span><span style="color:#9ECBFF">cancel</span><span style="color:#F97583">.-></span><span style="color:#FFAB70"> C2</span></span>
+<span class="line"><span style="color:#FFAB70">    T1 </span><span style="color:#F97583">-.</span><span style="color:#9ECBFF">cancel</span><span style="color:#F97583">.-></span><span style="color:#FFAB70"> V1</span></span>
+<span class="line"><span style="color:#FFAB70">    C2 </span><span style="color:#F97583">-.</span><span style="color:#9ECBFF">cancel</span><span style="color:#F97583">.-></span><span style="color:#FFAB70"> V2</span></span></code></pre>
+<p>“包装链”解释 <code>Deadline</code> 和 <code>Value</code> 如何向父级查询；“取消树”解释 <code>cancelCtx.children</code> 如何把取消向下传播。这是同一组对象的两个观察角度。</p>
+<h2 id="派生类型">派生类型</h2>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>构造函数</th><th>实际类型</th><th>自己新增的状态</th></tr></thead><tbody><tr><td><code>Background</code></td><td><code>backgroundCtx</code></td><td>无</td></tr><tr><td><code>TODO</code></td><td><code>todoCtx</code></td><td>无</td></tr><tr><td><code>WithCancel</code> / <code>WithCancelCause</code></td><td><code>*cancelCtx</code></td><td>done、children、err、cause</td></tr><tr><td><code>WithDeadline*</code> / <code>WithTimeout*</code></td><td><code>*timerCtx</code></td><td>内嵌 cancelCtx、timer、deadline</td></tr><tr><td><code>WithValue</code></td><td><code>*valueCtx</code></td><td>key、value</td></tr><tr><td><code>WithoutCancel</code></td><td><code>withoutCancelCtx</code></td><td>只包装父节点并截断取消/截止时间</td></tr></tbody></table>
+<h1 id="根-contextbackground-与-todo">根 Context：<code>Background</code> 与 <code>TODO</code></h1>
+<p><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/context/context.go#L181-L209" rel="noopener noreferrer" target="_blank"><code>emptyCtx</code></a> 的 <code>Deadline</code> 返回无截止时间，<code>Done</code> 返回 nil，<code>Err</code> 返回 nil，<code>Value</code> 返回 nil。</p>
+<ul>
+<li><code>Background()</code> 用在 <code>main</code>、初始化、测试和请求树根部。</li>
+<li><code>TODO()</code> 的运行语义相同，但表达“这里应该传什么 Context 尚未决定”。它是代码审阅信号，不是永久默认值。</li>
+</ul>
+<p><strong>⚠️ 不要传 nil Context</strong></p>
+<p>标准库构造函数会对 nil parent panic。即使暂时不确定，也应显式传 <code>context.TODO()</code>。</p>
+<h1 id="cancelctx取消树的核心"><code>cancelCtx</code>：取消树的核心</h1>
+<h2 id="数据结构">数据结构</h2>
+<p><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/context/context.go#L431-L439" rel="noopener noreferrer" target="_blank"><code>cancelCtx</code></a> 内嵌父 Context：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">type</span><span style="color:#B392F0"> cancelCtx</span><span style="color:#F97583"> struct</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#B392F0">    Context</span></span>
+<span class="line"><span style="color:#E1E4E8">    mu       </span><span style="color:#B392F0">sync</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">Mutex</span></span>
+<span class="line"><span style="color:#E1E4E8">    done     </span><span style="color:#B392F0">atomic</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">Value</span></span>
+<span class="line"><span style="color:#E1E4E8">    children </span><span style="color:#F97583">map</span><span style="color:#E1E4E8">[</span><span style="color:#B392F0">canceler</span><span style="color:#E1E4E8">]</span><span style="color:#F97583">struct</span><span style="color:#E1E4E8">{}</span></span>
+<span class="line"><span style="color:#E1E4E8">    err      </span><span style="color:#B392F0">atomic</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">Value</span></span>
+<span class="line"><span style="color:#E1E4E8">    cause    </span><span style="color:#F97583">error</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="mermaid"><code><span class="line"><span style="color:#F97583">flowchart</span><span style="color:#B392F0"> LR</span></span>
+<span class="line"><span style="color:#FFAB70">    C</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"cancelCtx"</span><span style="color:#F97583">]</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> P</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"Context：父节点"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    C </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> D</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"done：惰性创建的 chan struct{}"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    C </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> K</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"children：可取消直接子节点集合"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    C </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> E</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"err：Canceled / DeadlineExceeded"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    C </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> A</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"cause：业务取消原因"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    C </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> M</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"mu：保护 done 初始化、children、cause"</span><span style="color:#F97583">]</span></span></code></pre>
+<p><code>done</code> 和 <code>err</code> 用 <code>atomic.Value</code> 加速高频读取；结构性修改仍由 <code>mu</code> 串行化。<code>cause</code> 与 <code>err</code> 一起在首次取消时固定，之后的取消调用不会覆盖它们。</p>
+<h2 id="done-为什么惰性创建"><code>Done</code> 为什么惰性创建</h2>
+<p><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/context/context.go#L448-L461" rel="noopener noreferrer" target="_blank"><code>Done</code></a> 先原子读取；只有调用者真的索取 <code>Done()</code> 时，才在锁内创建 <code>chan struct{}</code>。</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="mermaid"><code><span class="line"><span style="color:#F97583">flowchart</span><span style="color:#B392F0"> TD</span></span>
+<span class="line"><span style="color:#FFAB70">    A</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"ctx.Done()"</span><span style="color:#F97583">]</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> L</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"atomic.Load(done)"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    L </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">已有</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> R</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"直接返回"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    L </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">nil</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> M</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"加锁并二次检查"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    M </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">仍为 nil</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> C</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"make(chan struct{}) 并 Store"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    M </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">已有</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> R</span></span>
+<span class="line"><span style="color:#FFAB70">    C </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> R</span></span></code></pre>
+<p>很多 Context 只用于 <code>Value</code> 或传递，并不会等待取消；惰性创建避免为它们都分配 Channel。如果 Context 在第一次调用 <code>Done</code> 前已经取消，源码直接存入全局复用的 <code>closedchan</code>。</p>
+<h2 id="err-的原子快路径"><code>Err</code> 的原子快路径</h2>
+<p><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/context/context.go#L463-L471" rel="noopener noreferrer" target="_blank"><code>Err</code></a> 用原子读取替代锁；源码注释指出紧密循环中原子读取约快五倍。观察到非 nil 错误后，它还会接收一次 <code>Done()</code>，保证返回错误前 Channel 已经关闭。</p>
+<h1 id="父子取消如何传播">父子取消如何传播</h1>
+<p><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/context/context.go#L473-L529" rel="noopener noreferrer" target="_blank"><code>propagateCancel</code></a> 有四条路径，不是每个子 Context 都创建一个 goroutine：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="mermaid"><code><span class="line"><span style="color:#F97583">flowchart</span><span style="color:#B392F0"> TD</span></span>
+<span class="line"><span style="color:#FFAB70">    A</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"propagateCancel(parent, child)"</span><span style="color:#F97583">]</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> D</span><span style="color:#F97583">{</span><span style="color:#9ECBFF">"parent.Done() == nil?"</span><span style="color:#F97583">}</span></span>
+<span class="line"><span style="color:#FFAB70">    D </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">是</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> N</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"永不取消，无需注册"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    D </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">否</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> C</span><span style="color:#F97583">{</span><span style="color:#9ECBFF">"parent 已取消?"</span><span style="color:#F97583">}</span></span>
+<span class="line"><span style="color:#FFAB70">    C </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">是</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> X</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"立即取消 child"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    C </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">否</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> P</span><span style="color:#F97583">{</span><span style="color:#9ECBFF">"能找到内部 *cancelCtx?"</span><span style="color:#F97583">}</span></span>
+<span class="line"><span style="color:#FFAB70">    P </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">是</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> K</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"把 child 加入 parent.children"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    P </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">否</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> F</span><span style="color:#F97583">{</span><span style="color:#9ECBFF">"parent 实现 AfterFunc?"</span><span style="color:#F97583">}</span></span>
+<span class="line"><span style="color:#FFAB70">    F </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">是</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> AF</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"注册回调，并用 stopCtx 保存注销函数"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    F </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">否</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> G</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"启动一个 goroutine 监听 parent.Done / child.Done"</span><span style="color:#F97583">]</span></span></code></pre>
+<p>最常见的标准库父子链走 <code>children</code> 注册，取消成本是 O(直接/递归子节点数)，而不是每层一个 goroutine。只有自定义 Context 无法暴露内部父节点、也不支持 <code>AfterFunc</code> 时才使用兜底 goroutine。</p>
+<p><code>parentCancelCtx</code> 通过一个私有 key 找到最内层 <code>*cancelCtx</code>，并验证它的 <code>Done</code> 与父 Context 暴露的 Channel 完全相同；如果自定义包装替换了 <code>Done</code>，标准库不会绕过它。</p>
+<h1 id="取消只执行第一次先发布状态再广播">取消：只执行第一次，先发布状态再广播</h1>
+<p><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/context/context.go#L546-L579" rel="noopener noreferrer" target="_blank"><code>cancelCtx.cancel</code></a> 的顺序非常关键：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="mermaid"><code><span class="line"><span style="color:#F97583">sequenceDiagram</span></span>
+<span class="line"><span style="color:#F97583">    participant</span><span style="color:#FFAB70"> F</span><span style="color:#F97583"> as</span><span style="color:#9ECBFF"> CancelFunc</span></span>
+<span class="line"><span style="color:#F97583">    participant</span><span style="color:#FFAB70"> C</span><span style="color:#F97583"> as</span><span style="color:#9ECBFF"> cancelCtx</span></span>
+<span class="line"><span style="color:#F97583">    participant</span><span style="color:#FFAB70"> Ch</span><span style="color:#F97583"> as</span><span style="color:#9ECBFF"> Done channel</span></span>
+<span class="line"><span style="color:#F97583">    participant</span><span style="color:#FFAB70"> Kids</span><span style="color:#F97583"> as</span><span style="color:#9ECBFF"> children</span></span>
+<span class="line"><span style="color:#FFAB70">    F</span><span style="color:#F97583">->></span><span style="color:#FFAB70">C</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> cancel(err, cause)</span></span>
+<span class="line"><span style="color:#FFAB70">    C</span><span style="color:#F97583">->></span><span style="color:#FFAB70">C</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> lock；若已有 err 则返回</span></span>
+<span class="line"><span style="color:#FFAB70">    C</span><span style="color:#F97583">->></span><span style="color:#FFAB70">C</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> Store err；设置 cause</span></span>
+<span class="line"><span style="color:#FFAB70">    C</span><span style="color:#F97583">->></span><span style="color:#FFAB70">Ch</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> close(done) 或存 closedchan</span></span>
+<span class="line"><span style="color:#FFAB70">    C</span><span style="color:#F97583">->></span><span style="color:#FFAB70">Kids</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> 递归 cancel 每个 child</span></span>
+<span class="line"><span style="color:#FFAB70">    C</span><span style="color:#F97583">->></span><span style="color:#FFAB70">C</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> children=nil；unlock</span></span>
+<span class="line"><span style="color:#FFAB70">    C</span><span style="color:#F97583">->></span><span style="color:#FFAB70">C</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> 可选：从 parent 移除自己</span></span></code></pre>
+<p>为什么先设 <code>err/cause</code> 再关闭 <code>Done</code>？因为其他 goroutine 从 <code>&#x3C;-Done()</code> 返回后，必须能立即读取到稳定的 <code>Err()</code> 和 <code>Cause()</code>。</p>
+<p><strong>⚠️ 取消函数必须被调用</strong></p>
+<p>即使操作成功提前完成，也应 <code>defer cancel()</code>。它不仅关闭信号，还会停止 timer，并把子节点从父节点的 <code>children</code> 集合移除；长期遗漏会保留对象和定时器直到父节点取消。</p>
+<h1 id="取消原因cause">取消原因：<code>Cause</code></h1>
+<p>传统 <code>Err()</code> 只有两个稳定类别：<code>context.Canceled</code> 与 <code>context.DeadlineExceeded</code>。Go 1.20 的 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/context/context.go#L255-L300" rel="noopener noreferrer" target="_blank"><code>WithCancelCause</code> 与 <code>Cause</code></a> 把“控制流分类”和“业务根因”分开：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#E1E4E8">ctx, cancel </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> context.</span><span style="color:#B392F0">WithCancelCause</span><span style="color:#E1E4E8">(parent)</span></span>
+<span class="line"><span style="color:#F97583">defer</span><span style="color:#B392F0"> cancel</span><span style="color:#E1E4E8">(</span><span style="color:#79B8FF">nil</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">if</span><span style="color:#E1E4E8"> err </span><span style="color:#F97583">:=</span><span style="color:#B392F0"> worker</span><span style="color:#E1E4E8">(); err </span><span style="color:#F97583">!=</span><span style="color:#79B8FF"> nil</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#B392F0">    cancel</span><span style="color:#E1E4E8">(fmt.</span><span style="color:#B392F0">Errorf</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">"worker failed: </span><span style="color:#79B8FF">%w</span><span style="color:#9ECBFF">"</span><span style="color:#E1E4E8">, err))</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">&#x3C;-</span><span style="color:#E1E4E8">ctx.</span><span style="color:#B392F0">Done</span><span style="color:#E1E4E8">()</span></span>
+<span class="line"><span style="color:#E1E4E8">log.</span><span style="color:#B392F0">Printf</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">"class=</span><span style="color:#79B8FF">%v</span><span style="color:#9ECBFF"> cause=</span><span style="color:#79B8FF">%v</span><span style="color:#9ECBFF">"</span><span style="color:#E1E4E8">, ctx.</span><span style="color:#B392F0">Err</span><span style="color:#E1E4E8">(), context.</span><span style="color:#B392F0">Cause</span><span style="color:#E1E4E8">(ctx))</span></span></code></pre>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>读取</th><th>用途</th></tr></thead><tbody><tr><td><code>ctx.Err()</code></td><td>稳定分支：取消还是超时</td></tr><tr><td><code>context.Cause(ctx)</code></td><td>日志、上报和保留业务错误链</td></tr></tbody></table>
+<p>第一个取消胜出：父先取消，子继承父 cause；子先用自己的 cause 取消，则子保留自己的 cause，即使父稍后再取消。</p>
+<h1 id="截止时间timerctx">截止时间：<code>timerCtx</code></h1>
+<p><code>WithTimeout</code> 只是把 duration 转为 deadline，再调用 <code>WithDeadline</code>。真正实现位于 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/context/context.go#L625-L657" rel="noopener noreferrer" target="_blank"><code>WithDeadlineCause</code></a>：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="mermaid"><code><span class="line"><span style="color:#F97583">flowchart</span><span style="color:#B392F0"> TD</span></span>
+<span class="line"><span style="color:#FFAB70">    A</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"WithDeadline(parent, d)"</span><span style="color:#F97583">]</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> P</span><span style="color:#F97583">{</span><span style="color:#9ECBFF">"父 deadline 更早?"</span><span style="color:#F97583">}</span></span>
+<span class="line"><span style="color:#FFAB70">    P </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">是</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> C</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"退化为 WithCancel(parent)"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    P </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">否</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> T</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"创建 timerCtx 并注册父取消"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    T </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> E</span><span style="color:#F97583">{</span><span style="color:#9ECBFF">"d 已到期?"</span><span style="color:#F97583">}</span></span>
+<span class="line"><span style="color:#FFAB70">    E </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">是</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> X</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"立即 DeadlineExceeded"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    E </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">否</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> R</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"time.AfterFunc(until d)"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    R </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> X</span></span>
+<span class="line"><span style="color:#FFAB70">    X </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> S</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"cancelCtx.cancel + 停止/清理 timer"</span><span style="color:#F97583">]</span></span></code></pre>
+<p>父 deadline 更早时不再创建第二个 timer，因为子不可能活得比父更久。<a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/context/context.go#L679-L691" rel="noopener noreferrer" target="_blank"><code>timerCtx.cancel</code></a> 先执行通用取消，再从父节点移除自己并停止 timer。</p>
+<h1 id="afterfunc取消后异步执行回调"><code>AfterFunc</code>：取消后异步执行回调</h1>
+<p><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/context/context.go#L302-L360" rel="noopener noreferrer" target="_blank"><code>AfterFunc</code></a> 注册一个在 Context 完成后由新 goroutine 执行的函数，并返回 <code>stop() bool</code>。</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="mermaid"><code><span class="line"><span style="color:#F97583">stateDiagram-v2</span></span>
+<span class="line"><span style="color:#F97583">    [*]</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> Pending</span></span>
+<span class="line"><span style="color:#FFAB70">    Pending</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> Started</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> Context 取消，once 赢</span></span>
+<span class="line"><span style="color:#FFAB70">    Pending</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> Stopped</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> stop() 赢</span></span>
+<span class="line"><span style="color:#FFAB70">    Started</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> Finished</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> f 返回</span></span>
+<span class="line"><span style="color:#FFAB70">    Stopped</span><span style="color:#F97583"> --></span><span style="color:#F97583"> [*]</span></span>
+<span class="line"><span style="color:#FFAB70">    Finished</span><span style="color:#F97583"> --></span><span style="color:#F97583"> [*]</span></span></code></pre>
+<ul>
+<li><code>afterFuncCtx.once</code> 决定“启动 f”与“阻止 f”谁赢。</li>
+<li><code>stop()</code> 返回 true 表示成功阻止启动；返回 false 可能是已经启动，也可能是此前已停止。</li>
+<li><code>stop()</code> <strong>不等待</strong>正在运行的 f 完成，需要等待时必须自己用 Channel/WaitGroup 协调。</li>
+<li>多个 <code>AfterFunc</code> 相互独立，执行顺序不保证。</li>
+</ul>
+<h1 id="withoutcancel截断控制流但保留-value"><code>WithoutCancel</code>：截断控制流，但保留 Value</h1>
+<p><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/context/context.go#L581-L616" rel="noopener noreferrer" target="_blank"><code>WithoutCancel</code></a> 返回一个仍指向 parent 的轻量包装：</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>方法</th><th>结果</th></tr></thead><tbody><tr><td><code>Deadline</code></td><td>无</td></tr><tr><td><code>Done</code></td><td>nil</td></tr><tr><td><code>Err</code></td><td>nil</td></tr><tr><td><code>Cause</code></td><td>nil</td></tr><tr><td><code>Value</code></td><td>继续向 parent 查询</td></tr></tbody></table>
+<p>典型场景是请求结束后仍需完成一个与请求取消解耦、但需要 trace ID 的收尾任务。它不是“后台任务无限运行许可证”；通常还要重新包一层明确的超时：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#E1E4E8">base </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> context.</span><span style="color:#B392F0">WithoutCancel</span><span style="color:#E1E4E8">(req.</span><span style="color:#B392F0">Context</span><span style="color:#E1E4E8">())</span></span>
+<span class="line"><span style="color:#E1E4E8">ctx, cancel </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> context.</span><span style="color:#B392F0">WithTimeout</span><span style="color:#E1E4E8">(base, </span><span style="color:#79B8FF">2</span><span style="color:#F97583">*</span><span style="color:#E1E4E8">time.Second)</span></span>
+<span class="line"><span style="color:#F97583">defer</span><span style="color:#B392F0"> cancel</span><span style="color:#E1E4E8">()</span></span>
+<span class="line"><span style="color:#F97583">return</span><span style="color:#B392F0"> flushAudit</span><span style="color:#E1E4E8">(ctx)</span></span></code></pre>
+<h1 id="value沿链向上查找"><code>Value</code>：沿链向上查找</h1>
+<p><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/context/context.go#L714-L738" rel="noopener noreferrer" target="_blank"><code>WithValue</code></a> 要求 key 非 nil 且可比较；<a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/context/context.go#L775-L821" rel="noopener noreferrer" target="_blank"><code>value</code></a> 用循环识别标准库各包装类型，避免每层递归调用：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="mermaid"><code><span class="line"><span style="color:#F97583">flowchart</span><span style="color:#B392F0"> LR</span></span>
+<span class="line"><span style="color:#FFAB70">    V3</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"valueCtx(k3,v3)"</span><span style="color:#F97583">]</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> V2</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"valueCtx(k2,v2)"</span><span style="color:#F97583">]</span><span style="color:#F97583"> --</span><span style="color:#9ECBFF">> C["cancelCtx"] </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> V1</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"valueCtx(k1,v1)"</span><span style="color:#F97583">]</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> B</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"Background"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    Q</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"Value(k1)"</span><span style="color:#F97583">]</span><span style="color:#F97583"> -.</span><span style="color:#9ECBFF">逐层比较</span><span style="color:#F97583">.-></span><span style="color:#FFAB70"> V3</span></span>
+<span class="line"><span style="color:#FFAB70">    V3 </span><span style="color:#F97583">-.</span><span style="color:#9ECBFF">miss</span><span style="color:#F97583">.-></span><span style="color:#FFAB70"> V2</span></span>
+<span class="line"><span style="color:#FFAB70">    V2 </span><span style="color:#F97583">-.</span><span style="color:#9ECBFF">miss</span><span style="color:#F97583">.-></span><span style="color:#FFAB70"> C</span></span>
+<span class="line"><span style="color:#FFAB70">    C </span><span style="color:#F97583">-.</span><span style="color:#9ECBFF">miss</span><span style="color:#F97583">.-></span><span style="color:#FFAB70"> V1</span></span>
+<span class="line"><span style="color:#FFAB70">    V1 </span><span style="color:#F97583">-.</span><span style="color:#9ECBFF">hit</span><span style="color:#F97583">.-></span><span style="color:#FFAB70"> A</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"返回 v1"</span><span style="color:#F97583">]</span></span></code></pre>
+<p>查询复杂度与链深度线性相关。不要在循环中制造很深的 Value 链，也不要使用内置 <code>string</code> 作为跨包 key：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">type</span><span style="color:#B392F0"> traceIDKey</span><span style="color:#F97583"> struct</span><span style="color:#E1E4E8">{}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">func</span><span style="color:#B392F0"> WithTraceID</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">ctx</span><span style="color:#B392F0"> context</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">Context</span><span style="color:#E1E4E8">, </span><span style="color:#FFAB70">id</span><span style="color:#F97583"> string</span><span style="color:#E1E4E8">) </span><span style="color:#B392F0">context</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">Context</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">    return</span><span style="color:#E1E4E8"> context.</span><span style="color:#B392F0">WithValue</span><span style="color:#E1E4E8">(ctx, </span><span style="color:#B392F0">traceIDKey</span><span style="color:#E1E4E8">{}, id)</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<h1 id="正确的-api-设计">正确的 API 设计</h1>
+<h2 id="传递规则">传递规则</h2>
+<ol>
+<li>Context 通常作为第一个参数：<code>func Do(ctx context.Context, ...)</code>。</li>
+<li>不要把它存进结构体；例外需要清晰生命周期说明。</li>
+<li>不要传 nil；使用 <code>TODO</code> 明确技术债。</li>
+<li>不要在库函数内部无条件改用 <code>Background</code>，否则会截断调用方的取消链。</li>
+<li>不要向参数列表塞进 Context Value；Value 只放跨进程/API 边界的请求域元数据。</li>
+<li>调用 <code>WithCancel/Timeout/Deadline</code> 后立即安排 <code>defer cancel()</code>。</li>
+</ol>
+<h2 id="在阻塞点响应取消">在阻塞点响应取消</h2>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">func</span><span style="color:#B392F0"> send</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">ctx</span><span style="color:#B392F0"> context</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">Context</span><span style="color:#E1E4E8">, </span><span style="color:#FFAB70">out</span><span style="color:#F97583"> chan&#x3C;-</span><span style="color:#B392F0"> Item</span><span style="color:#E1E4E8">, </span><span style="color:#FFAB70">v</span><span style="color:#B392F0"> Item</span><span style="color:#E1E4E8">) </span><span style="color:#F97583">error</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">    select</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">    case</span><span style="color:#E1E4E8"> out </span><span style="color:#F97583">&#x3C;-</span><span style="color:#E1E4E8"> v:</span></span>
+<span class="line"><span style="color:#F97583">        return</span><span style="color:#79B8FF"> nil</span></span>
+<span class="line"><span style="color:#F97583">    case</span><span style="color:#F97583"> &#x3C;-</span><span style="color:#E1E4E8">ctx.</span><span style="color:#B392F0">Done</span><span style="color:#E1E4E8">():</span></span>
+<span class="line"><span style="color:#F97583">        return</span><span style="color:#E1E4E8"> context.</span><span style="color:#B392F0">Cause</span><span style="color:#E1E4E8">(ctx)</span></span>
+<span class="line"><span style="color:#E1E4E8">    }</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>Context 的 <code>Done</code> 本身就是只读 Channel；其关闭唤醒机制由 <a href="/channel/">Channel（Go 1.26.5 源码分析）</a> 中的 <code>closechan</code> 实现。</p>
+<h2 id="并行任务的取消">并行任务的取消</h2>
+<p>Context 只负责停止协议，不负责等待 goroutine 退出。启动 goroutine 后，还需要 <code>WaitGroup</code>、<code>errgroup</code> 或结果 Channel 收拢生命周期：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="mermaid"><code><span class="line"><span style="color:#F97583">flowchart</span><span style="color:#B392F0"> LR</span></span>
+<span class="line"><span style="color:#FFAB70">    P</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"parent ctx"</span><span style="color:#F97583">]</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> C</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"WithCancelCause"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    C </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> W1</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"worker 1"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    C </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> W2</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"worker 2"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    W1 </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">首个错误</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> X</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"cancelCause(err)"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    X </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> W2</span></span>
+<span class="line"><span style="color:#FFAB70">    W1 </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> J</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"Wait / join"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    W2 </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> J</span></span>
+<span class="line"><span style="color:#FFAB70">    J </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> R</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"返回 Cause(ctx)"</span><span style="color:#F97583">]</span></span></code></pre>
+<h1 id="常见陷阱">常见陷阱</h1>
+<ul>
+<li><strong>只检查 <code>Err()</code> 一次</strong>：长循环应在合适边界反复检查或 select <code>Done</code>。</li>
+<li><strong>取消后不等待子任务</strong>：取消是请求，不是 goroutine 已退出的证明。</li>
+<li><strong><code>defer cancel</code> 放在大循环中</strong>：defer 到函数返回才执行，可能累积大量 timer/子节点；把一次迭代提成函数或显式 cancel。</li>
+<li><strong>把 Context 当事件总线</strong>：它只有单向、一次性的关闭信号，不适合暂停/恢复、进度或多次通知。</li>
+<li><strong>期望 <code>AfterFunc.stop</code> 等待完成</strong>：它只竞争“是否开始”。</li>
+<li><strong>用 <code>WithoutCancel</code> 制造无界后台任务</strong>：应重新附加 deadline，并交给有所有权的任务管理器。</li>
+<li><strong>把敏感对象放入 Value</strong>：Context 会沿调用链传播，容易扩大数据暴露和生命周期。</li>
+</ul>
+<h1 id="测试与诊断">测试与诊断</h1>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">func</span><span style="color:#B392F0"> TestOperationTimeout</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">t</span><span style="color:#F97583"> *</span><span style="color:#B392F0">testing</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">T</span><span style="color:#E1E4E8">) {</span></span>
+<span class="line"><span style="color:#E1E4E8">    ctx, cancel </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> context.</span><span style="color:#B392F0">WithTimeout</span><span style="color:#E1E4E8">(context.</span><span style="color:#B392F0">Background</span><span style="color:#E1E4E8">(), </span><span style="color:#79B8FF">50</span><span style="color:#F97583">*</span><span style="color:#E1E4E8">time.Millisecond)</span></span>
+<span class="line"><span style="color:#E1E4E8">    t.</span><span style="color:#B392F0">Cleanup</span><span style="color:#E1E4E8">(cancel)</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#E1E4E8">    err </span><span style="color:#F97583">:=</span><span style="color:#B392F0"> Operation</span><span style="color:#E1E4E8">(ctx)</span></span>
+<span class="line"><span style="color:#F97583">    if</span><span style="color:#F97583"> !</span><span style="color:#E1E4E8">errors.</span><span style="color:#B392F0">Is</span><span style="color:#E1E4E8">(err, context.DeadlineExceeded) {</span></span>
+<span class="line"><span style="color:#E1E4E8">        t.</span><span style="color:#B392F0">Fatalf</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">"got </span><span style="color:#79B8FF">%v</span><span style="color:#9ECBFF">"</span><span style="color:#E1E4E8">, err)</span></span>
+<span class="line"><span style="color:#E1E4E8">    }</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="bash"><code><span class="line"><span style="color:#6A737D"># 数据竞争与 goroutine 生命周期问题</span></span>
+<span class="line"><span style="color:#B392F0">go</span><span style="color:#9ECBFF"> test</span><span style="color:#79B8FF"> -race</span><span style="color:#9ECBFF"> ./...</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D"># 查看 goroutine 堆栈</span></span>
+<span class="line"><span style="color:#B392F0">curl</span><span style="color:#9ECBFF"> http://127.0.0.1:6060/debug/pprof/goroutine?debug=</span><span style="color:#79B8FF">2</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D"># 调度、timer 和网络等待时间线</span></span>
+<span class="line"><span style="color:#B392F0">go</span><span style="color:#9ECBFF"> test</span><span style="color:#79B8FF"> -trace=trace.out</span><span style="color:#9ECBFF"> ./...</span></span>
+<span class="line"><span style="color:#B392F0">go</span><span style="color:#9ECBFF"> tool</span><span style="color:#9ECBFF"> trace</span><span style="color:#9ECBFF"> trace.out</span></span></code></pre>
+<p>测试超时应留出调度余量，优先注入时钟或使用 <code>testing/synctest</code> 验证复杂并发时序，避免只靠极短的 <code>time.Sleep</code>。</p>
+<h1 id="总结">总结</h1>
+<ol>
+<li>Context 是不可变包装链；<code>cancelCtx.children</code> 又把可取消节点组织为树。</li>
+<li><code>Done</code> Channel 惰性创建，<code>Err</code> 使用原子快路径，结构修改由 mutex 保护。</li>
+<li>标准父子链直接登记 child，通常不会每层启动 goroutine；自定义 Context 才可能触发兜底监听 goroutine。</li>
+<li>取消先发布 <code>err/cause</code>，再关闭 <code>Done</code>，然后递归取消子节点。</li>
+<li><code>timerCtx</code> 复用父级更早的 deadline，并在取消时停止 timer、解除父子引用。</li>
+<li><code>Cause</code> 保留业务根因；<code>AfterFunc</code> 处理取消后的异步动作；<code>WithoutCancel</code> 只截断控制流。</li>
+<li>Context 发出停止请求，但等待、资源回收和 goroutine join 仍由调用者负责。</li>
+</ol>
+<h1 id="参考资料">参考资料</h1>
+<ul>
+<li><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/context/context.go" rel="noopener noreferrer" target="_blank">Go 1.26.5 context 源码</a></li>
+<li><a href="https://pkg.go.dev/context" rel="noopener noreferrer" target="_blank">context 包文档</a></li>
+<li><a href="https://go.dev/doc/devel/release" rel="noopener noreferrer" target="_blank">Go 发布历史</a></li>
+<li><a href="https://go.dev/doc/go1.26" rel="noopener noreferrer" target="_blank">Go 1.26 发布说明</a></li>
+<li><a href="https://go.dev/blog/context" rel="noopener noreferrer" target="_blank">Go Concurrency Patterns: Context</a></li>
+<li><a href="https://go.dev/doc/database/cancel-operations" rel="noopener noreferrer" target="_blank">Canceling in-progress operations</a></li>
+</ul></main><aside class="toc"><p class="toc-title">本页目录</p><ul><li class="toc-d2"><a href="#版本变化">版本变化</a></li><li class="toc-d2"><a href="#源码地图">源码地图</a></li><li class="toc-d2"><a href="#方法契约">方法契约</a></li><li class="toc-d2"><a href="#派生类型">派生类型</a></li><li class="toc-d2"><a href="#数据结构">数据结构</a></li><li class="toc-d2"><a href="#done-为什么惰性创建">Done 为什么惰性创建</a></li><li class="toc-d2"><a href="#err-的原子快路径">Err 的原子快路径</a></li><li class="toc-d2"><a href="#传递规则">传递规则</a></li><li class="toc-d2"><a href="#在阻塞点响应取消">在阻塞点响应取消</a></li><li class="toc-d2"><a href="#并行任务的取消">并行任务的取消</a></li></ul></aside></div><div class="lightbox" id="lightbox" aria-hidden="true"><img alt=""></div><script type="module" src="/_astro/Base.astro_astro_type_script_index_0_lang.7IsV0x-z.js"></script></body></html>

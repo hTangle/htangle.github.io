@@ -1,0 +1,193 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>在Ubuntu上安装v2ray和smartdns，并在客户端使用proxy上网</title><script>
+      (function () {
+        var s = localStorage.getItem('theme');
+        if (s === 'light' || s === 'dark') {
+          document.documentElement.setAttribute('data-theme', s);
+        }
+      })();
+    </script><link rel="stylesheet" href="/_astro/Base.CUYrCnW9.css"></head><body><header class="topbar"><a href="/" class="brand">HLDay</a><nav><a href="/">书</a><a href="/posts/">博客</a><a href="https://github.com/hTangle" class="nav-github" aria-label="GitHub">GitHub</a></nav><button class="theme-toggle" id="themeToggle" type="button" title="切换主题（自动/浅色/深色）" aria-label="切换主题">🖥️</button></header><div class="layout"><aside class="booknav"><ul class="nav-tree"><li><p class="nav-group">Go</p><ul><li><p class="nav-subgroup">并发编程</p><ul><li class><a href="/gmp/">GMP 调度器</a></li><li class><a href="/sync-lock/">同步和锁</a></li><li class><a href="/channel/">Channel</a></li><li class><a href="/context/">Context</a></li></ul></li></ul></li><li><p class="nav-group">Agent 开发</p><ul><li><p class="nav-subgroup">核心协议与机制</p><ul><li class><a href="/mcp/">MCP</a></li><li class><a href="/skill/">Skill</a></li><li class><a href="/tool-call/">Tool Call</a></li></ul></li></ul></li></ul></aside><main class="prose"><h1>在Ubuntu上安装v2ray和smartdns，并在客户端使用proxy上网</h1><p><a href="/post/linux/openwrt/">在树莓派上使用Dockers运行Openwrt并作为主路由器的旁路由</a>的方式比较爽，但是树莓派的风扇声音太大，考虑直接用电脑代替树莓派。在Ubuntu Server上安装V2Ray客户端+smartdns，客户端则使用proxy进行上网。</p>
+<blockquote>
+<p>本文假设你已经安装了Ubuntu Server了</p>
+</blockquote>
+<p>v2ray安装比较简单，直接去<a href="https://github.com/v2ray/v2ray-core/releases" rel="noopener noreferrer" target="_blank">github</a>上找一个版本下载即可
+<img src="https://ahsup.oss-cn-beijing.aliyuncs.com/20221221230158.png" alt="">
+然后将下载的文件scp到服务器并解压到一个目录中，假设解压的目录为<code>/usr/local/bin/v2ray</code>。</p>
+<h2 id="编辑配置文件">编辑配置文件</h2>
+<p>配置文件的路径为解压目录中的config.json</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="plaintext"><code><span class="line"><span>vim /usr/local/bin/v2ray/config.json</span></span></code></pre>
+<p>我使用的配置文件如下：<strong>注意：需要outbounds，根据server来配置</strong></p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="json"><code><span class="line"><span style="color:#E1E4E8">{</span></span>
+<span class="line"><span style="color:#79B8FF">  "log"</span><span style="color:#E1E4E8">: {</span></span>
+<span class="line"><span style="color:#79B8FF">    "access"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">""</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">    "error"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">""</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">    "loglevel"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"warning"</span></span>
+<span class="line"><span style="color:#E1E4E8">  },</span></span>
+<span class="line"><span style="color:#79B8FF">  "inbounds"</span><span style="color:#E1E4E8">: [</span></span>
+<span class="line"><span style="color:#E1E4E8">    {</span></span>
+<span class="line"><span style="color:#79B8FF">      "tag"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"socks"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">      "port"</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">10808</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">      "listen"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"0.0.0.0"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">      "protocol"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"socks"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">      "sniffing"</span><span style="color:#E1E4E8">: {</span></span>
+<span class="line"><span style="color:#79B8FF">        "enabled"</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">true</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">        "destOverride"</span><span style="color:#E1E4E8">: [</span></span>
+<span class="line"><span style="color:#9ECBFF">          "http"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#9ECBFF">          "tls"</span></span>
+<span class="line"><span style="color:#E1E4E8">        ]</span></span>
+<span class="line"><span style="color:#E1E4E8">      },</span></span>
+<span class="line"><span style="color:#79B8FF">      "settings"</span><span style="color:#E1E4E8">: {</span></span>
+<span class="line"><span style="color:#79B8FF">        "auth"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"noauth"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">        "udp"</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">true</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">        "allowTransparent"</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">false</span></span>
+<span class="line"><span style="color:#E1E4E8">      }</span></span>
+<span class="line"><span style="color:#E1E4E8">    },</span></span>
+<span class="line"><span style="color:#E1E4E8">    {</span></span>
+<span class="line"><span style="color:#79B8FF">      "tag"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"http"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">      "port"</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">10809</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">      "listen"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"127.0.0.1"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">      "protocol"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"http"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">      "sniffing"</span><span style="color:#E1E4E8">: {</span></span>
+<span class="line"><span style="color:#79B8FF">        "enabled"</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">true</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">        "destOverride"</span><span style="color:#E1E4E8">: [</span></span>
+<span class="line"><span style="color:#9ECBFF">          "http"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#9ECBFF">          "tls"</span></span>
+<span class="line"><span style="color:#E1E4E8">        ]</span></span>
+<span class="line"><span style="color:#E1E4E8">      },</span></span>
+<span class="line"><span style="color:#79B8FF">      "settings"</span><span style="color:#E1E4E8">: {</span></span>
+<span class="line"><span style="color:#79B8FF">        "udp"</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">false</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">        "allowTransparent"</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">false</span></span>
+<span class="line"><span style="color:#E1E4E8">      }</span></span>
+<span class="line"><span style="color:#E1E4E8">    }</span></span>
+<span class="line"><span style="color:#E1E4E8">  ],</span></span>
+<span class="line"><span style="color:#79B8FF">  "outbounds"</span><span style="color:#E1E4E8">: [</span></span>
+<span class="line"><span style="color:#E1E4E8">  ],</span></span>
+<span class="line"><span style="color:#79B8FF">  "routing"</span><span style="color:#E1E4E8">: {</span></span>
+<span class="line"><span style="color:#79B8FF">    "domainStrategy"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"IPIfNonMatch"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">    "domainMatcher"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"mph"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">    "rules"</span><span style="color:#E1E4E8">: [</span></span>
+<span class="line"><span style="color:#E1E4E8">      {</span></span>
+<span class="line"><span style="color:#79B8FF">        "type"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"field"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">        "outboundTag"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"Direct"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">        "protocol"</span><span style="color:#E1E4E8">: [</span><span style="color:#9ECBFF">"bittorrent"</span><span style="color:#E1E4E8">]</span></span>
+<span class="line"><span style="color:#E1E4E8">      },</span></span>
+<span class="line"><span style="color:#E1E4E8">      {</span></span>
+<span class="line"><span style="color:#79B8FF">        "type"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"field"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">        "outboundTag"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"Reject"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">        "domain"</span><span style="color:#E1E4E8">: [</span><span style="color:#9ECBFF">"geosite:category-ads-all"</span><span style="color:#E1E4E8">]</span></span>
+<span class="line"><span style="color:#E1E4E8">      },</span></span>
+<span class="line"><span style="color:#E1E4E8">      {</span></span>
+<span class="line"><span style="color:#79B8FF">        "type"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"field"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">        "outboundTag"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"Proxy"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">        "domain"</span><span style="color:#E1E4E8">: [</span></span>
+<span class="line"><span style="color:#9ECBFF">          "full:www.icloud.com"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#9ECBFF">          "domain:icloud-content.com"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#9ECBFF">          "geosite:google"</span></span>
+<span class="line"><span style="color:#E1E4E8">        ]</span></span>
+<span class="line"><span style="color:#E1E4E8">      },</span></span>
+<span class="line"><span style="color:#E1E4E8">      {</span></span>
+<span class="line"><span style="color:#79B8FF">        "type"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"field"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">        "outboundTag"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"Direct"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">        "domain"</span><span style="color:#E1E4E8">: [</span></span>
+<span class="line"><span style="color:#9ECBFF">          "geosite:tld-cn"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#9ECBFF">          "geosite:icloud"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#9ECBFF">          "geosite:category-games@cn"</span></span>
+<span class="line"><span style="color:#E1E4E8">        ]</span></span>
+<span class="line"><span style="color:#E1E4E8">      },</span></span>
+<span class="line"><span style="color:#E1E4E8">      {</span></span>
+<span class="line"><span style="color:#79B8FF">        "type"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"field"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">        "outboundTag"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"Proxy"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">        "domain"</span><span style="color:#E1E4E8">: [</span><span style="color:#9ECBFF">"geosite:geolocation-!cn"</span><span style="color:#E1E4E8">]</span></span>
+<span class="line"><span style="color:#E1E4E8">      },</span></span>
+<span class="line"><span style="color:#E1E4E8">      {</span></span>
+<span class="line"><span style="color:#79B8FF">        "type"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"field"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">        "outboundTag"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"Direct"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">        "domain"</span><span style="color:#E1E4E8">: [</span><span style="color:#9ECBFF">"geosite:cn"</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">"geosite:private"</span><span style="color:#E1E4E8">]</span></span>
+<span class="line"><span style="color:#E1E4E8">      },</span></span>
+<span class="line"><span style="color:#E1E4E8">      {</span></span>
+<span class="line"><span style="color:#79B8FF">        "type"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"field"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">        "outboundTag"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"Direct"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">        "ip"</span><span style="color:#E1E4E8">: [</span><span style="color:#9ECBFF">"geoip:cn"</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">"geoip:private"</span><span style="color:#E1E4E8">]</span></span>
+<span class="line"><span style="color:#E1E4E8">      },</span></span>
+<span class="line"><span style="color:#E1E4E8">      {</span></span>
+<span class="line"><span style="color:#79B8FF">        "type"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"field"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">        "outboundTag"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"Proxy"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">        "network"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"tcp,udp"</span></span>
+<span class="line"><span style="color:#E1E4E8">      }</span></span>
+<span class="line"><span style="color:#E1E4E8">    ]</span></span>
+<span class="line"><span style="color:#E1E4E8">  }</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>tips:</p>
+<blockquote>
+<p><a href="https://github.com/Loyalsoldier/v2ray-rules-dat" rel="noopener noreferrer" target="_blank">v2ray-rules-dat</a>可以在这个仓库下载</p>
+</blockquote>
+<h2 id="编辑systemd文件">编辑systemd文件</h2>
+<p>systemd文件路径为：<code>/etc/systemd/system/v2ray.service</code>
+systemd文件内容为：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="plaintext"><code><span class="line"><span>[Unit]</span></span>
+<span class="line"><span>Description=V2Ray Service</span></span>
+<span class="line"><span>Documentation=https://www.v2fly.org/</span></span>
+<span class="line"><span>After=network.target nss-lookup.target</span></span>
+<span class="line"><span></span></span>
+<span class="line"><span>[Service]</span></span>
+<span class="line"><span>User=nobody</span></span>
+<span class="line"><span>CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_BIND_SERVICE</span></span>
+<span class="line"><span>AmbientCapabilities=CAP_NET_ADMIN CAP_NET_BIND_SERVICE</span></span>
+<span class="line"><span>NoNewPrivileges=true</span></span>
+<span class="line"><span>ExecStart=/usr/local/bin/v2ray/v2ray -config /usr/local/bin/v2ray/config.json</span></span>
+<span class="line"><span>Restart=on-failure</span></span>
+<span class="line"><span>RestartPreventExitStatus=23</span></span>
+<span class="line"><span></span></span>
+<span class="line"><span>[Install]</span></span>
+<span class="line"><span>WantedBy=multi-user.target</span></span></code></pre>
+<p><strong>如果自己解压的目录不一致，则需要替换ExecStart部分</strong></p>
+<h2 id="启动v2ray">启动v2ray</h2>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="plaintext"><code><span class="line"><span>sudo systemctl enable v2ray</span></span>
+<span class="line"><span>sudo systemctl start v2ray</span></span></code></pre>
+<h1 id="smartdns"><a href="https://github.com/pymumu/smartdns" rel="noopener noreferrer" target="_blank">smartdns</a></h1>
+<p>官网介绍的是：</p>
+<blockquote>
+<p>SmartDNS 是一个运行在本地的 DNS 服务器，它接受来自本地客户端的 DNS 查询请求，然后从多个上游 DNS 服务器获取 DNS 查询结果，并将访问速度最快的结果返回给客户端，以此提高网络访问速度。 SmartDNS 同时支持指定特定域名 IP 地址，并高性匹配，可达到过滤广告的效果; 支持DOT(DNS over TLS)和DOH(DNS over HTTPS)，更好的保护隐私。 与 DNSmasq 的 all-servers 不同，SmartDNS 返回的是访问速度最快的解析结果。</p>
+</blockquote>
+<p>我使用了1年多，稳定、好用，就是解析Binance的时候经常出问题。</p>
+<h2 id="安装">安装</h2>
+<p>安装比较简单，Ubuntu上直接使用</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="plaintext"><code><span class="line"><span>sudo apt-get install smartdns</span></span></code></pre>
+<p>其他系统可以参考smart官网介绍。</p>
+<h2 id="配置">配置</h2>
+<p>smartdns默认的配置文件路径为：<code>/etc/smartdns/smartdns.conf</code>,需要修改的地方包括：</p>
+<ol>
+<li>添加53端口的监听</li>
+</ol>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="plaintext"><code><span class="line"><span>bind [::]:53</span></span>
+<span class="line"><span>bind-tcp [::]:53</span></span></code></pre>
+<ol start="2">
+<li>添加一些dns服务器</li>
+</ol>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="plaintext"><code><span class="line"><span>  server 114.114.114.114:53</span></span>
+<span class="line"><span>  server 223.5.5.5:53</span></span>
+<span class="line"><span>  server 221.130.13.133:53</span></span>
+<span class="line"><span>  server 119.29.29.29:53</span></span>
+<span class="line"><span>  server-tls 1.1.1.1:853</span></span>
+<span class="line"><span>  server-tls 8.8.8.8:53</span></span>
+<span class="line"><span>  server-tls 8.8.4.4:53</span></span>
+<span class="line"><span>  server 1.2.4.8:53</span></span>
+<span class="line"><span>  server 8.8.8.8:53</span></span></code></pre>
+<h2 id="启动">启动</h2>
+<p>默认情况下，系统的53端口被<code>systemd-resolved</code>占用，启动smartdns则需要先停止<code>systemd-resolved</code></p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="plaintext"><code><span class="line"><span>sudo systemctl stop systemd-resolved.service</span></span>
+<span class="line"><span>sudo systemctl disable systemd-resolved.service</span></span></code></pre>
+<p>然后启动smartdns</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="plaintext"><code><span class="line"><span>sudo systemctl enable smartdns</span></span>
+<span class="line"><span>sudo systemctl start smartdns</span></span></code></pre>
+<h1 id="配置代理访问">配置代理访问</h1>
+<p>windows11可以配置系统代理</p>
+<ol>
+<li>首先在设置里找到网络中的代理配置
+<img src="https://ahsup.oss-cn-beijing.aliyuncs.com/20221221231349.png" alt=""></li>
+<li>手动配置
+<img src="https://ahsup.oss-cn-beijing.aliyuncs.com/20221221231452.png" alt=""></li>
+<li>编辑配置
+<img src="https://ahsup.oss-cn-beijing.aliyuncs.com/20221221231527.png" alt="">
+注意：proxy的ip可以配置为socks={proxy ip}，声明使用socks代理</li>
+</ol>
+<p>然后就可以在浏览器中访问对应的网页了</p></main><aside class="toc"><p class="toc-title">本页目录</p><ul><li class="toc-d2"><a href="#编辑配置文件">编辑配置文件</a></li><li class="toc-d2"><a href="#编辑systemd文件">编辑systemd文件</a></li><li class="toc-d2"><a href="#启动v2ray">启动v2ray</a></li><li class="toc-d2"><a href="#安装">安装</a></li><li class="toc-d2"><a href="#配置">配置</a></li><li class="toc-d2"><a href="#启动">启动</a></li></ul></aside></div><div class="lightbox" id="lightbox" aria-hidden="true"><img alt=""></div><script type="module" src="/_astro/Base.astro_astro_type_script_index_0_lang.7IsV0x-z.js"></script></body></html>

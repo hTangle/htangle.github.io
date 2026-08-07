@@ -1,0 +1,205 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>设计模式-单例模式</title><script>
+      (function () {
+        var s = localStorage.getItem('theme');
+        if (s === 'light' || s === 'dark') {
+          document.documentElement.setAttribute('data-theme', s);
+        }
+      })();
+    </script><link rel="stylesheet" href="/_astro/Base.CUYrCnW9.css"></head><body><header class="topbar"><a href="/" class="brand">HLDay</a><nav><a href="/">书</a><a href="/posts/">博客</a><a href="https://github.com/hTangle" class="nav-github" aria-label="GitHub">GitHub</a></nav><button class="theme-toggle" id="themeToggle" type="button" title="切换主题（自动/浅色/深色）" aria-label="切换主题">🖥️</button></header><div class="layout"><aside class="booknav"><ul class="nav-tree"><li><p class="nav-group">Go</p><ul><li><p class="nav-subgroup">并发编程</p><ul><li class><a href="/gmp/">GMP 调度器</a></li><li class><a href="/sync-lock/">同步和锁</a></li><li class><a href="/channel/">Channel</a></li><li class><a href="/context/">Context</a></li></ul></li></ul></li><li><p class="nav-group">Agent 开发</p><ul><li><p class="nav-subgroup">核心协议与机制</p><ul><li class><a href="/mcp/">MCP</a></li><li class><a href="/skill/">Skill</a></li><li class><a href="/tool-call/">Tool Call</a></li></ul></li></ul></li></ul></aside><main class="prose"><h1>设计模式-单例模式</h1><h2 id="引入">引入</h2>
+<p>单例模式同时解决了两个问题：</p>
+<ol>
+<li>保证一个类只有一个实例</li>
+<li>为该实例提供一个全局访问节点：单例模式允许在程序的任何地方访问特定对象。 但是它可以保护该实例不被其他代码覆盖。</li>
+</ol>
+<p>单例模式的实现需要包含两个必要的步骤：</p>
+<ul>
+<li>将默认的构造函数设为私有，防止其他对象使用单例类的new来新建一个对象；</li>
+<li>新建一个静态构建方法来作为构造函数，该函数必要时会调用私有的类构造函数来创建对象并将其保存在一个静态成员函数变量中，此后对所有该函数的返回均返回这个静态成员函数变量；</li>
+</ul>
+<p>无论什么时候调用静态构造方法，其返回值都是相同的对象。</p>
+<p>一个典型的UML如下所示</p>
+<p><img src="https://ahsup.oss-cn-beijing.aliyuncs.com//draw/design-pattern-singleton-1.png" alt="design-pattern-singleton-1"></p>
+<h2 id="使用场景">使用场景</h2>
+<ol>
+<li>如果程序中某个类对于所有客户端都只有一个可用的实例，则可以使用单例模式</li>
+<li>如果需要严格控制全局变量，可以使用单例模式</li>
+</ol>
+<h2 id="实现">实现</h2>
+<h3 id="饿汉模式">饿汉模式</h3>
+<p>饿汉模式在类加载的时候就对实例进行创建，实例在整个程序周期都存在。因此不会存在多线程同步的问题，但是如果实例并未在程序中使用，则会浪费一定的内存</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="java"><code><span class="line"><span style="color:#F97583">public</span><span style="color:#F97583"> class</span><span style="color:#B392F0"> Singleton1</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#6A737D">    // 私有构造</span></span>
+<span class="line"><span style="color:#F97583">    private</span><span style="color:#B392F0"> Singleton1</span><span style="color:#E1E4E8">() {}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">    private</span><span style="color:#F97583"> static</span><span style="color:#E1E4E8"> Singleton1 single </span><span style="color:#F97583">=</span><span style="color:#F97583"> new</span><span style="color:#B392F0"> Singleton1</span><span style="color:#E1E4E8">();</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D">    // 静态工厂方法</span></span>
+<span class="line"><span style="color:#F97583">    public</span><span style="color:#F97583"> static</span><span style="color:#E1E4E8"> Singleton1 </span><span style="color:#B392F0">getInstance</span><span style="color:#E1E4E8">() {</span></span>
+<span class="line"><span style="color:#F97583">        return</span><span style="color:#E1E4E8"> single;</span></span>
+<span class="line"><span style="color:#E1E4E8">    }</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>go</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">package</span><span style="color:#B392F0"> singleton</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">type</span><span style="color:#B392F0"> singleton</span><span style="color:#F97583"> struct</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">var</span><span style="color:#E1E4E8"> singletonInstance </span><span style="color:#F97583">*</span><span style="color:#B392F0">singleton</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">func</span><span style="color:#B392F0"> init</span><span style="color:#E1E4E8">() {</span></span>
+<span class="line"><span style="color:#E1E4E8">	singletonInstance </span><span style="color:#F97583">=</span><span style="color:#F97583"> &#x26;</span><span style="color:#B392F0">singleton</span><span style="color:#E1E4E8">{}</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">func</span><span style="color:#B392F0"> GetInstance</span><span style="color:#E1E4E8">() </span><span style="color:#F97583">*</span><span style="color:#B392F0">singleton</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">	return</span><span style="color:#E1E4E8"> singletonInstance</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>test for go</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">func</span><span style="color:#B392F0"> TestGetInstance</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">t</span><span style="color:#F97583"> *</span><span style="color:#B392F0">testing</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">T</span><span style="color:#E1E4E8">) {</span></span>
+<span class="line"><span style="color:#F97583">	if</span><span style="color:#B392F0"> GetInstance</span><span style="color:#E1E4E8">() </span><span style="color:#F97583">!=</span><span style="color:#B392F0"> GetInstance</span><span style="color:#E1E4E8">() {</span></span>
+<span class="line"><span style="color:#E1E4E8">		t.</span><span style="color:#B392F0">Errorf</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">"instance get failed"</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"><span style="color:#E1E4E8">	}</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">func</span><span style="color:#B392F0"> BenchmarkGetInstance</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">b</span><span style="color:#F97583"> *</span><span style="color:#B392F0">testing</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">B</span><span style="color:#E1E4E8">) {</span></span>
+<span class="line"><span style="color:#E1E4E8">	b.</span><span style="color:#B392F0">RunParallel</span><span style="color:#E1E4E8">(</span><span style="color:#F97583">func</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">pb</span><span style="color:#F97583"> *</span><span style="color:#B392F0">testing</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">PB</span><span style="color:#E1E4E8">) {</span></span>
+<span class="line"><span style="color:#F97583">		for</span><span style="color:#E1E4E8"> pb.</span><span style="color:#B392F0">Next</span><span style="color:#E1E4E8">() {</span></span>
+<span class="line"><span style="color:#F97583">			if</span><span style="color:#B392F0"> GetInstance</span><span style="color:#E1E4E8">() </span><span style="color:#F97583">!=</span><span style="color:#B392F0"> GetInstance</span><span style="color:#E1E4E8">() {</span></span>
+<span class="line"><span style="color:#E1E4E8">				b.</span><span style="color:#B392F0">Errorf</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">"parallel get instance failed"</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"><span style="color:#E1E4E8">			}</span></span>
+<span class="line"><span style="color:#E1E4E8">		}</span></span>
+<span class="line"><span style="color:#E1E4E8">	})</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<h3 id="懒汉模式">懒汉模式</h3>
+<p>懒汉模式单例只有在需要的时候才去创建，但是存在线程安全的问题，需要考虑其他更安全的方法。</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="java"><code><span class="line"><span style="color:#6A737D">// 懒汉式单例</span></span>
+<span class="line"><span style="color:#F97583">public</span><span style="color:#F97583"> class</span><span style="color:#B392F0"> Singleton2</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D">    // 私有构造</span></span>
+<span class="line"><span style="color:#F97583">    private</span><span style="color:#B392F0"> Singleton2</span><span style="color:#E1E4E8">() {}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">    private</span><span style="color:#F97583"> static</span><span style="color:#E1E4E8"> Singleton2 single </span><span style="color:#F97583">=</span><span style="color:#79B8FF"> null</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">    public</span><span style="color:#F97583"> static</span><span style="color:#E1E4E8"> Singleton2 </span><span style="color:#B392F0">getInstance</span><span style="color:#E1E4E8">() {</span></span>
+<span class="line"><span style="color:#F97583">        if</span><span style="color:#E1E4E8">(single </span><span style="color:#F97583">==</span><span style="color:#79B8FF"> null</span><span style="color:#E1E4E8">){</span></span>
+<span class="line"><span style="color:#E1E4E8">            single </span><span style="color:#F97583">=</span><span style="color:#F97583"> new</span><span style="color:#B392F0"> Singleton2</span><span style="color:#E1E4E8">();</span></span>
+<span class="line"><span style="color:#E1E4E8">        }</span></span>
+<span class="line"><span style="color:#F97583">        return</span><span style="color:#E1E4E8"> single;</span></span>
+<span class="line"><span style="color:#E1E4E8">    }</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>go</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">package</span><span style="color:#B392F0"> singleton</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">import</span><span style="color:#9ECBFF"> "</span><span style="color:#B392F0">sync</span><span style="color:#9ECBFF">"</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">var</span><span style="color:#E1E4E8"> (</span></span>
+<span class="line"><span style="color:#E1E4E8">	lazySingleton </span><span style="color:#F97583">*</span><span style="color:#B392F0">singleton</span></span>
+<span class="line"><span style="color:#E1E4E8">	once          </span><span style="color:#F97583">=</span><span style="color:#F97583"> &#x26;</span><span style="color:#B392F0">sync</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">Once</span><span style="color:#E1E4E8">{}</span></span>
+<span class="line"><span style="color:#E1E4E8">)</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">func</span><span style="color:#B392F0"> GetLazyInstance</span><span style="color:#E1E4E8">() </span><span style="color:#F97583">*</span><span style="color:#B392F0">singleton</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">	if</span><span style="color:#E1E4E8"> lazySingleton </span><span style="color:#F97583">==</span><span style="color:#79B8FF"> nil</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">		once.</span><span style="color:#B392F0">Do</span><span style="color:#E1E4E8">(</span><span style="color:#F97583">func</span><span style="color:#E1E4E8">() {</span></span>
+<span class="line"><span style="color:#E1E4E8">			lazySingleton </span><span style="color:#F97583">=</span><span style="color:#F97583"> &#x26;</span><span style="color:#B392F0">singleton</span><span style="color:#E1E4E8">{}</span></span>
+<span class="line"><span style="color:#E1E4E8">		})</span></span>
+<span class="line"><span style="color:#E1E4E8">	}</span></span>
+<span class="line"><span style="color:#F97583">	return</span><span style="color:#E1E4E8"> lazySingleton</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>test for go</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">func</span><span style="color:#B392F0"> TestGetLazyInstance</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">t</span><span style="color:#F97583"> *</span><span style="color:#B392F0">testing</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">T</span><span style="color:#E1E4E8">) {</span></span>
+<span class="line"><span style="color:#F97583">	if</span><span style="color:#B392F0"> GetLazyInstance</span><span style="color:#E1E4E8">() </span><span style="color:#F97583">!=</span><span style="color:#B392F0"> GetLazyInstance</span><span style="color:#E1E4E8">() {</span></span>
+<span class="line"><span style="color:#E1E4E8">		t.</span><span style="color:#B392F0">Errorf</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">"lazy instance get failed"</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"><span style="color:#E1E4E8">	}</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">func</span><span style="color:#B392F0"> BenchmarkGetLazyInstance</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">b</span><span style="color:#F97583"> *</span><span style="color:#B392F0">testing</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">B</span><span style="color:#E1E4E8">) {</span></span>
+<span class="line"><span style="color:#E1E4E8">	b.</span><span style="color:#B392F0">RunParallel</span><span style="color:#E1E4E8">(</span><span style="color:#F97583">func</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">pb</span><span style="color:#F97583"> *</span><span style="color:#B392F0">testing</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">PB</span><span style="color:#E1E4E8">) {</span></span>
+<span class="line"><span style="color:#F97583">		for</span><span style="color:#E1E4E8"> pb.</span><span style="color:#B392F0">Next</span><span style="color:#E1E4E8">() {</span></span>
+<span class="line"><span style="color:#F97583">			if</span><span style="color:#B392F0"> GetLazyInstance</span><span style="color:#E1E4E8">() </span><span style="color:#F97583">!=</span><span style="color:#B392F0"> GetLazyInstance</span><span style="color:#E1E4E8">() {</span></span>
+<span class="line"><span style="color:#E1E4E8">				b.</span><span style="color:#B392F0">Errorf</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">"parallel get lazy failed"</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"><span style="color:#E1E4E8">			}</span></span>
+<span class="line"><span style="color:#E1E4E8">		}</span></span>
+<span class="line"><span style="color:#E1E4E8">	})</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>对比测试结果</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="sh"><code><span class="line"><span style="color:#B392F0">PS</span><span style="color:#9ECBFF"> E:</span><span style="color:#79B8FF">\g</span><span style="color:#9ECBFF">ithub</span><span style="color:#79B8FF">\d</span><span style="color:#9ECBFF">esign_pattern_go</span><span style="color:#79B8FF">\s</span><span style="color:#9ECBFF">ingleto</span><span style="color:#E1E4E8">n</span><span style="color:#F97583">></span><span style="color:#9ECBFF"> go</span><span style="color:#9ECBFF"> test</span><span style="color:#79B8FF"> -benchmem</span><span style="color:#79B8FF"> -bench=</span><span style="color:#9ECBFF">"."</span><span style="color:#79B8FF"> -v</span></span>
+<span class="line"><span style="color:#9ECBFF">===</span><span style="color:#9ECBFF"> RUN</span><span style="color:#9ECBFF">   TestGetInstance</span></span>
+<span class="line"><span style="color:#B392F0">---</span><span style="color:#9ECBFF"> PASS:</span><span style="color:#9ECBFF"> TestGetInstance</span><span style="color:#E1E4E8"> (0.00s)</span></span>
+<span class="line"><span style="color:#9ECBFF">===</span><span style="color:#9ECBFF"> RUN</span><span style="color:#9ECBFF">   TestGetLazyInstance</span></span>
+<span class="line"><span style="color:#B392F0">---</span><span style="color:#9ECBFF"> PASS:</span><span style="color:#9ECBFF"> TestGetLazyInstance</span><span style="color:#E1E4E8"> (0.00s)</span></span>
+<span class="line"><span style="color:#B392F0">goos:</span><span style="color:#9ECBFF"> windows</span></span>
+<span class="line"><span style="color:#B392F0">goarch:</span><span style="color:#9ECBFF"> amd64</span></span>
+<span class="line"><span style="color:#B392F0">pkg:</span><span style="color:#9ECBFF"> design_pattern_go/singleton</span></span>
+<span class="line"><span style="color:#B392F0">cpu:</span><span style="color:#9ECBFF"> AMD</span><span style="color:#9ECBFF"> Ryzen</span><span style="color:#79B8FF"> 5</span><span style="color:#9ECBFF"> 3500X</span><span style="color:#9ECBFF"> 6-Core</span><span style="color:#9ECBFF"> Processor</span></span>
+<span class="line"><span style="color:#B392F0">BenchmarkGetInstance</span></span>
+<span class="line"><span style="color:#B392F0">BenchmarkGetInstance-6</span><span style="color:#79B8FF">          1000000000</span><span style="color:#79B8FF">               0.08200</span><span style="color:#9ECBFF"> ns/op</span><span style="color:#79B8FF">         0</span><span style="color:#9ECBFF"> B/op</span><span style="color:#79B8FF">          0</span><span style="color:#9ECBFF"> allocs/op</span></span>
+<span class="line"><span style="color:#B392F0">BenchmarkGetLazyInstance</span></span>
+<span class="line"><span style="color:#B392F0">BenchmarkGetLazyInstance-6</span><span style="color:#79B8FF">      1000000000</span><span style="color:#79B8FF">               0.6276</span><span style="color:#9ECBFF"> ns/op</span><span style="color:#79B8FF">          0</span><span style="color:#9ECBFF"> B/op</span><span style="color:#79B8FF">          0</span><span style="color:#9ECBFF"> allocs/op</span></span>
+<span class="line"><span style="color:#B392F0">PASS</span></span>
+<span class="line"><span style="color:#B392F0">ok</span><span style="color:#9ECBFF">      design_pattern_go/singleton</span><span style="color:#9ECBFF">     0.836s</span></span></code></pre>
+<p><strong>饿汉式的性能表现要远远好于懒汉式</strong></p>
+<h3 id="线程安全懒汉模式">线程安全懒汉模式</h3>
+<p>每次请求的时候，都通过<code>getInstance</code>获取对象，首先判断对象是否为null，如果为null，则先加一个同步锁，然后判断对象是否为null，如果为null则需要调用构造函数实例化。</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="java"><code><span class="line"><span style="color:#F97583">public</span><span style="color:#F97583"> class</span><span style="color:#B392F0"> Singleton4</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#6A737D">    // 私有构造</span></span>
+<span class="line"><span style="color:#F97583">    private</span><span style="color:#B392F0"> Singleton4</span><span style="color:#E1E4E8">() {}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">    private</span><span style="color:#F97583"> static</span><span style="color:#E1E4E8"> Singleton4 single </span><span style="color:#F97583">=</span><span style="color:#79B8FF"> null</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D">    // 双重检查</span></span>
+<span class="line"><span style="color:#F97583">    public</span><span style="color:#F97583"> static</span><span style="color:#E1E4E8"> Singleton4 </span><span style="color:#B392F0">getInstance</span><span style="color:#E1E4E8">() {</span></span>
+<span class="line"><span style="color:#F97583">        if</span><span style="color:#E1E4E8"> (single </span><span style="color:#F97583">==</span><span style="color:#79B8FF"> null</span><span style="color:#E1E4E8">) {</span></span>
+<span class="line"><span style="color:#F97583">            synchronized</span><span style="color:#E1E4E8"> (Singleton4.class) {</span></span>
+<span class="line"><span style="color:#F97583">                if</span><span style="color:#E1E4E8"> (single </span><span style="color:#F97583">==</span><span style="color:#79B8FF"> null</span><span style="color:#E1E4E8">) {</span></span>
+<span class="line"><span style="color:#E1E4E8">                    single </span><span style="color:#F97583">=</span><span style="color:#F97583"> new</span><span style="color:#B392F0"> Singleton4</span><span style="color:#E1E4E8">();</span></span>
+<span class="line"><span style="color:#E1E4E8">                }</span></span>
+<span class="line"><span style="color:#E1E4E8">            }</span></span>
+<span class="line"><span style="color:#E1E4E8">        }</span></span>
+<span class="line"><span style="color:#F97583">        return</span><span style="color:#E1E4E8"> single;</span></span>
+<span class="line"><span style="color:#E1E4E8">    }</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>问题：Java中存在指令重排优化（<strong>在不改变原语义的情况下，通过调整指令的执行顺序让程序运行的更快</strong>）和Happens-Before规则（<strong>前一个操作的结果可以被后续的操作获取。这条规则规范了编译器对程序的重排序优化。</strong>），指令重排优化的存在，导致初始化Singleton和将对象地址赋给instance字段的顺序是不确定的。在某个线程创建单例对象时，在构造方法被调用之前，就为该对象分配了内存空间并将对象的字段设置为默认值。此时就可以将分配的内存地址赋值给instance字段了，然而该对象可能还没有初始化。若紧接着另外一个线程来调用getInstance，取到的就是状态不正确的对象，程序就会出错。</p>
+<p>可以通过Java提供的关键字<code>volatile</code>来解决</p>
+<blockquote>
+<p>volatile关键字的作用主要有两个：</p>
+<ul>
+<li>多线程主要围绕可见性和原子性两个特性而展开，使用volatile关键字修饰的变量，保证了其在多线程之间的可见性，即每次读取到volatile变量，一定是最新的数据；</li>
+<li>使用volatile则会对禁止语义重排序</li>
+</ul>
+<p>volatile是一个特殊的修饰符，只有成员变量才能使用它。在Java并发程序缺少同步类的情况下，多线程对成员变量的操作对其它线程是透明的。volatile变量可以保证下一个读取操作会在前一个写操作之后发生。</p>
+</blockquote>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="java"><code><span class="line"><span style="color:#F97583">public</span><span style="color:#F97583"> class</span><span style="color:#B392F0"> Singleton4</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#6A737D">    // 私有构造</span></span>
+<span class="line"><span style="color:#F97583">    private</span><span style="color:#B392F0"> Singleton4</span><span style="color:#E1E4E8">() {}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">    private</span><span style="color:#F97583"> volatile</span><span style="color:#F97583"> static</span><span style="color:#E1E4E8"> Singleton4 single </span><span style="color:#F97583">=</span><span style="color:#79B8FF"> null</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D">    // 双重检查</span></span>
+<span class="line"><span style="color:#F97583">    public</span><span style="color:#F97583"> static</span><span style="color:#E1E4E8"> Singleton4 </span><span style="color:#B392F0">getInstance</span><span style="color:#E1E4E8">() {</span></span>
+<span class="line"><span style="color:#F97583">        if</span><span style="color:#E1E4E8"> (single </span><span style="color:#F97583">==</span><span style="color:#79B8FF"> null</span><span style="color:#E1E4E8">) {</span></span>
+<span class="line"><span style="color:#F97583">            synchronized</span><span style="color:#E1E4E8"> (Singleton4.class) {</span></span>
+<span class="line"><span style="color:#F97583">                if</span><span style="color:#E1E4E8"> (single </span><span style="color:#F97583">==</span><span style="color:#79B8FF"> null</span><span style="color:#E1E4E8">) {</span></span>
+<span class="line"><span style="color:#E1E4E8">                    single </span><span style="color:#F97583">=</span><span style="color:#F97583"> new</span><span style="color:#B392F0"> Singleton4</span><span style="color:#E1E4E8">();</span></span>
+<span class="line"><span style="color:#E1E4E8">                }</span></span>
+<span class="line"><span style="color:#E1E4E8">            }</span></span>
+<span class="line"><span style="color:#E1E4E8">        }</span></span>
+<span class="line"><span style="color:#F97583">        return</span><span style="color:#E1E4E8"> single;</span></span>
+<span class="line"><span style="color:#E1E4E8">    }</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<h3 id="静态内部类">静态内部类</h3>
+<p>静态内部类,序列化对象，默认方式是多例的</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="java"><code><span class="line"><span style="color:#F97583">package</span><span style="color:#E1E4E8"> org.mlinge.s06;</span></span>
+<span class="line"><span style="color:#E1E4E8"> </span></span>
+<span class="line"><span style="color:#F97583">public</span><span style="color:#F97583"> class</span><span style="color:#B392F0"> MySingleton</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">	</span></span>
+<span class="line"><span style="color:#6A737D">	//内部类</span></span>
+<span class="line"><span style="color:#F97583">	private</span><span style="color:#F97583"> static</span><span style="color:#F97583"> class</span><span style="color:#B392F0"> MySingletonHandler</span><span style="color:#E1E4E8">{</span></span>
+<span class="line"><span style="color:#F97583">		private</span><span style="color:#F97583"> static</span><span style="color:#E1E4E8"> MySingleton instance </span><span style="color:#F97583">=</span><span style="color:#F97583"> new</span><span style="color:#B392F0"> MySingleton</span><span style="color:#E1E4E8">();</span></span>
+<span class="line"><span style="color:#E1E4E8">	} </span></span>
+<span class="line"><span style="color:#E1E4E8">	</span></span>
+<span class="line"><span style="color:#F97583">	private</span><span style="color:#B392F0"> MySingleton</span><span style="color:#E1E4E8">(){}</span></span>
+<span class="line"><span style="color:#E1E4E8">	 </span></span>
+<span class="line"><span style="color:#F97583">	public</span><span style="color:#F97583"> static</span><span style="color:#E1E4E8"> MySingleton </span><span style="color:#B392F0">getInstance</span><span style="color:#E1E4E8">() { </span></span>
+<span class="line"><span style="color:#F97583">		return</span><span style="color:#E1E4E8"> MySingletonHandler.instance;</span></span>
+<span class="line"><span style="color:#E1E4E8">	}</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>这种方式利用了类加载机制来保证只会创建一个instance实例，它与饿汉模式一样，也是利用了类加载机制，因此不存在多线程并发的问题。它与饿汉模式一样，也是利用了类加载机制，因此不存在多线程并发的问题。这样的话，只要应用中不使用内部类，JVM就不会去加载这个单例类，也就不会创建单例对象，从而实现懒汉式的延迟加载。也就是说这种方式可以同时保证延迟加载和线程安全。</p></main><aside class="toc"><p class="toc-title">本页目录</p><ul><li class="toc-d2"><a href="#引入">引入</a></li><li class="toc-d2"><a href="#使用场景">使用场景</a></li><li class="toc-d2"><a href="#实现">实现</a></li><li class="toc-d3"><a href="#饿汉模式">饿汉模式</a></li><li class="toc-d3"><a href="#懒汉模式">懒汉模式</a></li><li class="toc-d3"><a href="#线程安全懒汉模式">线程安全懒汉模式</a></li><li class="toc-d3"><a href="#静态内部类">静态内部类</a></li></ul></aside></div><div class="lightbox" id="lightbox" aria-hidden="true"><img alt=""></div><script type="module" src="/_astro/Base.astro_astro_type_script_index_0_lang.7IsV0x-z.js"></script></body></html>

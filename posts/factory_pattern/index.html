@@ -1,0 +1,212 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>工厂模式</title><script>
+      (function () {
+        var s = localStorage.getItem('theme');
+        if (s === 'light' || s === 'dark') {
+          document.documentElement.setAttribute('data-theme', s);
+        }
+      })();
+    </script><link rel="stylesheet" href="/_astro/Base.CUYrCnW9.css"></head><body><header class="topbar"><a href="/" class="brand">HLDay</a><nav><a href="/">书</a><a href="/posts/">博客</a><a href="https://github.com/hTangle" class="nav-github" aria-label="GitHub">GitHub</a></nav><button class="theme-toggle" id="themeToggle" type="button" title="切换主题（自动/浅色/深色）" aria-label="切换主题">🖥️</button></header><div class="layout"><aside class="booknav"><ul class="nav-tree"><li><p class="nav-group">Go</p><ul><li><p class="nav-subgroup">并发编程</p><ul><li class><a href="/gmp/">GMP 调度器</a></li><li class><a href="/sync-lock/">同步和锁</a></li><li class><a href="/channel/">Channel</a></li><li class><a href="/context/">Context</a></li></ul></li></ul></li><li><p class="nav-group">Agent 开发</p><ul><li><p class="nav-subgroup">核心协议与机制</p><ul><li class><a href="/mcp/">MCP</a></li><li class><a href="/skill/">Skill</a></li><li class><a href="/tool-call/">Tool Call</a></li></ul></li></ul></li></ul></aside><main class="prose"><h1>工厂模式</h1><h2 id="简单工厂方法">简单工厂方法</h2>
+<h3 id="问题">问题</h3>
+<p>刚开始设计程序的时候，可能只需要程序提供一个苹果，每次有需求就new 一个Apple，随着需求的增加或者变化，后续可能需要new一个Apple，也可能需要new一个Banana，或者Orange等，如果每次都直接new一个对应的水果的话，则可能每次来一个新的水果，都得重写自己的代码。</p>
+<h3 id="解决方案">解决方案</h3>
+<p>简单工厂模式(Simple Factory Pattern)：又称为静态工厂方法(Static Factory Method)模式，它属于类创建型模式。在简单工厂模式中，可以根据参数的不同返回不同类的实例。简单工厂模式专门定义一个类来负责创建其他类的实例，被创建的实例通常都具有共同的父类。</p>
+<p>工厂模式将直接调用构造函数的方法切换为通过调用特殊的工厂方法来实现。</p>
+<p><img src="https://ahsup.oss-cn-beijing.aliyuncs.com/image/5db9aca331b04a68b518c023f0fec074.png" alt="394bf6ec-f02a-43cc-8744-6a8bd9925a02.png"></p>
+<p>我们先定义所有水果的接口类Fruit以及需要的水果类</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">type</span><span style="color:#B392F0"> Fruit</span><span style="color:#F97583"> interface</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#B392F0">	Name</span><span style="color:#E1E4E8">() </span><span style="color:#F97583">string</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span>
+<span class="line"><span style="color:#F97583">type</span><span style="color:#B392F0"> Apple</span><span style="color:#F97583"> struct</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">	name </span><span style="color:#F97583">string</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">func</span><span style="color:#E1E4E8"> (</span><span style="color:#FFAB70">a </span><span style="color:#F97583">*</span><span style="color:#B392F0">Apple</span><span style="color:#E1E4E8">) </span><span style="color:#B392F0">Name</span><span style="color:#E1E4E8">() </span><span style="color:#F97583">string</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">	return</span><span style="color:#E1E4E8"> a.name</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">type</span><span style="color:#B392F0"> Banana</span><span style="color:#F97583"> struct</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">	name </span><span style="color:#F97583">string</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">func</span><span style="color:#E1E4E8"> (</span><span style="color:#FFAB70">a </span><span style="color:#F97583">*</span><span style="color:#B392F0">Banana</span><span style="color:#E1E4E8">) </span><span style="color:#B392F0">Name</span><span style="color:#E1E4E8">() </span><span style="color:#F97583">string</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">	return</span><span style="color:#E1E4E8"> a.name</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">type</span><span style="color:#B392F0"> Orange</span><span style="color:#F97583"> struct</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">	name </span><span style="color:#F97583">string</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">func</span><span style="color:#E1E4E8"> (</span><span style="color:#FFAB70">a </span><span style="color:#F97583">*</span><span style="color:#B392F0">Orange</span><span style="color:#E1E4E8">) </span><span style="color:#B392F0">Name</span><span style="color:#E1E4E8">() </span><span style="color:#F97583">string</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">	return</span><span style="color:#E1E4E8"> a.name</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>然后我们可以使用一个简单工厂来决定创建哪一种水果</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">func</span><span style="color:#B392F0"> NewSimpleFruitFactory</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">name</span><span style="color:#F97583"> string</span><span style="color:#E1E4E8">) </span><span style="color:#B392F0">Fruit</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">	switch</span><span style="color:#E1E4E8"> name {</span></span>
+<span class="line"><span style="color:#F97583">	case</span><span style="color:#9ECBFF"> "apple"</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#F97583">		return</span><span style="color:#F97583"> &#x26;</span><span style="color:#B392F0">Apple</span><span style="color:#E1E4E8">{name: name}</span></span>
+<span class="line"><span style="color:#F97583">	case</span><span style="color:#9ECBFF"> "banana"</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#F97583">		return</span><span style="color:#F97583"> &#x26;</span><span style="color:#B392F0">Banana</span><span style="color:#E1E4E8">{name: name}</span></span>
+<span class="line"><span style="color:#F97583">	case</span><span style="color:#9ECBFF"> "orange"</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#F97583">		return</span><span style="color:#F97583"> &#x26;</span><span style="color:#B392F0">Orange</span><span style="color:#E1E4E8">{name: name}</span></span>
+<span class="line"><span style="color:#E1E4E8">	}</span></span>
+<span class="line"><span style="color:#F97583">	return</span><span style="color:#79B8FF"> nil</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>新建一个单元测试</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">func</span><span style="color:#B392F0"> TestNewSimpleFruitFactory</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">t</span><span style="color:#F97583"> *</span><span style="color:#B392F0">testing</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">T</span><span style="color:#E1E4E8">) {</span></span>
+<span class="line"><span style="color:#F97583">	type</span><span style="color:#B392F0"> args</span><span style="color:#F97583"> struct</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">		name </span><span style="color:#F97583">string</span></span>
+<span class="line"><span style="color:#E1E4E8">	}</span></span>
+<span class="line"><span style="color:#E1E4E8">	tests </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> []</span><span style="color:#F97583">struct</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">		name </span><span style="color:#F97583">string</span></span>
+<span class="line"><span style="color:#E1E4E8">		args </span><span style="color:#B392F0">args</span></span>
+<span class="line"><span style="color:#E1E4E8">		want </span><span style="color:#F97583">string</span></span>
+<span class="line"><span style="color:#E1E4E8">	}{</span></span>
+<span class="line"><span style="color:#E1E4E8">		{</span></span>
+<span class="line"><span style="color:#E1E4E8">			name: </span><span style="color:#9ECBFF">"apple"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">			args: </span><span style="color:#B392F0">args</span><span style="color:#E1E4E8">{</span></span>
+<span class="line"><span style="color:#E1E4E8">				name: </span><span style="color:#9ECBFF">"apple"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">			},</span></span>
+<span class="line"><span style="color:#E1E4E8">			want: </span><span style="color:#9ECBFF">"apple"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">		},</span></span>
+<span class="line"><span style="color:#E1E4E8">		{</span></span>
+<span class="line"><span style="color:#E1E4E8">			name: </span><span style="color:#9ECBFF">"banana"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">			args: </span><span style="color:#B392F0">args</span><span style="color:#E1E4E8">{</span></span>
+<span class="line"><span style="color:#E1E4E8">				name: </span><span style="color:#9ECBFF">"banana"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">			},</span></span>
+<span class="line"><span style="color:#E1E4E8">			want: </span><span style="color:#9ECBFF">"banana"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">		},</span></span>
+<span class="line"><span style="color:#E1E4E8">		{</span></span>
+<span class="line"><span style="color:#E1E4E8">			name: </span><span style="color:#9ECBFF">"orange"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">			args: </span><span style="color:#B392F0">args</span><span style="color:#E1E4E8">{</span></span>
+<span class="line"><span style="color:#E1E4E8">				name: </span><span style="color:#9ECBFF">"orange"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">			},</span></span>
+<span class="line"><span style="color:#E1E4E8">			want: </span><span style="color:#9ECBFF">"orange"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">		},</span></span>
+<span class="line"><span style="color:#E1E4E8">	}</span></span>
+<span class="line"><span style="color:#F97583">	for</span><span style="color:#E1E4E8"> _, tes </span><span style="color:#F97583">:=</span><span style="color:#F97583"> range</span><span style="color:#E1E4E8"> tests {</span></span>
+<span class="line"><span style="color:#E1E4E8">		t.</span><span style="color:#B392F0">Run</span><span style="color:#E1E4E8">(tes.name, </span><span style="color:#F97583">func</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">ts</span><span style="color:#F97583"> *</span><span style="color:#B392F0">testing</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">T</span><span style="color:#E1E4E8">) {</span></span>
+<span class="line"><span style="color:#F97583">			if</span><span style="color:#E1E4E8"> got </span><span style="color:#F97583">:=</span><span style="color:#B392F0"> NewSimpleFruitFactory</span><span style="color:#E1E4E8">(tes.args.name); </span><span style="color:#F97583">!</span><span style="color:#E1E4E8">(got.</span><span style="color:#B392F0">Name</span><span style="color:#E1E4E8">() </span><span style="color:#F97583">==</span><span style="color:#E1E4E8"> tes.want) {</span></span>
+<span class="line"><span style="color:#E1E4E8">				ts.</span><span style="color:#B392F0">Errorf</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">"NewSimpleFruitFactory Name=</span><span style="color:#79B8FF">%s</span><span style="color:#9ECBFF">, want </span><span style="color:#79B8FF">%s</span><span style="color:#9ECBFF">"</span><span style="color:#E1E4E8">, got.</span><span style="color:#B392F0">Name</span><span style="color:#E1E4E8">(), tes.want)</span></span>
+<span class="line"><span style="color:#E1E4E8">			}</span></span>
+<span class="line"><span style="color:#E1E4E8">		})</span></span>
+<span class="line"><span style="color:#E1E4E8">	}</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>使用简单工厂模式的优势：让对象的调用者和对象创建过程分离，当对象调用者需要对象时，直接向工厂请求即可。从而避免了对象的调用者与对象的实现类以硬编码方式耦合，以提高系统的可维护性、可扩展性。工厂模式也有一个小小的缺陷：当产品修改时，工厂类也要做相应的修改，违反了开闭原则。如上例，需要增加一种新的水果时，需要修改工厂类<code>NewSimpleFruitFactory</code></p>
+<blockquote>
+<p>在面向对象编程领域中，开闭原则 (The Open/Closed Principle, OCP) 规定“软件中的对象（类，模块，函数等等）应该对于扩展是开放的，但是对于修改是封闭的，这意味着一个实体是允许在不改变它的源代码的前提下变更它的行为。</p>
+</blockquote>
+<p>简单工厂模式的要点在于：当你需要什么，只需要传入一个正确的参数，就可以获取你所需要的对象，而无须知道其创建细节。</p>
+<h2 id="工厂方法">工厂方法</h2>
+<p>现在需要对系统进行修改，不使用统一的FruitFactory来统一生成水果，而专门交给对应的工厂子类来完成。首先定义一个抽象的水果工厂，然后定义具体的水果工厂来生成Apple、Banana、Orange等，她们实现了抽象工厂定义的接口，这种抽象化的结果可以不修改具体工厂类的前提下引进新的水果，就符合了开闭原则。</p>
+<h3 id="定义">定义</h3>
+<p>工厂方法模式(Factory Method Pattern)又称为工厂模式，也叫虚拟构造器(Virtual Constructor)模式或者多态工厂(Polymorphic Factory)模式，它属于类创建型模式。在工厂方法模式中，工厂父类负责定义创建产品对象的公共接口，而工厂子类则负责生成具体的产品对象，这样做的目的是将产品类的实例化操作延迟到工厂子类中完成。</p>
+<p><img src="https://ahsup.oss-cn-beijing.aliyuncs.com/draw/factory-method-uml-1.png" alt="factory-method-uml-1"></p>
+<h3 id="代码">代码</h3>
+<p>工厂：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">package</span><span style="color:#B392F0"> factory_method</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">import</span><span style="color:#9ECBFF"> "</span><span style="color:#B392F0">errors</span><span style="color:#9ECBFF">"</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">type</span><span style="color:#B392F0"> FruitFactory</span><span style="color:#F97583"> interface</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#B392F0">	CreateFruit</span><span style="color:#E1E4E8">() </span><span style="color:#B392F0">Fruit</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">type</span><span style="color:#B392F0"> AppleFruitFactory</span><span style="color:#F97583"> struct</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">	name </span><span style="color:#F97583">string</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">func</span><span style="color:#E1E4E8"> (</span><span style="color:#FFAB70">f </span><span style="color:#F97583">*</span><span style="color:#B392F0">AppleFruitFactory</span><span style="color:#E1E4E8">) </span><span style="color:#B392F0">CreateFruit</span><span style="color:#E1E4E8">() </span><span style="color:#B392F0">Fruit</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">	return</span><span style="color:#F97583"> &#x26;</span><span style="color:#B392F0">Apple</span><span style="color:#E1E4E8">{name: f.name, type_: </span><span style="color:#9ECBFF">"apple"</span><span style="color:#E1E4E8">}</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">type</span><span style="color:#B392F0"> BananaFruitFactory</span><span style="color:#F97583"> struct</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">	name </span><span style="color:#F97583">string</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">func</span><span style="color:#E1E4E8"> (</span><span style="color:#FFAB70">f </span><span style="color:#F97583">*</span><span style="color:#B392F0">BananaFruitFactory</span><span style="color:#E1E4E8">) </span><span style="color:#B392F0">CreateFruit</span><span style="color:#E1E4E8">() </span><span style="color:#B392F0">Fruit</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">	return</span><span style="color:#F97583"> &#x26;</span><span style="color:#B392F0">Banana</span><span style="color:#E1E4E8">{name: f.name, type_: </span><span style="color:#9ECBFF">"banana"</span><span style="color:#E1E4E8">}</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">type</span><span style="color:#B392F0"> OrangeFruitFactory</span><span style="color:#F97583"> struct</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">	name </span><span style="color:#F97583">string</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">func</span><span style="color:#E1E4E8"> (</span><span style="color:#FFAB70">f </span><span style="color:#F97583">*</span><span style="color:#B392F0">OrangeFruitFactory</span><span style="color:#E1E4E8">) </span><span style="color:#B392F0">CreateFruit</span><span style="color:#E1E4E8">() </span><span style="color:#B392F0">Fruit</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">	return</span><span style="color:#F97583"> &#x26;</span><span style="color:#B392F0">Orange</span><span style="color:#E1E4E8">{name: f.name, type_: </span><span style="color:#9ECBFF">"orange"</span><span style="color:#E1E4E8">}</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">func</span><span style="color:#B392F0"> NewFruitFactory</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">name</span><span style="color:#F97583"> string</span><span style="color:#E1E4E8">) (</span><span style="color:#B392F0">FruitFactory</span><span style="color:#E1E4E8">, </span><span style="color:#F97583">error</span><span style="color:#E1E4E8">) {</span></span>
+<span class="line"><span style="color:#F97583">	switch</span><span style="color:#E1E4E8"> name {</span></span>
+<span class="line"><span style="color:#F97583">	case</span><span style="color:#9ECBFF"> "apple"</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#F97583">		return</span><span style="color:#F97583"> &#x26;</span><span style="color:#B392F0">AppleFruitFactory</span><span style="color:#E1E4E8">{name: name}, </span><span style="color:#79B8FF">nil</span></span>
+<span class="line"><span style="color:#F97583">	case</span><span style="color:#9ECBFF"> "banana"</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#F97583">		return</span><span style="color:#F97583"> &#x26;</span><span style="color:#B392F0">BananaFruitFactory</span><span style="color:#E1E4E8">{name: name}, </span><span style="color:#79B8FF">nil</span></span>
+<span class="line"><span style="color:#F97583">	case</span><span style="color:#9ECBFF"> "orange"</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#F97583">		return</span><span style="color:#F97583"> &#x26;</span><span style="color:#B392F0">OrangeFruitFactory</span><span style="color:#E1E4E8">{name: name}, </span><span style="color:#79B8FF">nil</span></span>
+<span class="line"><span style="color:#E1E4E8">	}</span></span>
+<span class="line"><span style="color:#F97583">	return</span><span style="color:#79B8FF"> nil</span><span style="color:#E1E4E8">, errors.</span><span style="color:#B392F0">New</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">"not supported"</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>单元测试</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">package</span><span style="color:#B392F0"> factory_method</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">import</span><span style="color:#E1E4E8"> (</span></span>
+<span class="line"><span style="color:#9ECBFF">	"</span><span style="color:#B392F0">testing</span><span style="color:#9ECBFF">"</span></span>
+<span class="line"><span style="color:#E1E4E8">)</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">func</span><span style="color:#B392F0"> TestNewFruitFactory</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">t</span><span style="color:#F97583"> *</span><span style="color:#B392F0">testing</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">T</span><span style="color:#E1E4E8">) {</span></span>
+<span class="line"><span style="color:#F97583">	type</span><span style="color:#B392F0"> args</span><span style="color:#F97583"> struct</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">		name </span><span style="color:#F97583">string</span></span>
+<span class="line"><span style="color:#E1E4E8">	}</span></span>
+<span class="line"><span style="color:#E1E4E8">	tests </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> []</span><span style="color:#F97583">struct</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">		name  </span><span style="color:#F97583">string</span></span>
+<span class="line"><span style="color:#E1E4E8">		args  </span><span style="color:#B392F0">args</span></span>
+<span class="line"><span style="color:#E1E4E8">		want  </span><span style="color:#F97583">string</span></span>
+<span class="line"><span style="color:#E1E4E8">		want1 </span><span style="color:#F97583">string</span></span>
+<span class="line"><span style="color:#E1E4E8">	}{</span></span>
+<span class="line"><span style="color:#E1E4E8">		{</span></span>
+<span class="line"><span style="color:#E1E4E8">			name:  </span><span style="color:#9ECBFF">"apple"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">			args:  </span><span style="color:#F97583">struct</span><span style="color:#E1E4E8">{ name </span><span style="color:#F97583">string</span><span style="color:#E1E4E8"> }{name: </span><span style="color:#9ECBFF">"apple"</span><span style="color:#E1E4E8">},</span></span>
+<span class="line"><span style="color:#E1E4E8">			want:  </span><span style="color:#9ECBFF">"apple"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">			want1: </span><span style="color:#9ECBFF">"apple"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">		},</span></span>
+<span class="line"><span style="color:#E1E4E8">		{</span></span>
+<span class="line"><span style="color:#E1E4E8">			name:  </span><span style="color:#9ECBFF">"orange"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">			args:  </span><span style="color:#F97583">struct</span><span style="color:#E1E4E8">{ name </span><span style="color:#F97583">string</span><span style="color:#E1E4E8"> }{name: </span><span style="color:#9ECBFF">"orange"</span><span style="color:#E1E4E8">},</span></span>
+<span class="line"><span style="color:#E1E4E8">			want:  </span><span style="color:#9ECBFF">"orange"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">			want1: </span><span style="color:#9ECBFF">"orange"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">		}, {</span></span>
+<span class="line"><span style="color:#E1E4E8">			name:  </span><span style="color:#9ECBFF">"banana"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">			args:  </span><span style="color:#F97583">struct</span><span style="color:#E1E4E8">{ name </span><span style="color:#F97583">string</span><span style="color:#E1E4E8"> }{name: </span><span style="color:#9ECBFF">"banana"</span><span style="color:#E1E4E8">},</span></span>
+<span class="line"><span style="color:#E1E4E8">			want:  </span><span style="color:#9ECBFF">"banana"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">			want1: </span><span style="color:#9ECBFF">"banana"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">		},</span></span>
+<span class="line"><span style="color:#E1E4E8">	}</span></span>
+<span class="line"><span style="color:#F97583">	for</span><span style="color:#E1E4E8"> _, tt </span><span style="color:#F97583">:=</span><span style="color:#F97583"> range</span><span style="color:#E1E4E8"> tests {</span></span>
+<span class="line"><span style="color:#E1E4E8">		t.</span><span style="color:#B392F0">Run</span><span style="color:#E1E4E8">(tt.name, </span><span style="color:#F97583">func</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">t</span><span style="color:#F97583"> *</span><span style="color:#B392F0">testing</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">T</span><span style="color:#E1E4E8">) {</span></span>
+<span class="line"><span style="color:#E1E4E8">			got, _ </span><span style="color:#F97583">:=</span><span style="color:#B392F0"> NewFruitFactory</span><span style="color:#E1E4E8">(tt.args.name)</span></span>
+<span class="line"><span style="color:#F97583">			if</span><span style="color:#E1E4E8"> got.</span><span style="color:#B392F0">CreateFruit</span><span style="color:#E1E4E8">().</span><span style="color:#B392F0">Type</span><span style="color:#E1E4E8">() </span><span style="color:#F97583">!=</span><span style="color:#E1E4E8"> tt.want1 {</span></span>
+<span class="line"><span style="color:#E1E4E8">				t.</span><span style="color:#B392F0">Errorf</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">"NewFruitFactory() got = </span><span style="color:#79B8FF">%v</span><span style="color:#9ECBFF">, want1 </span><span style="color:#79B8FF">%v</span><span style="color:#9ECBFF">"</span><span style="color:#E1E4E8">, got.</span><span style="color:#B392F0">CreateFruit</span><span style="color:#E1E4E8">().</span><span style="color:#B392F0">Type</span><span style="color:#E1E4E8">(), tt.want1)</span></span>
+<span class="line"><span style="color:#E1E4E8">			}</span></span>
+<span class="line"><span style="color:#F97583">			if</span><span style="color:#E1E4E8"> got.</span><span style="color:#B392F0">CreateFruit</span><span style="color:#E1E4E8">().</span><span style="color:#B392F0">Name</span><span style="color:#E1E4E8">() </span><span style="color:#F97583">!=</span><span style="color:#E1E4E8"> tt.want {</span></span>
+<span class="line"><span style="color:#E1E4E8">				t.</span><span style="color:#B392F0">Errorf</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">"NewFruitFactory() got = </span><span style="color:#79B8FF">%v</span><span style="color:#9ECBFF">, want </span><span style="color:#79B8FF">%v</span><span style="color:#9ECBFF">"</span><span style="color:#E1E4E8">, got.</span><span style="color:#B392F0">CreateFruit</span><span style="color:#E1E4E8">().</span><span style="color:#B392F0">Type</span><span style="color:#E1E4E8">(), tt.want)</span></span>
+<span class="line"><span style="color:#E1E4E8">			}</span></span>
+<span class="line"><span style="color:#E1E4E8">		})</span></span>
+<span class="line"><span style="color:#E1E4E8">	}</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>优点：</p>
+<ul>
+<li>在工厂方法模式中，工厂方法用来创建客户所需要的产品，同时还向客户隐藏了哪种具体产品类将被实例化这一细节，用户只需要关心所需产品对应的工厂，无须关心创建细节，甚至无须知道具体产品类的类名。</li>
+<li>基于工厂角色和产品角色的多态性设计是工厂方法模式的关键。它能够使工厂可以自主确定创建何种产品对象，而如何创建这个对象的细节则完全封装在具体工厂内部。工厂方法模式之所以又被称为多态工厂模式，是因为所有的具体工厂类都具有同一抽象父类。</li>
+<li>使用工厂方法模式的另一个优点是在系统中加入新产品时，无须修改抽象工厂和抽象产品提供的接口，无须修改客户端，也无须修改其他的具体工厂和具体产品，而只要添加一个具体工厂和具体产品就可以了。这样，系统的可扩展性也就变得非常好，完全符合“开闭原则”。</li>
+</ul>
+<p>缺点：</p>
+<ul>
+<li>在添加新产品时，需要编写新的具体产品类，而且还要提供与之对应的具体工厂类，系统中类的个数将成对增加，在一定程度上增加了系统的复杂度，有更多的类需要编译和运行，会给系统带来一些额外的开销。</li>
+<li>由于考虑到系统的可扩展性，需要引入抽象层，在客户端代码中均使用抽象层进行定义，增加了系统的抽象性和理解难度，且在实现时可能需要用到DOM、反射等技术，增加了系统的实现难度。</li>
+</ul>
+<h2 id="抽象工厂方法">抽象工厂方法</h2>
+<p>在工厂方法模式中具体工厂负责生产具体的产品，每一个具体工厂对应一种具体产品，工厂方法也具有唯一性，一般情况下，一个具体工厂中只有一个工厂方法或者一组重载的工厂方法。但是有时候我们需要一个工厂可以提供多个产品对象，而不是单一的产品对象。</p>
+<p>当系统所提供的工厂所需生产的具体产品并不是一个简单的对象，而是多个位于不同产品等级结构中属于不同类型的具体产品时需要使用抽象工厂模式。</p>
+<p>抽象工厂模式与工厂方法模式最大的区别在于，工厂方法模式针对的是一个产品等级结构，而抽象工厂模式则需要面对多个产品等级结构，一个工厂等级结构可以负责多个不同产品等级结构中的产品对象的创建 。当一个工厂等级结构可以创建出分属于不同产品等级结构的一个产品族中的所有对象时，抽象工厂模式比工厂方法模式更为简单、有效率。</p>
+<h3 id="定义-1">定义</h3>
+<p>抽象工厂模式(Abstract Factory Pattern)：提供一个创建一系列相关或相互依赖对象的接口，而无须指定它们具体的类。</p></main><aside class="toc"><p class="toc-title">本页目录</p><ul><li class="toc-d2"><a href="#简单工厂方法">简单工厂方法</a></li><li class="toc-d3"><a href="#问题">问题</a></li><li class="toc-d3"><a href="#解决方案">解决方案</a></li><li class="toc-d2"><a href="#工厂方法">工厂方法</a></li><li class="toc-d3"><a href="#定义">定义</a></li><li class="toc-d3"><a href="#代码">代码</a></li><li class="toc-d2"><a href="#抽象工厂方法">抽象工厂方法</a></li><li class="toc-d3"><a href="#定义-1">定义</a></li></ul></aside></div><div class="lightbox" id="lightbox" aria-hidden="true"><img alt=""></div><script type="module" src="/_astro/Base.astro_astro_type_script_index_0_lang.7IsV0x-z.js"></script></body></html>

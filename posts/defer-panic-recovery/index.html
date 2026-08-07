@@ -1,0 +1,693 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Defer Panic Recovery</title><script>
+      (function () {
+        var s = localStorage.getItem('theme');
+        if (s === 'light' || s === 'dark') {
+          document.documentElement.setAttribute('data-theme', s);
+        }
+      })();
+    </script><link rel="stylesheet" href="/_astro/Base.CUYrCnW9.css"></head><body><header class="topbar"><a href="/" class="brand">HLDay</a><nav><a href="/">书</a><a href="/posts/">博客</a><a href="https://github.com/hTangle" class="nav-github" aria-label="GitHub">GitHub</a></nav><button class="theme-toggle" id="themeToggle" type="button" title="切换主题（自动/浅色/深色）" aria-label="切换主题">🖥️</button></header><div class="layout"><aside class="booknav"><ul class="nav-tree"><li><p class="nav-group">Go</p><ul><li><p class="nav-subgroup">并发编程</p><ul><li class><a href="/gmp/">GMP 调度器</a></li><li class><a href="/sync-lock/">同步和锁</a></li><li class><a href="/channel/">Channel</a></li><li class><a href="/context/">Context</a></li></ul></li></ul></li><li><p class="nav-group">Agent 开发</p><ul><li><p class="nav-subgroup">核心协议与机制</p><ul><li class><a href="/mcp/">MCP</a></li><li class><a href="/skill/">Skill</a></li><li class><a href="/tool-call/">Tool Call</a></li></ul></li></ul></li></ul></aside><main class="prose"><h1>Defer Panic Recovery</h1><h2 id="defer">defer</h2>
+<p>Go 语言的 <code>defer</code> 会在当前函数返回前执行传入的函数，它会经常被用于关闭文件描述符、关闭数据库连接以及解锁资源。</p>
+<p>常用的一种方式为：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">func</span><span style="color:#B392F0"> createPost</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">db</span><span style="color:#F97583"> *</span><span style="color:#B392F0">gorm</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">DB</span><span style="color:#E1E4E8">) </span><span style="color:#F97583">error</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">    tx </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> db.</span><span style="color:#B392F0">Begin</span><span style="color:#E1E4E8">()</span></span>
+<span class="line"><span style="color:#F97583">    defer</span><span style="color:#E1E4E8"> tx.</span><span style="color:#B392F0">Rollback</span><span style="color:#E1E4E8">()</span></span>
+<span class="line"><span style="color:#E1E4E8">    </span></span>
+<span class="line"><span style="color:#F97583">    if</span><span style="color:#E1E4E8"> err </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> tx.</span><span style="color:#B392F0">Create</span><span style="color:#E1E4E8">(</span><span style="color:#F97583">&#x26;</span><span style="color:#B392F0">Post</span><span style="color:#E1E4E8">{Author: </span><span style="color:#9ECBFF">""</span><span style="color:#E1E4E8">}).Error; err </span><span style="color:#F97583">!=</span><span style="color:#79B8FF"> nil</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">        return</span><span style="color:#E1E4E8"> err</span></span>
+<span class="line"><span style="color:#E1E4E8">    }</span></span>
+<span class="line"><span style="color:#E1E4E8">    </span></span>
+<span class="line"><span style="color:#F97583">    return</span><span style="color:#E1E4E8"> tx.</span><span style="color:#B392F0">Commit</span><span style="color:#E1E4E8">().Error</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>如果tx.Commit()执行失败，则函数退出时会默认执行tx.Rollback()，但是如果执行成功，也会执行tx.Rollback()，但是不会影响已经提交的事务。</p>
+<p>需要思考两个问题：</p>
+<ul>
+<li>多个defer函数的调用顺序：
+<ul>
+<li>后调用的 <code>defer</code> 函数会被追加到 Goroutine <code>_defer</code> 链表的最前面；</li>
+<li>运行 <a href="https://draveness.me/golang/tree/runtime._defer" rel="noopener noreferrer" target="_blank"><code>runtime._defer</code></a> 时是从前到后依次执行；</li>
+</ul>
+</li>
+<li><code>defer</code> 关键字使用传值的方式传递参数时会进行预计算，导致不符合预期的结果：调用 <a href="https://draveness.me/golang/tree/runtime.deferproc" rel="noopener noreferrer" target="_blank"><code>runtime.deferproc</code></a> 函数创建新的延迟调用时就会立刻拷贝函数的参数，函数的参数不会等到真正执行时计算；</li>
+</ul>
+<h3 id="defer函数执行顺序">defer函数执行顺序</h3>
+<p>假设多次调用defer</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">func</span><span style="color:#B392F0"> main</span><span style="color:#E1E4E8">() {</span></span>
+<span class="line"><span style="color:#F97583">	for</span><span style="color:#E1E4E8"> i </span><span style="color:#F97583">:=</span><span style="color:#79B8FF"> 0</span><span style="color:#E1E4E8">; i </span><span style="color:#F97583">&#x3C;</span><span style="color:#79B8FF"> 5</span><span style="color:#E1E4E8">; i</span><span style="color:#F97583">++</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">		defer</span><span style="color:#E1E4E8"> fmt.</span><span style="color:#B392F0">Println</span><span style="color:#E1E4E8">(i)</span></span>
+<span class="line"><span style="color:#E1E4E8">	}</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>其输出为：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="plaintext"><code><span class="line"><span>4</span></span>
+<span class="line"><span>3</span></span>
+<span class="line"><span>2</span></span>
+<span class="line"><span>1</span></span>
+<span class="line"><span>0</span></span></code></pre>
+<p>所以defer的调用顺序为先进后出的方式（类似于堆栈，<code>实际上是链表，后加入的会插入到链表的首部</code>），defer函数只会在当前函数退出前被调用。</p>
+<p>在看下一段代码的输出</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">func</span><span style="color:#B392F0"> testDeferValue</span><span style="color:#E1E4E8">() {</span></span>
+<span class="line"><span style="color:#E1E4E8">	startedAt </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> time.</span><span style="color:#B392F0">Now</span><span style="color:#E1E4E8">()</span></span>
+<span class="line"><span style="color:#F97583">	defer</span><span style="color:#E1E4E8"> fmt.</span><span style="color:#B392F0">Println</span><span style="color:#E1E4E8">(time.</span><span style="color:#B392F0">Since</span><span style="color:#E1E4E8">(startedAt))</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#E1E4E8">	time.</span><span style="color:#B392F0">Sleep</span><span style="color:#E1E4E8">(time.Second)</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">func</span><span style="color:#B392F0"> main</span><span style="color:#E1E4E8">() {</span></span>
+<span class="line"><span style="color:#B392F0">	testDeferValue</span><span style="color:#E1E4E8">()</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>其输出为：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="plaintext"><code><span class="line"><span>151ns</span></span></code></pre>
+<p>而我们预期的输出是1s，问题出在哪？</p>
+<p>Go 语言中所有的函数调用都是传值的，虽然 <code>defer</code> 是关键字，但是也继承了这个特性。调用 <code>defer</code> 关键字会立刻拷贝函数中引用的外部参数，所以 <code>time.Since(startedAt)</code> 的结果不是在 <code>main</code> 函数退出之前计算的，而是在 <code>defer</code> 关键字调用时计算的，最终导致上述代码输出 0s。</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">func</span><span style="color:#B392F0"> test</span><span style="color:#E1E4E8">() (</span><span style="color:#FFAB70">a</span><span style="color:#F97583"> int</span><span style="color:#E1E4E8">) {</span></span>
+<span class="line"><span style="color:#E1E4E8">	a </span><span style="color:#F97583">=</span><span style="color:#79B8FF"> 5</span></span>
+<span class="line"><span style="color:#F97583">	defer</span><span style="color:#B392F0"> println</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">"direct"</span><span style="color:#E1E4E8">, a)</span></span>
+<span class="line"><span style="color:#F97583">	defer</span><span style="color:#F97583"> func</span><span style="color:#E1E4E8">() {</span></span>
+<span class="line"><span style="color:#B392F0">		println</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">"func"</span><span style="color:#E1E4E8">, a)</span></span>
+<span class="line"><span style="color:#E1E4E8">	}()</span></span>
+<span class="line"><span style="color:#E1E4E8">	a </span><span style="color:#F97583">=</span><span style="color:#79B8FF"> 10</span></span>
+<span class="line"><span style="color:#F97583">	return</span><span style="color:#E1E4E8"> a</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>上面这个函数的输出为：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">func</span><span style="color:#79B8FF"> 10</span></span>
+<span class="line"><span style="color:#E1E4E8">direct </span><span style="color:#79B8FF">5</span></span></code></pre>
+<p>虽然调用 <code>defer</code> 关键字时也使用值传递，但是因为拷贝的是函数指针，所以使用匿名函数能解决上述问题。</p>
+<h3 id="defer数据结构">defer数据结构</h3>
+<p>defer的数据结构如下</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">type</span><span style="color:#B392F0"> _defer</span><span style="color:#F97583"> struct</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">	siz     </span><span style="color:#F97583">int32</span><span style="color:#6A737D"> // includes both arguments and results</span></span>
+<span class="line"><span style="color:#E1E4E8">	started </span><span style="color:#F97583">bool</span></span>
+<span class="line"><span style="color:#E1E4E8">	heap    </span><span style="color:#F97583">bool</span></span>
+<span class="line"><span style="color:#6A737D">	// openDefer indicates that this _defer is for a frame with open-coded</span></span>
+<span class="line"><span style="color:#6A737D">	// defers. We have only one defer record for the entire frame (which may</span></span>
+<span class="line"><span style="color:#6A737D">	// currently have 0, 1, or more defers active).</span></span>
+<span class="line"><span style="color:#E1E4E8">	openDefer </span><span style="color:#F97583">bool</span></span>
+<span class="line"><span style="color:#E1E4E8">	sp        </span><span style="color:#F97583">uintptr</span><span style="color:#6A737D">  // sp at time of defer</span></span>
+<span class="line"><span style="color:#E1E4E8">	pc        </span><span style="color:#F97583">uintptr</span><span style="color:#6A737D">  // pc at time of defer</span></span>
+<span class="line"><span style="color:#E1E4E8">	fn        </span><span style="color:#F97583">*</span><span style="color:#B392F0">funcval</span><span style="color:#6A737D"> // can be nil for open-coded defers</span></span>
+<span class="line"><span style="color:#E1E4E8">	_panic    </span><span style="color:#F97583">*</span><span style="color:#B392F0">_panic</span><span style="color:#6A737D">  // panic that is running defer</span></span>
+<span class="line"><span style="color:#E1E4E8">	link      </span><span style="color:#F97583">*</span><span style="color:#B392F0">_defer</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D">	// If openDefer is true, the fields below record values about the stack</span></span>
+<span class="line"><span style="color:#6A737D">	// frame and associated function that has the open-coded defer(s). sp</span></span>
+<span class="line"><span style="color:#6A737D">	// above will be the sp for the frame, and pc will be address of the</span></span>
+<span class="line"><span style="color:#6A737D">	// deferreturn call in the function.</span></span>
+<span class="line"><span style="color:#E1E4E8">	fd   </span><span style="color:#B392F0">unsafe</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">Pointer</span><span style="color:#6A737D"> // funcdata for the function associated with the frame</span></span>
+<span class="line"><span style="color:#E1E4E8">	varp </span><span style="color:#F97583">uintptr</span><span style="color:#6A737D">        // value of varp for the stack frame</span></span>
+<span class="line"><span style="color:#6A737D">	// framepc is the current pc associated with the stack frame. Together,</span></span>
+<span class="line"><span style="color:#6A737D">	// with sp above (which is the sp associated with the stack frame),</span></span>
+<span class="line"><span style="color:#6A737D">	// framepc/sp can be used as pc/sp pair to continue a stack trace via</span></span>
+<span class="line"><span style="color:#6A737D">	// gentraceback().</span></span>
+<span class="line"><span style="color:#E1E4E8">	framepc </span><span style="color:#F97583">uintptr</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>defer是一个链表，通过link将defer连接到一起。</p>
+<ul>
+<li><code>siz</code> 是参数和结果的内存大小；</li>
+<li><code>sp</code> 和 <code>pc</code> 分别代表栈指针和调用方的程序计数器；</li>
+<li><code>fn</code> 是 <code>defer</code> 关键字中传入的函数；</li>
+<li><code>_panic</code> 是触发延迟调用的结构体，可能为空；</li>
+<li><code>openDefer</code> 表示当前 <code>defer</code> 是否经过开放编码的优化；</li>
+</ul>
+<h3 id="执行">执行</h3>
+<p><a href="https://github.com/golang/go/blob/41d8e61a6b9d8f9db912626eb2bbc535e929fefc/src/cmd/compile/internal/gc/ssa.go#L1114" rel="noopener noreferrer" target="_blank">中间代码生成阶段</a>会负责处理程序中的defer</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">case</span><span style="color:#E1E4E8"> ODEFER:</span></span>
+<span class="line"><span style="color:#F97583">		if</span><span style="color:#E1E4E8"> Debug_defer </span><span style="color:#F97583">></span><span style="color:#79B8FF"> 0</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">			var</span><span style="color:#E1E4E8"> defertype </span><span style="color:#F97583">string</span></span>
+<span class="line"><span style="color:#F97583">			if</span><span style="color:#E1E4E8"> s.hasOpenDefers {</span></span>
+<span class="line"><span style="color:#E1E4E8">				defertype </span><span style="color:#F97583">=</span><span style="color:#9ECBFF"> "open-coded"</span></span>
+<span class="line"><span style="color:#E1E4E8">			} </span><span style="color:#F97583">else</span><span style="color:#F97583"> if</span><span style="color:#E1E4E8"> n.Esc </span><span style="color:#F97583">==</span><span style="color:#E1E4E8"> EscNever {</span></span>
+<span class="line"><span style="color:#E1E4E8">				defertype </span><span style="color:#F97583">=</span><span style="color:#9ECBFF"> "stack-allocated"</span></span>
+<span class="line"><span style="color:#E1E4E8">			} </span><span style="color:#F97583">else</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">				defertype </span><span style="color:#F97583">=</span><span style="color:#9ECBFF"> "heap-allocated"</span></span>
+<span class="line"><span style="color:#E1E4E8">			}</span></span>
+<span class="line"><span style="color:#B392F0">			Warnl</span><span style="color:#E1E4E8">(n.Pos, </span><span style="color:#9ECBFF">"</span><span style="color:#79B8FF">%s</span><span style="color:#9ECBFF"> defer"</span><span style="color:#E1E4E8">, defertype)</span></span>
+<span class="line"><span style="color:#E1E4E8">		}</span></span>
+<span class="line"><span style="color:#F97583">		if</span><span style="color:#E1E4E8"> s.hasOpenDefers {</span></span>
+<span class="line"><span style="color:#E1E4E8">			s.</span><span style="color:#B392F0">openDeferRecord</span><span style="color:#E1E4E8">(n.Left) </span><span style="color:#6A737D">// 开放编码</span></span>
+<span class="line"><span style="color:#E1E4E8">		} </span><span style="color:#F97583">else</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">			d </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> callDefer </span><span style="color:#6A737D">// 堆分配</span></span>
+<span class="line"><span style="color:#F97583">			if</span><span style="color:#E1E4E8"> n.Esc </span><span style="color:#F97583">==</span><span style="color:#E1E4E8"> EscNever {</span></span>
+<span class="line"><span style="color:#E1E4E8">				d </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> callDeferStack </span><span style="color:#6A737D">// 栈分配</span></span>
+<span class="line"><span style="color:#E1E4E8">			}</span></span>
+<span class="line"><span style="color:#E1E4E8">			s.</span><span style="color:#B392F0">callResult</span><span style="color:#E1E4E8">(n.Left, d)</span></span>
+<span class="line"><span style="color:#E1E4E8">		}</span></span></code></pre>
+<h3 id="堆上分配">堆上分配</h3>
+<p>根据 <a href="https://draveness.me/golang/tree/cmd/compile/internal/gc.state.stmt" rel="noopener noreferrer" target="_blank"><code>cmd/compile/internal/gc.state.stmt</code></a> 方法对 <code>defer</code> 的处理我们可以看出，堆上分配的 <a href="https://draveness.me/golang/tree/runtime._defer" rel="noopener noreferrer" target="_blank"><code>runtime._defer</code></a> 结构体是默认的兜底方案，当该方案被启用时，编译器会调用 <a href="https://draveness.me/golang/tree/cmd/compile/internal/gc.state.callResult" rel="noopener noreferrer" target="_blank"><code>cmd/compile/internal/gc.state.callResult</code></a> 和 <a href="https://draveness.me/golang/tree/cmd/compile/internal/gc.state.call" rel="noopener noreferrer" target="_blank"><code>cmd/compile/internal/gc.state.call</code></a>，这表示 <code>defer</code> 在编译器看来也是函数调用。</p>
+<p><a href="https://draveness.me/golang/tree/cmd/compile/internal/gc.state.call" rel="noopener noreferrer" target="_blank"><code>cmd/compile/internal/gc.state.call</code></a> 会负责为所有函数和方法调用生成中间代码，它的工作包括以下内容：</p>
+<ol>
+<li>获取需要执行的函数名、闭包指针、代码指针和函数调用的接收方；</li>
+<li>获取栈地址并将函数或者方法的参数写入栈中；</li>
+<li>使用 <a href="https://draveness.me/golang/tree/cmd/compile/internal/gc.state.newValue1A" rel="noopener noreferrer" target="_blank"><code>cmd/compile/internal/gc.state.newValue1A</code></a> 以及相关函数生成函数调用的中间代码；</li>
+<li>如果当前调用的函数是 <code>defer</code>，那么会单独生成相关的结束代码块；</li>
+<li>获取函数的返回值地址并结束当前调用；</li>
+</ol>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">func</span><span style="color:#E1E4E8"> (</span><span style="color:#FFAB70">s </span><span style="color:#F97583">*</span><span style="color:#B392F0">state</span><span style="color:#E1E4E8">) </span><span style="color:#B392F0">call</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">n</span><span style="color:#F97583"> *</span><span style="color:#B392F0">Node</span><span style="color:#E1E4E8">, </span><span style="color:#FFAB70">k</span><span style="color:#B392F0"> callKind</span><span style="color:#E1E4E8">, </span><span style="color:#FFAB70">returnResultAddr</span><span style="color:#F97583"> bool</span><span style="color:#E1E4E8">) </span><span style="color:#F97583">*</span><span style="color:#B392F0">ssa</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">Value</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">	...</span></span>
+<span class="line"><span style="color:#F97583">	var</span><span style="color:#E1E4E8"> call </span><span style="color:#F97583">*</span><span style="color:#B392F0">ssa</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">Value</span></span>
+<span class="line"><span style="color:#F97583">	if</span><span style="color:#E1E4E8"> k </span><span style="color:#F97583">==</span><span style="color:#E1E4E8"> callDeferStack {</span></span>
+<span class="line"><span style="color:#6A737D">		// 在栈上初始化 defer 结构体</span></span>
+<span class="line"><span style="color:#F97583">		...</span></span>
+<span class="line"><span style="color:#E1E4E8">	} </span><span style="color:#F97583">else</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">		...</span></span>
+<span class="line"><span style="color:#F97583">		switch</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">		case</span><span style="color:#E1E4E8"> k </span><span style="color:#F97583">==</span><span style="color:#E1E4E8"> callDefer:</span></span>
+<span class="line"><span style="color:#E1E4E8">			aux </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> ssa.</span><span style="color:#B392F0">StaticAuxCall</span><span style="color:#E1E4E8">(deferproc, ACArgs, ACResults)</span></span>
+<span class="line"><span style="color:#E1E4E8">			call </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> s.</span><span style="color:#B392F0">newValue1A</span><span style="color:#E1E4E8">(ssa.OpStaticCall, types.TypeMem, aux, s.</span><span style="color:#B392F0">mem</span><span style="color:#E1E4E8">())</span></span>
+<span class="line"><span style="color:#F97583">		...</span></span>
+<span class="line"><span style="color:#E1E4E8">		}</span></span>
+<span class="line"><span style="color:#E1E4E8">		call.AuxInt </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> stksize</span></span>
+<span class="line"><span style="color:#E1E4E8">	}</span></span>
+<span class="line"><span style="color:#E1E4E8">	s.vars[</span><span style="color:#F97583">&#x26;</span><span style="color:#E1E4E8">memVar] </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> call</span></span>
+<span class="line"><span style="color:#F97583">	...</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p><code>defer</code> 关键字在运行期间会调用 <a href="https://draveness.me/golang/tree/runtime.deferproc" rel="noopener noreferrer" target="_blank"><code>runtime.deferproc</code></a>，这个函数接收了参数的大小和闭包所在的地址两个参数。</p>
+<p>编译器不仅将 <code>defer</code> 关键字都转换成 <a href="https://draveness.me/golang/tree/runtime.deferproc" rel="noopener noreferrer" target="_blank"><code>runtime.deferproc</code></a> 函数，它还会通过以下三个步骤为所有调用 <code>defer</code> 的函数末尾插入 <a href="https://draveness.me/golang/tree/runtime.deferreturn" rel="noopener noreferrer" target="_blank"><code>runtime.deferreturn</code></a> 的函数调用：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">func</span><span style="color:#E1E4E8"> (</span><span style="color:#FFAB70">s </span><span style="color:#F97583">*</span><span style="color:#B392F0">state</span><span style="color:#E1E4E8">) </span><span style="color:#B392F0">exit</span><span style="color:#E1E4E8">() </span><span style="color:#F97583">*</span><span style="color:#B392F0">ssa</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">Block</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">   if</span><span style="color:#E1E4E8"> s.hasdefer {</span></span>
+<span class="line"><span style="color:#F97583">   	...</span></span>
+<span class="line"><span style="color:#E1E4E8">   	s.</span><span style="color:#B392F0">rtcall</span><span style="color:#E1E4E8">(Deferreturn, </span><span style="color:#79B8FF">true</span><span style="color:#E1E4E8">, </span><span style="color:#79B8FF">nil</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"><span style="color:#E1E4E8">   }</span></span>
+<span class="line"><span style="color:#F97583">   ...</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>当运行时将 <a href="https://draveness.me/golang/tree/runtime._defer" rel="noopener noreferrer" target="_blank"><code>runtime._defer</code></a> 分配到堆上时，Go 语言的编译器不仅将 <code>defer</code> 转换成了 <a href="https://draveness.me/golang/tree/runtime.deferproc" rel="noopener noreferrer" target="_blank"><code>runtime.deferproc</code></a>，还在所有调用 <code>defer</code> 的函数结尾插入了 <a href="https://draveness.me/golang/tree/runtime.deferreturn" rel="noopener noreferrer" target="_blank"><code>runtime.deferreturn</code></a>。上述两个运行时函数是 <code>defer</code> 关键字运行时机制的入口，它们分别承担了不同的工作：</p>
+<ul>
+<li><a href="https://draveness.me/golang/tree/runtime.deferproc" rel="noopener noreferrer" target="_blank"><code>runtime.deferproc</code></a> 负责创建新的延迟调用；</li>
+<li><a href="https://draveness.me/golang/tree/runtime.deferreturn" rel="noopener noreferrer" target="_blank"><code>runtime.deferreturn</code></a> 负责在函数调用结束时执行所有的延迟调用；</li>
+</ul>
+<h4 id="创建延迟调用">创建延迟调用</h4>
+<p><a href="https://draveness.me/golang/tree/runtime.deferproc" rel="noopener noreferrer" target="_blank"><code>runtime.deferproc</code></a> 会为 <code>defer</code> 创建一个新的 <a href="https://draveness.me/golang/tree/runtime._defer" rel="noopener noreferrer" target="_blank"><code>runtime._defer</code></a> 结构体、设置它的函数指针 <code>fn</code>、程序计数器 <code>pc</code> 和栈指针 <code>sp</code> 并将相关的参数拷贝到相邻的内存空间中：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">func</span><span style="color:#B392F0"> deferproc</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">siz</span><span style="color:#F97583"> int32</span><span style="color:#E1E4E8">, </span><span style="color:#FFAB70">fn</span><span style="color:#F97583"> *</span><span style="color:#B392F0">funcval</span><span style="color:#E1E4E8">) {</span></span>
+<span class="line"><span style="color:#E1E4E8">	sp </span><span style="color:#F97583">:=</span><span style="color:#B392F0"> getcallersp</span><span style="color:#E1E4E8">()</span></span>
+<span class="line"><span style="color:#E1E4E8">	argp </span><span style="color:#F97583">:=</span><span style="color:#F97583"> uintptr</span><span style="color:#E1E4E8">(unsafe.</span><span style="color:#B392F0">Pointer</span><span style="color:#E1E4E8">(</span><span style="color:#F97583">&#x26;</span><span style="color:#E1E4E8">fn)) </span><span style="color:#F97583">+</span><span style="color:#E1E4E8"> unsafe.</span><span style="color:#B392F0">Sizeof</span><span style="color:#E1E4E8">(fn)</span></span>
+<span class="line"><span style="color:#E1E4E8">	callerpc </span><span style="color:#F97583">:=</span><span style="color:#B392F0"> getcallerpc</span><span style="color:#E1E4E8">()</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#E1E4E8">	d </span><span style="color:#F97583">:=</span><span style="color:#B392F0"> newdefer</span><span style="color:#E1E4E8">(siz)</span></span>
+<span class="line"><span style="color:#F97583">	if</span><span style="color:#E1E4E8"> d._panic </span><span style="color:#F97583">!=</span><span style="color:#79B8FF"> nil</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#B392F0">		throw</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">"deferproc: d.panic != nil after newdefer"</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"><span style="color:#E1E4E8">	}</span></span>
+<span class="line"><span style="color:#E1E4E8">	d.fn </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> fn</span></span>
+<span class="line"><span style="color:#E1E4E8">	d.pc </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> callerpc</span></span>
+<span class="line"><span style="color:#E1E4E8">	d.sp </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> sp</span></span>
+<span class="line"><span style="color:#F97583">	switch</span><span style="color:#E1E4E8"> siz {</span></span>
+<span class="line"><span style="color:#F97583">	case</span><span style="color:#79B8FF"> 0</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#F97583">	case</span><span style="color:#E1E4E8"> sys.PtrSize:</span></span>
+<span class="line"><span style="color:#F97583">		*</span><span style="color:#E1E4E8">(</span><span style="color:#F97583">*uintptr</span><span style="color:#E1E4E8">)(</span><span style="color:#B392F0">deferArgs</span><span style="color:#E1E4E8">(d)) </span><span style="color:#F97583">=</span><span style="color:#F97583"> *</span><span style="color:#E1E4E8">(</span><span style="color:#F97583">*uintptr</span><span style="color:#E1E4E8">)(unsafe.</span><span style="color:#B392F0">Pointer</span><span style="color:#E1E4E8">(argp))</span></span>
+<span class="line"><span style="color:#F97583">	default</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#B392F0">		memmove</span><span style="color:#E1E4E8">(</span><span style="color:#B392F0">deferArgs</span><span style="color:#E1E4E8">(d), unsafe.</span><span style="color:#B392F0">Pointer</span><span style="color:#E1E4E8">(argp), </span><span style="color:#F97583">uintptr</span><span style="color:#E1E4E8">(siz))</span></span>
+<span class="line"><span style="color:#E1E4E8">	}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#B392F0">	return0</span><span style="color:#E1E4E8">()</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>最后调用的 <a href="https://draveness.me/golang/tree/runtime.return0" rel="noopener noreferrer" target="_blank"><code>runtime.return0</code></a> 是唯一一个不会触发延迟调用的函数，它可以避免递归 <a href="https://draveness.me/golang/tree/runtime.deferreturn" rel="noopener noreferrer" target="_blank"><code>runtime.deferreturn</code></a> 的递归调用。</p>
+<p><a href="https://draveness.me/golang/tree/runtime.deferproc" rel="noopener noreferrer" target="_blank"><code>runtime.deferproc</code></a> 中 <a href="https://draveness.me/golang/tree/runtime.newdefer" rel="noopener noreferrer" target="_blank"><code>runtime.newdefer</code></a> 的作用是想尽办法获得 <a href="https://draveness.me/golang/tree/runtime._defer" rel="noopener noreferrer" target="_blank"><code>runtime._defer</code></a> 结构体，这里包含三种路径：</p>
+<ol>
+<li>从调度器的延迟调用缓存池 <code>sched.deferpool</code> 中取出结构体并将该结构体追加到当前 Goroutine 的缓存池中；</li>
+<li>从 Goroutine 的延迟调用缓存池 <code>pp.deferpool</code> 中取出结构体；</li>
+<li>通过 <a href="https://draveness.me/golang/tree/runtime.mallocgc" rel="noopener noreferrer" target="_blank"><code>runtime.mallocgc</code></a> 在堆上创建一个新的结构体；</li>
+</ol>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">func</span><span style="color:#B392F0"> newdefer</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">siz</span><span style="color:#F97583"> int32</span><span style="color:#E1E4E8">) </span><span style="color:#F97583">*</span><span style="color:#B392F0">_defer</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">	var</span><span style="color:#E1E4E8"> d </span><span style="color:#F97583">*</span><span style="color:#B392F0">_defer</span></span>
+<span class="line"><span style="color:#E1E4E8">	sc </span><span style="color:#F97583">:=</span><span style="color:#B392F0"> deferclass</span><span style="color:#E1E4E8">(</span><span style="color:#F97583">uintptr</span><span style="color:#E1E4E8">(siz))</span></span>
+<span class="line"><span style="color:#E1E4E8">	gp </span><span style="color:#F97583">:=</span><span style="color:#B392F0"> getg</span><span style="color:#E1E4E8">()</span></span>
+<span class="line"><span style="color:#F97583">	if</span><span style="color:#E1E4E8"> sc </span><span style="color:#F97583">&#x3C;</span><span style="color:#F97583"> uintptr</span><span style="color:#E1E4E8">(</span><span style="color:#B392F0">len</span><span style="color:#E1E4E8">(</span><span style="color:#B392F0">p</span><span style="color:#E1E4E8">{}.deferpool)) {</span></span>
+<span class="line"><span style="color:#E1E4E8">		pp </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> gp.m.p.</span><span style="color:#B392F0">ptr</span><span style="color:#E1E4E8">()</span></span>
+<span class="line"><span style="color:#F97583">		if</span><span style="color:#B392F0"> len</span><span style="color:#E1E4E8">(pp.deferpool[sc]) </span><span style="color:#F97583">==</span><span style="color:#79B8FF"> 0</span><span style="color:#F97583"> &#x26;&#x26;</span><span style="color:#E1E4E8"> sched.deferpool[sc] </span><span style="color:#F97583">!=</span><span style="color:#79B8FF"> nil</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">			for</span><span style="color:#B392F0"> len</span><span style="color:#E1E4E8">(pp.deferpool[sc]) </span><span style="color:#F97583">&#x3C;</span><span style="color:#B392F0"> cap</span><span style="color:#E1E4E8">(pp.deferpool[sc])</span><span style="color:#F97583">/</span><span style="color:#79B8FF">2</span><span style="color:#F97583"> &#x26;&#x26;</span><span style="color:#E1E4E8"> sched.deferpool[sc] </span><span style="color:#F97583">!=</span><span style="color:#79B8FF"> nil</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">				d </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> sched.deferpool[sc]</span></span>
+<span class="line"><span style="color:#E1E4E8">				sched.deferpool[sc] </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> d.link</span></span>
+<span class="line"><span style="color:#E1E4E8">				pp.deferpool[sc] </span><span style="color:#F97583">=</span><span style="color:#B392F0"> append</span><span style="color:#E1E4E8">(pp.deferpool[sc], d)</span></span>
+<span class="line"><span style="color:#E1E4E8">			}</span></span>
+<span class="line"><span style="color:#E1E4E8">		}</span></span>
+<span class="line"><span style="color:#F97583">		if</span><span style="color:#E1E4E8"> n </span><span style="color:#F97583">:=</span><span style="color:#B392F0"> len</span><span style="color:#E1E4E8">(pp.deferpool[sc]); n </span><span style="color:#F97583">></span><span style="color:#79B8FF"> 0</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">			d </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> pp.deferpool[sc][n</span><span style="color:#F97583">-</span><span style="color:#79B8FF">1</span><span style="color:#E1E4E8">]</span></span>
+<span class="line"><span style="color:#E1E4E8">			pp.deferpool[sc][n</span><span style="color:#F97583">-</span><span style="color:#79B8FF">1</span><span style="color:#E1E4E8">] </span><span style="color:#F97583">=</span><span style="color:#79B8FF"> nil</span></span>
+<span class="line"><span style="color:#E1E4E8">			pp.deferpool[sc] </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> pp.deferpool[sc][:n</span><span style="color:#F97583">-</span><span style="color:#79B8FF">1</span><span style="color:#E1E4E8">]</span></span>
+<span class="line"><span style="color:#E1E4E8">		}</span></span>
+<span class="line"><span style="color:#E1E4E8">	}</span></span>
+<span class="line"><span style="color:#F97583">	if</span><span style="color:#E1E4E8"> d </span><span style="color:#F97583">==</span><span style="color:#79B8FF"> nil</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">		total </span><span style="color:#F97583">:=</span><span style="color:#B392F0"> roundupsize</span><span style="color:#E1E4E8">(</span><span style="color:#B392F0">totaldefersize</span><span style="color:#E1E4E8">(</span><span style="color:#F97583">uintptr</span><span style="color:#E1E4E8">(siz)))</span></span>
+<span class="line"><span style="color:#E1E4E8">		d </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> (</span><span style="color:#F97583">*</span><span style="color:#B392F0">_defer</span><span style="color:#E1E4E8">)(</span><span style="color:#B392F0">mallocgc</span><span style="color:#E1E4E8">(total, deferType, </span><span style="color:#79B8FF">true</span><span style="color:#E1E4E8">))</span></span>
+<span class="line"><span style="color:#E1E4E8">	}</span></span>
+<span class="line"><span style="color:#E1E4E8">	d.siz </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> siz</span></span>
+<span class="line"><span style="color:#E1E4E8">	d.link </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> gp._defer</span></span>
+<span class="line"><span style="color:#E1E4E8">	gp._defer </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> d</span></span>
+<span class="line"><span style="color:#F97583">	return</span><span style="color:#E1E4E8"> d</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>无论使用哪种方式，只要获取到 <a href="https://draveness.me/golang/tree/runtime._defer" rel="noopener noreferrer" target="_blank"><code>runtime._defer</code></a> 结构体，它都会被追加到所在 Goroutine <code>_defer</code> 链表的最前面。</p>
+<p><code>defer</code> 关键字的插入顺序是从后向前的，而 <code>defer</code> 关键字执行是从前向后的，这也是为什么后调用的 <code>defer</code> 会优先执行。</p>
+<h4 id="执行延迟调用">执行延迟调用</h4>
+<p><a href="https://draveness.me/golang/tree/runtime.deferreturn" rel="noopener noreferrer" target="_blank"><code>runtime.deferreturn</code></a> 会从 Goroutine 的 <code>_defer</code> 链表中取出最前面的 <a href="https://draveness.me/golang/tree/runtime._defer" rel="noopener noreferrer" target="_blank"><code>runtime._defer</code></a> 并调用 <a href="https://draveness.me/golang/tree/runtime.jmpdefer" rel="noopener noreferrer" target="_blank"><code>runtime.jmpdefer</code></a> 传入需要执行的函数和参数：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">func</span><span style="color:#B392F0"> deferreturn</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">arg0</span><span style="color:#F97583"> uintptr</span><span style="color:#E1E4E8">) {</span></span>
+<span class="line"><span style="color:#E1E4E8">	gp </span><span style="color:#F97583">:=</span><span style="color:#B392F0"> getg</span><span style="color:#E1E4E8">()</span></span>
+<span class="line"><span style="color:#E1E4E8">	d </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> gp._defer</span></span>
+<span class="line"><span style="color:#F97583">	if</span><span style="color:#E1E4E8"> d </span><span style="color:#F97583">==</span><span style="color:#79B8FF"> nil</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">		return</span></span>
+<span class="line"><span style="color:#E1E4E8">	}</span></span>
+<span class="line"><span style="color:#E1E4E8">	sp </span><span style="color:#F97583">:=</span><span style="color:#B392F0"> getcallersp</span><span style="color:#E1E4E8">()</span></span>
+<span class="line"><span style="color:#F97583">	...</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">	switch</span><span style="color:#E1E4E8"> d.siz {</span></span>
+<span class="line"><span style="color:#F97583">	case</span><span style="color:#79B8FF"> 0</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#F97583">	case</span><span style="color:#E1E4E8"> sys.PtrSize:</span></span>
+<span class="line"><span style="color:#F97583">		*</span><span style="color:#E1E4E8">(</span><span style="color:#F97583">*uintptr</span><span style="color:#E1E4E8">)(unsafe.</span><span style="color:#B392F0">Pointer</span><span style="color:#E1E4E8">(</span><span style="color:#F97583">&#x26;</span><span style="color:#E1E4E8">arg0)) </span><span style="color:#F97583">=</span><span style="color:#F97583"> *</span><span style="color:#E1E4E8">(</span><span style="color:#F97583">*uintptr</span><span style="color:#E1E4E8">)(</span><span style="color:#B392F0">deferArgs</span><span style="color:#E1E4E8">(d))</span></span>
+<span class="line"><span style="color:#F97583">	default</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#B392F0">		memmove</span><span style="color:#E1E4E8">(unsafe.</span><span style="color:#B392F0">Pointer</span><span style="color:#E1E4E8">(</span><span style="color:#F97583">&#x26;</span><span style="color:#E1E4E8">arg0), </span><span style="color:#B392F0">deferArgs</span><span style="color:#E1E4E8">(d), </span><span style="color:#F97583">uintptr</span><span style="color:#E1E4E8">(d.siz))</span></span>
+<span class="line"><span style="color:#E1E4E8">	}</span></span>
+<span class="line"><span style="color:#E1E4E8">	fn </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> d.fn</span></span>
+<span class="line"><span style="color:#E1E4E8">	gp._defer </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> d.link</span></span>
+<span class="line"><span style="color:#B392F0">	freedefer</span><span style="color:#E1E4E8">(d)</span></span>
+<span class="line"><span style="color:#B392F0">	jmpdefer</span><span style="color:#E1E4E8">(fn, </span><span style="color:#F97583">uintptr</span><span style="color:#E1E4E8">(unsafe.</span><span style="color:#B392F0">Pointer</span><span style="color:#E1E4E8">(</span><span style="color:#F97583">&#x26;</span><span style="color:#E1E4E8">arg0)))</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p><a href="https://draveness.me/golang/tree/runtime.jmpdefer" rel="noopener noreferrer" target="_blank"><code>runtime.jmpdefer</code></a> 是一个用汇编语言实现的运行时函数，它的主要工作是跳转到 <code>defer</code> 所在的代码段并在执行结束之后跳转回 <a href="https://draveness.me/golang/tree/runtime.deferreturn" rel="noopener noreferrer" target="_blank"><code>runtime.deferreturn</code></a>。</p>
+<h3 id="栈上分配">栈上分配</h3>
+<p>在默认情况下，我们可以看到 Go 语言中 <a href="https://draveness.me/golang/tree/runtime._defer" rel="noopener noreferrer" target="_blank"><code>runtime._defer</code></a> 结构体都会在堆上分配，如果我们能够将部分结构体分配到栈上就可以节约内存分配带来的额外开销。当该关键字在函数体中最多执行一次时，编译期间的 <a href="https://draveness.me/golang/tree/cmd/compile/internal/gc.state.call" rel="noopener noreferrer" target="_blank"><code>cmd/compile/internal/gc.state.call</code></a> 会将结构体分配到栈上并调用 <a href="https://draveness.me/golang/tree/runtime.deferprocStack" rel="noopener noreferrer" target="_blank"><code>runtime.deferprocStack</code></a>：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">func</span><span style="color:#E1E4E8"> (</span><span style="color:#FFAB70">s </span><span style="color:#F97583">*</span><span style="color:#B392F0">state</span><span style="color:#E1E4E8">) </span><span style="color:#B392F0">call</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">n</span><span style="color:#F97583"> *</span><span style="color:#B392F0">Node</span><span style="color:#E1E4E8">, </span><span style="color:#FFAB70">k</span><span style="color:#B392F0"> callKind</span><span style="color:#E1E4E8">) </span><span style="color:#F97583">*</span><span style="color:#B392F0">ssa</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">Value</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">	...</span></span>
+<span class="line"><span style="color:#F97583">	var</span><span style="color:#E1E4E8"> call </span><span style="color:#F97583">*</span><span style="color:#B392F0">ssa</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">Value</span></span>
+<span class="line"><span style="color:#F97583">	if</span><span style="color:#E1E4E8"> k </span><span style="color:#F97583">==</span><span style="color:#E1E4E8"> callDeferStack {</span></span>
+<span class="line"><span style="color:#6A737D">		// 在栈上创建 _defer 结构体</span></span>
+<span class="line"><span style="color:#E1E4E8">		t </span><span style="color:#F97583">:=</span><span style="color:#B392F0"> deferstruct</span><span style="color:#E1E4E8">(stksize)</span></span>
+<span class="line"><span style="color:#F97583">		...</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#E1E4E8">		ACArgs </span><span style="color:#F97583">=</span><span style="color:#B392F0"> append</span><span style="color:#E1E4E8">(ACArgs, </span><span style="color:#B392F0">ssa</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">Param</span><span style="color:#E1E4E8">{Type: types.Types[TUINTPTR], Offset: </span><span style="color:#F97583">int32</span><span style="color:#E1E4E8">(Ctxt.</span><span style="color:#B392F0">FixedFrameSize</span><span style="color:#E1E4E8">())})</span></span>
+<span class="line"><span style="color:#E1E4E8">		aux </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> ssa.</span><span style="color:#B392F0">StaticAuxCall</span><span style="color:#E1E4E8">(deferprocStack, ACArgs, ACResults) </span><span style="color:#6A737D">// 调用 deferprocStack</span></span>
+<span class="line"><span style="color:#E1E4E8">		arg0 </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> s.</span><span style="color:#B392F0">constOffPtrSP</span><span style="color:#E1E4E8">(types.Types[TUINTPTR], Ctxt.</span><span style="color:#B392F0">FixedFrameSize</span><span style="color:#E1E4E8">())</span></span>
+<span class="line"><span style="color:#E1E4E8">		s.</span><span style="color:#B392F0">store</span><span style="color:#E1E4E8">(types.Types[TUINTPTR], arg0, addr)</span></span>
+<span class="line"><span style="color:#E1E4E8">		call </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> s.</span><span style="color:#B392F0">newValue1A</span><span style="color:#E1E4E8">(ssa.OpStaticCall, types.TypeMem, aux, s.</span><span style="color:#B392F0">mem</span><span style="color:#E1E4E8">())</span></span>
+<span class="line"><span style="color:#E1E4E8">		call.AuxInt </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> stksize</span></span>
+<span class="line"><span style="color:#E1E4E8">	} </span><span style="color:#F97583">else</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">		...</span></span>
+<span class="line"><span style="color:#E1E4E8">	}</span></span>
+<span class="line"><span style="color:#E1E4E8">	s.vars[</span><span style="color:#F97583">&#x26;</span><span style="color:#E1E4E8">memVar] </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> call</span></span>
+<span class="line"><span style="color:#F97583">	...</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>因为在编译期间我们已经创建了 <a href="https://draveness.me/golang/tree/runtime._defer" rel="noopener noreferrer" target="_blank"><code>runtime._defer</code></a> 结构体，所以在运行期间 <a href="https://draveness.me/golang/tree/runtime.deferprocStack" rel="noopener noreferrer" target="_blank"><code>runtime.deferprocStack</code></a> 只需要设置一些未在编译期间初始化的字段，就可以将栈上的 <a href="https://draveness.me/golang/tree/runtime._defer" rel="noopener noreferrer" target="_blank"><code>runtime._defer</code></a> 追加到函数的链表上：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">func</span><span style="color:#B392F0"> deferprocStack</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">d</span><span style="color:#F97583"> *</span><span style="color:#B392F0">_defer</span><span style="color:#E1E4E8">) {</span></span>
+<span class="line"><span style="color:#E1E4E8">	gp </span><span style="color:#F97583">:=</span><span style="color:#B392F0"> getg</span><span style="color:#E1E4E8">()</span></span>
+<span class="line"><span style="color:#E1E4E8">	d.started </span><span style="color:#F97583">=</span><span style="color:#79B8FF"> false</span></span>
+<span class="line"><span style="color:#E1E4E8">	d.heap </span><span style="color:#F97583">=</span><span style="color:#79B8FF"> false</span><span style="color:#6A737D"> // 栈上分配的 _defer</span></span>
+<span class="line"><span style="color:#E1E4E8">	d.openDefer </span><span style="color:#F97583">=</span><span style="color:#79B8FF"> false</span></span>
+<span class="line"><span style="color:#E1E4E8">	d.sp </span><span style="color:#F97583">=</span><span style="color:#B392F0"> getcallersp</span><span style="color:#E1E4E8">()</span></span>
+<span class="line"><span style="color:#E1E4E8">	d.pc </span><span style="color:#F97583">=</span><span style="color:#B392F0"> getcallerpc</span><span style="color:#E1E4E8">()</span></span>
+<span class="line"><span style="color:#E1E4E8">	d.framepc </span><span style="color:#F97583">=</span><span style="color:#79B8FF"> 0</span></span>
+<span class="line"><span style="color:#E1E4E8">	d.varp </span><span style="color:#F97583">=</span><span style="color:#79B8FF"> 0</span></span>
+<span class="line"><span style="color:#F97583">	*</span><span style="color:#E1E4E8">(</span><span style="color:#F97583">*uintptr</span><span style="color:#E1E4E8">)(unsafe.</span><span style="color:#B392F0">Pointer</span><span style="color:#E1E4E8">(</span><span style="color:#F97583">&#x26;</span><span style="color:#E1E4E8">d._panic)) </span><span style="color:#F97583">=</span><span style="color:#79B8FF"> 0</span></span>
+<span class="line"><span style="color:#F97583">	*</span><span style="color:#E1E4E8">(</span><span style="color:#F97583">*uintptr</span><span style="color:#E1E4E8">)(unsafe.</span><span style="color:#B392F0">Pointer</span><span style="color:#E1E4E8">(</span><span style="color:#F97583">&#x26;</span><span style="color:#E1E4E8">d.fd)) </span><span style="color:#F97583">=</span><span style="color:#79B8FF"> 0</span></span>
+<span class="line"><span style="color:#F97583">	*</span><span style="color:#E1E4E8">(</span><span style="color:#F97583">*uintptr</span><span style="color:#E1E4E8">)(unsafe.</span><span style="color:#B392F0">Pointer</span><span style="color:#E1E4E8">(</span><span style="color:#F97583">&#x26;</span><span style="color:#E1E4E8">d.link)) </span><span style="color:#F97583">=</span><span style="color:#F97583"> uintptr</span><span style="color:#E1E4E8">(unsafe.</span><span style="color:#B392F0">Pointer</span><span style="color:#E1E4E8">(gp._defer))</span></span>
+<span class="line"><span style="color:#F97583">	*</span><span style="color:#E1E4E8">(</span><span style="color:#F97583">*uintptr</span><span style="color:#E1E4E8">)(unsafe.</span><span style="color:#B392F0">Pointer</span><span style="color:#E1E4E8">(</span><span style="color:#F97583">&#x26;</span><span style="color:#E1E4E8">gp._defer)) </span><span style="color:#F97583">=</span><span style="color:#F97583"> uintptr</span><span style="color:#E1E4E8">(unsafe.</span><span style="color:#B392F0">Pointer</span><span style="color:#E1E4E8">(d))</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#B392F0">	return0</span><span style="color:#E1E4E8">()</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>除了分配位置的不同，栈上分配和堆上分配的 <a href="https://draveness.me/golang/tree/runtime._defer" rel="noopener noreferrer" target="_blank"><code>runtime._defer</code></a> 并没有本质的不同，而该方法可以适用于绝大多数的场景，与堆上分配的 <a href="https://draveness.me/golang/tree/runtime._defer" rel="noopener noreferrer" target="_blank"><code>runtime._defer</code></a> 相比，该方法可以将 <code>defer</code> 关键字的额外开销降低 ~30%。</p>
+<h3 id="开放编码">开放编码</h3>
+<p>Go 语言在 1.14 中通过开放编码（Open Coded）实现 <code>defer</code> 关键字，该设计使用代码内联优化 <code>defer</code> 关键的额外开销并引入函数数据 <code>funcdata</code> 管理 <code>panic</code> 的调用，该优化可以将 <code>defer</code> 的调用开销从 1.13 版本的 ~35ns 降低至 ~6ns 左右。</p>
+<p>然而开放编码作为一种优化 <code>defer</code> 关键字的方法，它不是在所有的场景下都会开启的，开放编码只会在满足以下的条件时启用：</p>
+<ol>
+<li>函数的 <code>defer</code> 数量少于或者等于 8 个；</li>
+<li>函数的 <code>defer</code> 关键字不能在循环中执行；</li>
+<li>函数的 <code>return</code> 语句与 <code>defer</code> 语句的乘积小于或者等于 15 个；</li>
+</ol>
+<h4 id="启用优化">启用优化</h4>
+<p>Go 语言会在编译期间就确定是否启用开放编码，在编译器生成中间代码之前，我们会使用 <a href="https://draveness.me/golang/tree/cmd/compile/internal/gc.walkstmt" rel="noopener noreferrer" target="_blank"><code>cmd/compile/internal/gc.walkstmt</code></a> 修改已经生成的抽象语法树，设置函数体上的 <code>OpenCodedDeferDisallowed</code> 属性：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">const</span><span style="color:#79B8FF"> maxOpenDefers</span><span style="color:#F97583"> =</span><span style="color:#79B8FF"> 8</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">func</span><span style="color:#B392F0"> walkstmt</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">n</span><span style="color:#F97583"> *</span><span style="color:#B392F0">Node</span><span style="color:#E1E4E8">) </span><span style="color:#F97583">*</span><span style="color:#B392F0">Node</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">	switch</span><span style="color:#E1E4E8"> n.Op {</span></span>
+<span class="line"><span style="color:#F97583">	case</span><span style="color:#E1E4E8"> ODEFER:</span></span>
+<span class="line"><span style="color:#E1E4E8">		Curfn.Func.</span><span style="color:#B392F0">SetHasDefer</span><span style="color:#E1E4E8">(</span><span style="color:#79B8FF">true</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"><span style="color:#E1E4E8">		Curfn.Func.numDefers</span><span style="color:#F97583">++</span></span>
+<span class="line"><span style="color:#F97583">		if</span><span style="color:#E1E4E8"> Curfn.Func.numDefers </span><span style="color:#F97583">></span><span style="color:#E1E4E8"> maxOpenDefers {</span></span>
+<span class="line"><span style="color:#E1E4E8">			Curfn.Func.</span><span style="color:#B392F0">SetOpenCodedDeferDisallowed</span><span style="color:#E1E4E8">(</span><span style="color:#79B8FF">true</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"><span style="color:#E1E4E8">		}</span></span>
+<span class="line"><span style="color:#F97583">		if</span><span style="color:#E1E4E8"> n.Esc </span><span style="color:#F97583">!=</span><span style="color:#E1E4E8"> EscNever {</span></span>
+<span class="line"><span style="color:#E1E4E8">			Curfn.Func.</span><span style="color:#B392F0">SetOpenCodedDeferDisallowed</span><span style="color:#E1E4E8">(</span><span style="color:#79B8FF">true</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"><span style="color:#E1E4E8">		}</span></span>
+<span class="line"><span style="color:#F97583">		fallthrough</span></span>
+<span class="line"><span style="color:#F97583">	...</span></span>
+<span class="line"><span style="color:#E1E4E8">	}</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>就像我们上面提到的，如果函数中 <code>defer</code> 关键字的数量多于 8 个或者 <code>defer</code> 关键字处于 <code>for</code> 循环中，那么我们在这里都会禁用开放编码优化，使用上两节提到的方法处理 <code>defer</code>。</p>
+<p>在 SSA 中间代码生成阶段的 <a href="https://draveness.me/golang/tree/cmd/compile/internal/gc.buildssa" rel="noopener noreferrer" target="_blank"><code>cmd/compile/internal/gc.buildssa</code></a> 中，我们也能够看到启用开放编码优化的其他条件，也就是返回语句的数量与 <code>defer</code> 数量的乘积需要小于 15：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">func</span><span style="color:#B392F0"> buildssa</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">fn</span><span style="color:#F97583"> *</span><span style="color:#B392F0">Node</span><span style="color:#E1E4E8">, </span><span style="color:#FFAB70">worker</span><span style="color:#F97583"> int</span><span style="color:#E1E4E8">) </span><span style="color:#F97583">*</span><span style="color:#B392F0">ssa</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">Func</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">	...</span></span>
+<span class="line"><span style="color:#E1E4E8">	s.hasOpenDefers </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> s.hasdefer </span><span style="color:#F97583">&#x26;&#x26;</span><span style="color:#F97583"> !</span><span style="color:#E1E4E8">s.curfn.Func.</span><span style="color:#B392F0">OpenCodedDeferDisallowed</span><span style="color:#E1E4E8">()</span></span>
+<span class="line"><span style="color:#F97583">	...</span></span>
+<span class="line"><span style="color:#F97583">	if</span><span style="color:#E1E4E8"> s.hasOpenDefers </span><span style="color:#F97583">&#x26;&#x26;</span></span>
+<span class="line"><span style="color:#E1E4E8">		s.curfn.Func.numReturns</span><span style="color:#F97583">*</span><span style="color:#E1E4E8">s.curfn.Func.numDefers </span><span style="color:#F97583">></span><span style="color:#79B8FF"> 15</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">		s.hasOpenDefers </span><span style="color:#F97583">=</span><span style="color:#79B8FF"> false</span></span>
+<span class="line"><span style="color:#E1E4E8">	}</span></span>
+<span class="line"><span style="color:#F97583">	...</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>中间代码生成的这两个步骤会决定当前函数是否应该使用开放编码优化 <code>defer</code> 关键字，一旦确定使用开放编码，就会在编译期间初始化延迟比特和延迟记录。</p>
+<h4 id="延迟记录">延迟记录</h4>
+<p>延迟比特和延迟记录是使用开放编码实现 <code>defer</code> 的两个最重要结构，一旦决定使用开放编码，<a href="https://draveness.me/golang/tree/cmd/compile/internal/gc.buildssa" rel="noopener noreferrer" target="_blank"><code>cmd/compile/internal/gc.buildssa</code></a> 会在编译期间在栈上初始化大小为 8 个比特的 <code>deferBits</code> 变量：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">func</span><span style="color:#B392F0"> buildssa</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">fn</span><span style="color:#F97583"> *</span><span style="color:#B392F0">Node</span><span style="color:#E1E4E8">, </span><span style="color:#FFAB70">worker</span><span style="color:#F97583"> int</span><span style="color:#E1E4E8">) </span><span style="color:#F97583">*</span><span style="color:#B392F0">ssa</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">Func</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">	...</span></span>
+<span class="line"><span style="color:#F97583">	if</span><span style="color:#E1E4E8"> s.hasOpenDefers {</span></span>
+<span class="line"><span style="color:#E1E4E8">		deferBitsTemp </span><span style="color:#F97583">:=</span><span style="color:#B392F0"> tempAt</span><span style="color:#E1E4E8">(src.NoXPos, s.curfn, types.Types[TUINT8]) </span><span style="color:#6A737D">// 初始化延迟比特</span></span>
+<span class="line"><span style="color:#E1E4E8">		s.deferBitsTemp </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> deferBitsTemp</span></span>
+<span class="line"><span style="color:#E1E4E8">		startDeferBits </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> s.</span><span style="color:#B392F0">entryNewValue0</span><span style="color:#E1E4E8">(ssa.OpConst8, types.Types[TUINT8])</span></span>
+<span class="line"><span style="color:#E1E4E8">		s.vars[</span><span style="color:#F97583">&#x26;</span><span style="color:#E1E4E8">deferBitsVar] </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> startDeferBits</span></span>
+<span class="line"><span style="color:#E1E4E8">		s.deferBitsAddr </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> s.</span><span style="color:#B392F0">addr</span><span style="color:#E1E4E8">(deferBitsTemp)</span></span>
+<span class="line"><span style="color:#E1E4E8">		s.</span><span style="color:#B392F0">store</span><span style="color:#E1E4E8">(types.Types[TUINT8], s.deferBitsAddr, startDeferBits)</span></span>
+<span class="line"><span style="color:#E1E4E8">		s.vars[</span><span style="color:#F97583">&#x26;</span><span style="color:#E1E4E8">memVar] </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> s.</span><span style="color:#B392F0">newValue1Apos</span><span style="color:#E1E4E8">(ssa.OpVarLive, types.TypeMem, deferBitsTemp, s.</span><span style="color:#B392F0">mem</span><span style="color:#E1E4E8">(), </span><span style="color:#79B8FF">false</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"><span style="color:#E1E4E8">	}</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>延迟比特中的每一个比特位都表示该位对应的 <code>defer</code> 关键字是否需要被执行。</p>
+<p>因为不是函数中所有的 <code>defer</code> 语句都会在函数返回前执行，如下所示的代码只会在 <code>if</code> 语句的条件为真时，其中的 <code>defer</code> 语句才会在结尾被执行</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#E1E4E8">deferBits </span><span style="color:#F97583">:=</span><span style="color:#79B8FF"> 0</span><span style="color:#6A737D"> // 初始化 deferBits</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#E1E4E8">_f1, _a1 </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> f1, a1  </span><span style="color:#6A737D">// 保存函数以及参数</span></span>
+<span class="line"><span style="color:#E1E4E8">deferBits </span><span style="color:#F97583">|=</span><span style="color:#79B8FF"> 1</span><span style="color:#F97583"> &#x3C;&#x3C;</span><span style="color:#79B8FF"> 0</span><span style="color:#6A737D"> // 将 deferBits 最后一位置位 1</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">if</span><span style="color:#E1E4E8"> condition {</span></span>
+<span class="line"><span style="color:#E1E4E8">    _f2, _a2 </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> f2, a2  </span><span style="color:#6A737D">// 保存函数以及参数</span></span>
+<span class="line"><span style="color:#E1E4E8">    deferBits </span><span style="color:#F97583">|=</span><span style="color:#79B8FF"> 1</span><span style="color:#F97583"> &#x3C;&#x3C;</span><span style="color:#79B8FF"> 1</span><span style="color:#6A737D"> // 将 deferBits 倒数第二位置位 1</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span>
+<span class="line"><span style="color:#E1E4E8">exit:</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">if</span><span style="color:#E1E4E8"> deferBits </span><span style="color:#F97583">&#x26;</span><span style="color:#79B8FF"> 1</span><span style="color:#F97583"> &#x3C;&#x3C;</span><span style="color:#79B8FF"> 1</span><span style="color:#F97583"> !=</span><span style="color:#79B8FF"> 0</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">    deferBits </span><span style="color:#F97583">&#x26;^=</span><span style="color:#79B8FF"> 1</span><span style="color:#F97583"> &#x3C;&#x3C;</span><span style="color:#79B8FF"> 1</span></span>
+<span class="line"><span style="color:#B392F0">    _f2</span><span style="color:#E1E4E8">(a2)</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">if</span><span style="color:#E1E4E8"> deferBits </span><span style="color:#F97583">&#x26;</span><span style="color:#79B8FF"> 1</span><span style="color:#F97583"> &#x3C;&#x3C;</span><span style="color:#79B8FF"> 0</span><span style="color:#F97583"> !=</span><span style="color:#79B8FF"> 0</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">    deferBits </span><span style="color:#F97583">&#x26;^=</span><span style="color:#79B8FF"> 1</span><span style="color:#F97583"> &#x3C;&#x3C;</span><span style="color:#79B8FF"> 0</span></span>
+<span class="line"><span style="color:#B392F0">    _f1</span><span style="color:#E1E4E8">(a1)</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>延迟比特的作用就是标记哪些 <code>defer</code> 关键字在函数中被执行，这样在函数返回时可以根据对应 <code>deferBits</code> 的内容确定执行的函数，而正是因为 <code>deferBits</code> 的大小仅为 8 比特，所以该优化的启用条件为函数中的 <code>defer</code> 关键字少于 8 个。</p>
+<p>上述伪代码展示了开放编码的实现原理，但是仍然缺少了一些细节，例如：传入 <code>defer</code> 关键字的函数和参数都会存储在如下所示的 <a href="https://draveness.me/golang/tree/cmd/compile/internal/gc.openDeferInfo" rel="noopener noreferrer" target="_blank"><code>cmd/compile/internal/gc.openDeferInfo</code></a> 结构体中：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">type</span><span style="color:#B392F0"> openDeferInfo</span><span style="color:#F97583"> struct</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">	n           </span><span style="color:#F97583">*</span><span style="color:#B392F0">Node</span></span>
+<span class="line"><span style="color:#E1E4E8">	closure     </span><span style="color:#F97583">*</span><span style="color:#B392F0">ssa</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">Value</span></span>
+<span class="line"><span style="color:#E1E4E8">	closureNode </span><span style="color:#F97583">*</span><span style="color:#B392F0">Node</span></span>
+<span class="line"><span style="color:#E1E4E8">	rcvr        </span><span style="color:#F97583">*</span><span style="color:#B392F0">ssa</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">Value</span></span>
+<span class="line"><span style="color:#E1E4E8">	rcvrNode    </span><span style="color:#F97583">*</span><span style="color:#B392F0">Node</span></span>
+<span class="line"><span style="color:#E1E4E8">	argVals     []</span><span style="color:#F97583">*</span><span style="color:#B392F0">ssa</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">Value</span></span>
+<span class="line"><span style="color:#E1E4E8">	argNodes    []</span><span style="color:#F97583">*</span><span style="color:#B392F0">Node</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>当编译器在调用 <a href="https://draveness.me/golang/tree/cmd/compile/internal/gc.buildssa" rel="noopener noreferrer" target="_blank"><code>cmd/compile/internal/gc.buildssa</code></a> 构建中间代码时会通过 <a href="https://draveness.me/golang/tree/cmd/compile/internal/gc.state.openDeferRecord" rel="noopener noreferrer" target="_blank"><code>cmd/compile/internal/gc.state.openDeferRecord</code></a> 方法在栈上构建结构体，该结构体的 <code>closure</code> 中存储着调用的函数，<code>rcvr</code> 中存储着方法的接收者，而最后的 <code>argVals</code> 中存储了函数的参数。</p>
+<p>很多 <code>defer</code> 语句都可以在编译期间判断是否被执行，如果函数中的 <code>defer</code> 语句都会在编译期间确定，中间代码生成阶段就会直接调用 <a href="https://draveness.me/golang/tree/cmd/compile/internal/gc.state.openDeferExit" rel="noopener noreferrer" target="_blank"><code>cmd/compile/internal/gc.state.openDeferExit</code></a> 在函数返回前生成判断 <code>deferBits</code> 的代码，也就是上述伪代码中的后半部分。</p>
+<p>不过当程序遇到运行时才能判断的条件语句时，我们仍然需要由运行时的 <a href="https://draveness.me/golang/tree/runtime.deferreturn" rel="noopener noreferrer" target="_blank"><code>runtime.deferreturn</code></a> 决定是否执行 <code>defer</code> 关键字：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">func</span><span style="color:#B392F0"> deferreturn</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">arg0</span><span style="color:#F97583"> uintptr</span><span style="color:#E1E4E8">) {</span></span>
+<span class="line"><span style="color:#E1E4E8">	gp </span><span style="color:#F97583">:=</span><span style="color:#B392F0"> getg</span><span style="color:#E1E4E8">()</span></span>
+<span class="line"><span style="color:#E1E4E8">	d </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> gp._defer</span></span>
+<span class="line"><span style="color:#E1E4E8">	sp </span><span style="color:#F97583">:=</span><span style="color:#B392F0"> getcallersp</span><span style="color:#E1E4E8">()</span></span>
+<span class="line"><span style="color:#F97583">	if</span><span style="color:#E1E4E8"> d.openDefer {</span></span>
+<span class="line"><span style="color:#B392F0">		runOpenDeferFrame</span><span style="color:#E1E4E8">(gp, d)</span></span>
+<span class="line"><span style="color:#E1E4E8">		gp._defer </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> d.link</span></span>
+<span class="line"><span style="color:#B392F0">		freedefer</span><span style="color:#E1E4E8">(d)</span></span>
+<span class="line"><span style="color:#F97583">		return</span></span>
+<span class="line"><span style="color:#E1E4E8">	}</span></span>
+<span class="line"><span style="color:#F97583">	...</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>该函数为开放编码做了特殊的优化，运行时会调用 <a href="https://draveness.me/golang/tree/runtime.runOpenDeferFrame" rel="noopener noreferrer" target="_blank"><code>runtime.runOpenDeferFrame</code></a> 执行活跃的开放编码延迟函数，该函数会执行以下的工作：</p>
+<ol>
+<li>从 <a href="https://draveness.me/golang/tree/runtime._defer" rel="noopener noreferrer" target="_blank"><code>runtime._defer</code></a> 结构体中读取 <code>deferBits</code>、函数 <code>defer</code> 数量等信息；</li>
+<li>在循环中依次读取函数的地址和参数信息并通过 <code>deferBits</code> 判断该函数是否需要被执行；</li>
+<li>调用 <a href="https://draveness.me/golang/tree/runtime.reflectcallSave" rel="noopener noreferrer" target="_blank"><code>runtime.reflectcallSave</code></a> 调用需要执行的 <code>defer</code> 函数；</li>
+</ol>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">func</span><span style="color:#B392F0"> runOpenDeferFrame</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">gp</span><span style="color:#F97583"> *</span><span style="color:#B392F0">g</span><span style="color:#E1E4E8">, </span><span style="color:#FFAB70">d</span><span style="color:#F97583"> *</span><span style="color:#B392F0">_defer</span><span style="color:#E1E4E8">) </span><span style="color:#F97583">bool</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">	fd </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> d.fd</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">	...</span></span>
+<span class="line"><span style="color:#E1E4E8">	deferBitsOffset, fd </span><span style="color:#F97583">:=</span><span style="color:#B392F0"> readvarintUnsafe</span><span style="color:#E1E4E8">(fd)</span></span>
+<span class="line"><span style="color:#E1E4E8">	nDefers, fd </span><span style="color:#F97583">:=</span><span style="color:#B392F0"> readvarintUnsafe</span><span style="color:#E1E4E8">(fd)</span></span>
+<span class="line"><span style="color:#E1E4E8">	deferBits </span><span style="color:#F97583">:=</span><span style="color:#F97583"> *</span><span style="color:#E1E4E8">(</span><span style="color:#F97583">*uint8</span><span style="color:#E1E4E8">)(unsafe.</span><span style="color:#B392F0">Pointer</span><span style="color:#E1E4E8">(d.varp </span><span style="color:#F97583">-</span><span style="color:#F97583"> uintptr</span><span style="color:#E1E4E8">(deferBitsOffset)))</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">	for</span><span style="color:#E1E4E8"> i </span><span style="color:#F97583">:=</span><span style="color:#F97583"> int</span><span style="color:#E1E4E8">(nDefers) </span><span style="color:#F97583">-</span><span style="color:#79B8FF"> 1</span><span style="color:#E1E4E8">; i </span><span style="color:#F97583">>=</span><span style="color:#79B8FF"> 0</span><span style="color:#E1E4E8">; i</span><span style="color:#F97583">--</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">		var</span><span style="color:#E1E4E8"> argWidth, closureOffset, nArgs </span><span style="color:#F97583">uint32</span><span style="color:#6A737D"> // 读取函数的地址和参数信息</span></span>
+<span class="line"><span style="color:#E1E4E8">		argWidth, fd </span><span style="color:#F97583">=</span><span style="color:#B392F0"> readvarintUnsafe</span><span style="color:#E1E4E8">(fd)</span></span>
+<span class="line"><span style="color:#E1E4E8">		closureOffset, fd </span><span style="color:#F97583">=</span><span style="color:#B392F0"> readvarintUnsafe</span><span style="color:#E1E4E8">(fd)</span></span>
+<span class="line"><span style="color:#E1E4E8">		nArgs, fd </span><span style="color:#F97583">=</span><span style="color:#B392F0"> readvarintUnsafe</span><span style="color:#E1E4E8">(fd)</span></span>
+<span class="line"><span style="color:#F97583">		if</span><span style="color:#E1E4E8"> deferBits</span><span style="color:#F97583">&#x26;</span><span style="color:#E1E4E8">(</span><span style="color:#79B8FF">1</span><span style="color:#F97583">&#x3C;&#x3C;</span><span style="color:#E1E4E8">i) </span><span style="color:#F97583">==</span><span style="color:#79B8FF"> 0</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">			...</span></span>
+<span class="line"><span style="color:#F97583">			continue</span></span>
+<span class="line"><span style="color:#E1E4E8">		}</span></span>
+<span class="line"><span style="color:#E1E4E8">		closure </span><span style="color:#F97583">:=</span><span style="color:#F97583"> *</span><span style="color:#E1E4E8">(</span><span style="color:#F97583">**</span><span style="color:#B392F0">funcval</span><span style="color:#E1E4E8">)(unsafe.</span><span style="color:#B392F0">Pointer</span><span style="color:#E1E4E8">(d.varp </span><span style="color:#F97583">-</span><span style="color:#F97583"> uintptr</span><span style="color:#E1E4E8">(closureOffset)))</span></span>
+<span class="line"><span style="color:#E1E4E8">		d.fn </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> closure</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">		...</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#E1E4E8">		deferBits </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> deferBits </span><span style="color:#F97583">&#x26;^</span><span style="color:#E1E4E8"> (</span><span style="color:#79B8FF">1</span><span style="color:#F97583"> &#x3C;&#x3C;</span><span style="color:#E1E4E8"> i)</span></span>
+<span class="line"><span style="color:#F97583">		*</span><span style="color:#E1E4E8">(</span><span style="color:#F97583">*uint8</span><span style="color:#E1E4E8">)(unsafe.</span><span style="color:#B392F0">Pointer</span><span style="color:#E1E4E8">(d.varp </span><span style="color:#F97583">-</span><span style="color:#F97583"> uintptr</span><span style="color:#E1E4E8">(deferBitsOffset))) </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> deferBits</span></span>
+<span class="line"><span style="color:#E1E4E8">		p </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> d._panic</span></span>
+<span class="line"><span style="color:#B392F0">		reflectcallSave</span><span style="color:#E1E4E8">(p, unsafe.</span><span style="color:#B392F0">Pointer</span><span style="color:#E1E4E8">(closure), deferArgs, argWidth)</span></span>
+<span class="line"><span style="color:#F97583">		if</span><span style="color:#E1E4E8"> p </span><span style="color:#F97583">!=</span><span style="color:#79B8FF"> nil</span><span style="color:#F97583"> &#x26;&#x26;</span><span style="color:#E1E4E8"> p.aborted {</span></span>
+<span class="line"><span style="color:#F97583">			break</span></span>
+<span class="line"><span style="color:#E1E4E8">		}</span></span>
+<span class="line"><span style="color:#E1E4E8">		d.fn </span><span style="color:#F97583">=</span><span style="color:#79B8FF"> nil</span></span>
+<span class="line"><span style="color:#B392F0">		memclrNoHeapPointers</span><span style="color:#E1E4E8">(deferArgs, </span><span style="color:#F97583">uintptr</span><span style="color:#E1E4E8">(argWidth))</span></span>
+<span class="line"><span style="color:#F97583">		...</span></span>
+<span class="line"><span style="color:#E1E4E8">	}</span></span>
+<span class="line"><span style="color:#F97583">	return</span><span style="color:#E1E4E8"> done</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<h3 id="总结">总结</h3>
+<p>三种机制：</p>
+<ul>
+<li>堆上分配 · 1.1 ~ 1.12
+<ul>
+<li>编译期将 <code>defer</code> 关键字转换成 <a href="https://draveness.me/golang/tree/runtime.deferproc" rel="noopener noreferrer" target="_blank"><code>runtime.deferproc</code></a> 并在调用 <code>defer</code> 关键字的函数返回之前插入 <a href="https://draveness.me/golang/tree/runtime.deferreturn" rel="noopener noreferrer" target="_blank"><code>runtime.deferreturn</code></a>；</li>
+<li>运行时调用 <a href="https://draveness.me/golang/tree/runtime.deferproc" rel="noopener noreferrer" target="_blank"><code>runtime.deferproc</code></a> 会将一个新的 <a href="https://draveness.me/golang/tree/runtime._defer" rel="noopener noreferrer" target="_blank"><code>runtime._defer</code></a> 结构体追加到当前 Goroutine 的链表头；</li>
+<li>运行时调用 <a href="https://draveness.me/golang/tree/runtime.deferreturn" rel="noopener noreferrer" target="_blank"><code>runtime.deferreturn</code></a> 会从 Goroutine 的链表中取出 <a href="https://draveness.me/golang/tree/runtime._defer" rel="noopener noreferrer" target="_blank"><code>runtime._defer</code></a> 结构并依次执行；</li>
+</ul>
+</li>
+<li>栈上分配 · 1.13
+<ul>
+<li>当该关键字在函数体中最多执行一次时，编译期间的 <a href="https://draveness.me/golang/tree/cmd/compile/internal/gc.state.call" rel="noopener noreferrer" target="_blank"><code>cmd/compile/internal/gc.state.call</code></a> 会将结构体分配到栈上并调用 <a href="https://draveness.me/golang/tree/runtime.deferprocStack" rel="noopener noreferrer" target="_blank"><code>runtime.deferprocStack</code></a>；</li>
+</ul>
+</li>
+<li>开放编码 · 1.14 ~ 现在
+<ul>
+<li>编译期间判断 <code>defer</code> 关键字、<code>return</code> 语句的个数确定是否开启开放编码优化；</li>
+<li>通过 <code>deferBits</code> 和 <a href="https://draveness.me/golang/tree/cmd/compile/internal/gc.openDeferInfo" rel="noopener noreferrer" target="_blank"><code>cmd/compile/internal/gc.openDeferInfo</code></a> 存储 <code>defer</code> 关键字的相关信息；</li>
+<li>如果 <code>defer</code> 关键字的执行可以在编译期间确定，会在函数返回前直接插入相应的代码，否则会由运行时的 <a href="https://draveness.me/golang/tree/runtime.deferreturn" rel="noopener noreferrer" target="_blank"><code>runtime.deferreturn</code></a> 处理；</li>
+</ul>
+</li>
+</ul>
+<h2 id="paincrecovery">painc&#x26;&#x26;recovery</h2>
+<ul>
+<li><code>panic</code> 能够改变程序的控制流，调用 <code>panic</code> 后会立刻停止执行当前函数的剩余代码，并在当前 Goroutine 中递归执行调用方的 <code>defer</code>；</li>
+<li><code>recover</code> 可以中止 <code>panic</code> 造成的程序崩溃。它是一个只能在 <code>defer</code> 中发挥作用的函数，在其他作用域中调用不会发挥作用；</li>
+</ul>
+<h3 id="现象">现象</h3>
+<ul>
+<li><code>panic</code> 只会触发当前 Goroutine 的 <code>defer</code>；</li>
+<li><code>recover</code> 只有在 <code>defer</code> 中调用才会生效；</li>
+<li><code>panic</code> 允许在 <code>defer</code> 中嵌套多次调用；</li>
+</ul>
+<p>如果代码为：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">package</span><span style="color:#B392F0"> main</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">import</span><span style="color:#E1E4E8"> (</span></span>
+<span class="line"><span style="color:#9ECBFF">	"</span><span style="color:#B392F0">time</span><span style="color:#9ECBFF">"</span></span>
+<span class="line"><span style="color:#E1E4E8">)</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">func</span><span style="color:#B392F0"> main</span><span style="color:#E1E4E8">() {</span></span>
+<span class="line"><span style="color:#B392F0">  println</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">"start main"</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"><span style="color:#F97583">	defer</span><span style="color:#B392F0"> println</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">"in main"</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"><span style="color:#E1E4E8">	testChan </span><span style="color:#F97583">:=</span><span style="color:#B392F0"> make</span><span style="color:#E1E4E8">(</span><span style="color:#F97583">chan</span><span style="color:#F97583"> int</span><span style="color:#E1E4E8">, </span><span style="color:#79B8FF">10</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"><span style="color:#F97583">	go</span><span style="color:#F97583"> func</span><span style="color:#E1E4E8">() {</span></span>
+<span class="line"><span style="color:#F97583">		for</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">			select</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">			case</span><span style="color:#E1E4E8"> val, ok </span><span style="color:#F97583">:=</span><span style="color:#F97583"> &#x3C;-</span><span style="color:#E1E4E8">testChan:</span></span>
+<span class="line"><span style="color:#B392F0">				println</span><span style="color:#E1E4E8">(val, ok)</span></span>
+<span class="line"><span style="color:#E1E4E8">			}</span></span>
+<span class="line"><span style="color:#E1E4E8">		}</span></span>
+<span class="line"><span style="color:#E1E4E8">	}()</span></span>
+<span class="line"><span style="color:#F97583">	go</span><span style="color:#F97583"> func</span><span style="color:#E1E4E8">() {</span></span>
+<span class="line"><span style="color:#F97583">		defer</span><span style="color:#B392F0"> println</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">"in goroutine"</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"><span style="color:#B392F0">		panic</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">""</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"><span style="color:#E1E4E8">	}()</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#E1E4E8">	time.</span><span style="color:#B392F0">Sleep</span><span style="color:#E1E4E8">(</span><span style="color:#79B8FF">1</span><span style="color:#F97583"> *</span><span style="color:#E1E4E8"> time.Second)</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>设置一个env：<code>GOTRACEBACK=1</code></p>
+<p>官方解释：</p>
+<blockquote>
+<p>The GOTRACEBACK variable controls the amount of output generated when a Go program fails due to an unrecovered panic or an unexpected runtime condition. <code>By default, a failure prints a stack trace for the current goroutine</code>, eliding functions internal to the run-time system, and then exits with exit code 2. The failure prints stack traces for all goroutines if there is no current goroutine or the failure is internal to the run-time. <code>GOTRACEBACK=none omits the goroutine stack traces entirely</code>. <code>GOTRACEBACK=single (the default) behaves as described above.</code> <code>GOTRACEBACK=all adds stack traces for all user-created goroutines</code>. <code>GOTRACEBACK=system is like “all” but adds stack frames for run-time functions and shows goroutines created internally by the run-time</code>. <code>GOTRACEBACK=crash is like “system” but crashes in an operating system-specific manner instead of exiting.</code> For example, on Unix systems, the crash raises SIGABRT to trigger a core dump. For historical reasons, the GOTRACEBACK settings 0, 1, and 2 are synonyms for none, all, and system, respectively. The runtime/debug package’s SetTraceback function allows increasing the amount of output at run time, but it cannot reduce the amount below that specified by the environment variable.</p>
+</blockquote>
+<p>也就是GOTRACEBACK可以有如下取值：</p>
+<ul>
+<li>none(0)：屏蔽崩溃的栈输出</li>
+<li>single(默认值)：只输出当前goroutine的栈</li>
+<li>all(1)：输出所有用户创建的goroutines的栈</li>
+<li>system(2)：除了all，还有一些系统级别的goroutines，例如垃圾回收goroutine</li>
+<li>crash：除了system的输出，还可以包括core文件，可以用于定位问题</li>
+</ul>
+<p>则其输出为：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="plaintext"><code><span class="line"><span>start main</span></span>
+<span class="line"><span>in goroutine</span></span>
+<span class="line"><span>panic: </span></span>
+<span class="line"><span></span></span>
+<span class="line"><span>goroutine 6 [running]:</span></span>
+<span class="line"><span>main.main.func2()</span></span>
+<span class="line"><span>        /Users/hxsup/go/src/github.com/hTangle/test-go/main.go:20 +0x7b</span></span>
+<span class="line"><span>created by main.main</span></span>
+<span class="line"><span>        /Users/hxsup/go/src/github.com/hTangle/test-go/main.go:18 +0xd3</span></span>
+<span class="line"><span></span></span>
+<span class="line"><span>goroutine 1 [sleep]:</span></span>
+<span class="line"><span>time.Sleep(0x3b9aca00)</span></span>
+<span class="line"><span>        /usr/local/go/src/runtime/time.go:193 +0x12e</span></span>
+<span class="line"><span>main.main()</span></span>
+<span class="line"><span>        /Users/hxsup/go/src/github.com/hTangle/test-go/main.go:23 +0xdd</span></span>
+<span class="line"><span></span></span>
+<span class="line"><span>goroutine 5 [chan receive]:</span></span>
+<span class="line"><span>main.main.func1()</span></span>
+<span class="line"><span>        /Users/hxsup/go/src/github.com/hTangle/test-go/main.go:13 +0x27</span></span>
+<span class="line"><span>created by main.main</span></span>
+<span class="line"><span>        /Users/hxsup/go/src/github.com/hTangle/test-go/main.go:10 +0xc5</span></span></code></pre>
+<p>可以看到，函数执行了go函数中的defer函数，但是没有执行main中的defer函数，说明<code>panic</code> 只会触发当前 Goroutine 的 <code>defer</code>。</p>
+<h3 id="panic数据结构">panic数据结构</h3>
+<p><code>panic</code> 关键字在 Go 语言的源代码是由数据结构 <a href="https://draveness.me/golang/tree/runtime._panic" rel="noopener noreferrer" target="_blank"><code>runtime._panic</code></a> 表示的。每当我们调用 <code>panic</code> 都会创建一个如下所示的数据结构存储相关信息：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#6A737D">// A _panic holds information about an active panic.</span></span>
+<span class="line"><span style="color:#6A737D">//</span></span>
+<span class="line"><span style="color:#6A737D">// A _panic value must only ever live on the stack.</span></span>
+<span class="line"><span style="color:#6A737D">//</span></span>
+<span class="line"><span style="color:#6A737D">// The argp and link fields are stack pointers, but don't need special</span></span>
+<span class="line"><span style="color:#6A737D">// handling during stack growth: because they are pointer-typed and</span></span>
+<span class="line"><span style="color:#6A737D">// _panic values only live on the stack, regular stack pointer</span></span>
+<span class="line"><span style="color:#6A737D">// adjustment takes care of them.</span></span>
+<span class="line"><span style="color:#F97583">type</span><span style="color:#B392F0"> _panic</span><span style="color:#F97583"> struct</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">	argp      </span><span style="color:#B392F0">unsafe</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">Pointer</span><span style="color:#6A737D"> // pointer to arguments of deferred call run during panic; cannot move - known to liblink</span></span>
+<span class="line"><span style="color:#E1E4E8">	arg       </span><span style="color:#F97583">interface</span><span style="color:#E1E4E8">{}    </span><span style="color:#6A737D">// argument to panic</span></span>
+<span class="line"><span style="color:#E1E4E8">	link      </span><span style="color:#F97583">*</span><span style="color:#B392F0">_panic</span><span style="color:#6A737D">        // link to earlier panic</span></span>
+<span class="line"><span style="color:#E1E4E8">	pc        </span><span style="color:#F97583">uintptr</span><span style="color:#6A737D">        // where to return to in runtime if this panic is bypassed</span></span>
+<span class="line"><span style="color:#E1E4E8">	sp        </span><span style="color:#B392F0">unsafe</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">Pointer</span><span style="color:#6A737D"> // where to return to in runtime if this panic is bypassed</span></span>
+<span class="line"><span style="color:#E1E4E8">	recovered </span><span style="color:#F97583">bool</span><span style="color:#6A737D">           // whether this panic is over</span></span>
+<span class="line"><span style="color:#E1E4E8">	aborted   </span><span style="color:#F97583">bool</span><span style="color:#6A737D">           // the panic was aborted</span></span>
+<span class="line"><span style="color:#E1E4E8">	goexit    </span><span style="color:#F97583">bool</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<ol>
+<li><code>argp</code> 是指向 <code>defer</code> 调用时参数的指针；</li>
+<li><code>arg</code> 是调用 <code>panic</code> 时传入的参数；</li>
+<li><code>link</code> 指向了更早调用的 <a href="https://draveness.me/golang/tree/runtime._panic" rel="noopener noreferrer" target="_blank"><code>runtime._panic</code></a> 结构；</li>
+<li><code>recovered</code> 表示当前 <a href="https://draveness.me/golang/tree/runtime._panic" rel="noopener noreferrer" target="_blank"><code>runtime._panic</code></a> 是否被 <code>recover</code> 恢复；</li>
+<li><code>aborted</code> 表示当前的 <code>panic</code> 是否被强行终止；</li>
+</ol>
+<p>从数据结构中的 <code>link</code> 字段我们就可以推测出以下的结论：<code>panic</code> 函数可以被连续多次调用，它们之间通过 <code>link</code> 可以组成链表。</p>
+<p>结构体中的 <code>pc</code>、<code>sp</code> 和 <code>goexit</code> 三个字段都是为了修复 <a href="https://draveness.me/golang/tree/runtime.Goexit" rel="noopener noreferrer" target="_blank"><code>runtime.Goexit</code></a> 带来的问题引入的。<a href="https://draveness.me/golang/tree/runtime.Goexit" rel="noopener noreferrer" target="_blank"><code>runtime.Goexit</code></a> 能够只结束调用该函数的 Goroutine 而不影响其他的 Goroutine，但是该函数会被 <code>defer</code> 中的 <code>panic</code> 和 <code>recover</code> 取消，引入这三个字段就是为了保证该函数的一定会生效。</p>
+<h3 id="程序崩溃">程序崩溃</h3>
+<p>编译器会将关键字 <code>panic</code> 转换成 <a href="https://draveness.me/golang/tree/runtime.gopanic" rel="noopener noreferrer" target="_blank"><code>runtime.gopanic</code></a>，该函数的执行过程包含以下几个步骤：</p>
+<ol>
+<li>创建新的 <a href="https://draveness.me/golang/tree/runtime._panic" rel="noopener noreferrer" target="_blank"><code>runtime._panic</code></a> 并添加到所在 Goroutine 的 <code>_panic</code> 链表的最前面；</li>
+<li>在循环中不断从当前 Goroutine 的 <code>_defer</code> 中链表获取 <a href="https://draveness.me/golang/tree/runtime._defer" rel="noopener noreferrer" target="_blank"><code>runtime._defer</code></a> 并调用 <a href="https://draveness.me/golang/tree/runtime.reflectcall" rel="noopener noreferrer" target="_blank"><code>runtime.reflectcall</code></a> 运行延迟调用函数；</li>
+<li>调用 <a href="https://draveness.me/golang/tree/runtime.fatalpanic" rel="noopener noreferrer" target="_blank"><code>runtime.fatalpanic</code></a> 中止整个程序；</li>
+</ol>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">func</span><span style="color:#B392F0"> gopanic</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">e</span><span style="color:#F97583"> interface</span><span style="color:#E1E4E8">{}) {</span></span>
+<span class="line"><span style="color:#E1E4E8">	gp </span><span style="color:#F97583">:=</span><span style="color:#B392F0"> getg</span><span style="color:#E1E4E8">()</span></span>
+<span class="line"><span style="color:#F97583">	...</span></span>
+<span class="line"><span style="color:#F97583">	var</span><span style="color:#E1E4E8"> p </span><span style="color:#B392F0">_panic</span></span>
+<span class="line"><span style="color:#E1E4E8">	p.arg </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> e</span></span>
+<span class="line"><span style="color:#E1E4E8">	p.link </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> gp._panic</span></span>
+<span class="line"><span style="color:#E1E4E8">	gp._panic </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> (</span><span style="color:#F97583">*</span><span style="color:#B392F0">_panic</span><span style="color:#E1E4E8">)(</span><span style="color:#B392F0">noescape</span><span style="color:#E1E4E8">(unsafe.</span><span style="color:#B392F0">Pointer</span><span style="color:#E1E4E8">(</span><span style="color:#F97583">&#x26;</span><span style="color:#E1E4E8">p)))</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">	for</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">		d </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> gp._defer</span></span>
+<span class="line"><span style="color:#F97583">		if</span><span style="color:#E1E4E8"> d </span><span style="color:#F97583">==</span><span style="color:#79B8FF"> nil</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">			break</span></span>
+<span class="line"><span style="color:#E1E4E8">		}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#E1E4E8">		d._panic </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> (</span><span style="color:#F97583">*</span><span style="color:#B392F0">_panic</span><span style="color:#E1E4E8">)(</span><span style="color:#B392F0">noescape</span><span style="color:#E1E4E8">(unsafe.</span><span style="color:#B392F0">Pointer</span><span style="color:#E1E4E8">(</span><span style="color:#F97583">&#x26;</span><span style="color:#E1E4E8">p)))</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#B392F0">		reflectcall</span><span style="color:#E1E4E8">(</span><span style="color:#79B8FF">nil</span><span style="color:#E1E4E8">, unsafe.</span><span style="color:#B392F0">Pointer</span><span style="color:#E1E4E8">(d.fn), </span><span style="color:#B392F0">deferArgs</span><span style="color:#E1E4E8">(d), </span><span style="color:#F97583">uint32</span><span style="color:#E1E4E8">(d.siz), </span><span style="color:#F97583">uint32</span><span style="color:#E1E4E8">(d.siz))</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#E1E4E8">		d._panic </span><span style="color:#F97583">=</span><span style="color:#79B8FF"> nil</span></span>
+<span class="line"><span style="color:#E1E4E8">		d.fn </span><span style="color:#F97583">=</span><span style="color:#79B8FF"> nil</span></span>
+<span class="line"><span style="color:#E1E4E8">		gp._defer </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> d.link</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#B392F0">		freedefer</span><span style="color:#E1E4E8">(d)</span></span>
+<span class="line"><span style="color:#F97583">		if</span><span style="color:#E1E4E8"> p.recovered {</span></span>
+<span class="line"><span style="color:#F97583">			...</span></span>
+<span class="line"><span style="color:#E1E4E8">		}</span></span>
+<span class="line"><span style="color:#E1E4E8">	}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#B392F0">	fatalpanic</span><span style="color:#E1E4E8">(gp._panic)</span></span>
+<span class="line"><span style="color:#F97583">	*</span><span style="color:#E1E4E8">(</span><span style="color:#F97583">*int</span><span style="color:#E1E4E8">)(</span><span style="color:#79B8FF">nil</span><span style="color:#E1E4E8">) </span><span style="color:#F97583">=</span><span style="color:#79B8FF"> 0</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p><a href="https://draveness.me/golang/tree/runtime.fatalpanic" rel="noopener noreferrer" target="_blank"><code>runtime.fatalpanic</code></a> 实现了无法被恢复的程序崩溃，它在中止程序之前会通过 <a href="https://draveness.me/golang/tree/runtime.printpanics" rel="noopener noreferrer" target="_blank"><code>runtime.printpanics</code></a> 打印出全部的 <code>panic</code> 消息以及调用时传入的参数：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">func</span><span style="color:#B392F0"> fatalpanic</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">msgs</span><span style="color:#F97583"> *</span><span style="color:#B392F0">_panic</span><span style="color:#E1E4E8">) {</span></span>
+<span class="line"><span style="color:#E1E4E8">	pc </span><span style="color:#F97583">:=</span><span style="color:#B392F0"> getcallerpc</span><span style="color:#E1E4E8">()</span></span>
+<span class="line"><span style="color:#E1E4E8">	sp </span><span style="color:#F97583">:=</span><span style="color:#B392F0"> getcallersp</span><span style="color:#E1E4E8">()</span></span>
+<span class="line"><span style="color:#E1E4E8">	gp </span><span style="color:#F97583">:=</span><span style="color:#B392F0"> getg</span><span style="color:#E1E4E8">()</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">	if</span><span style="color:#B392F0"> startpanic_m</span><span style="color:#E1E4E8">() </span><span style="color:#F97583">&#x26;&#x26;</span><span style="color:#E1E4E8"> msgs </span><span style="color:#F97583">!=</span><span style="color:#79B8FF"> nil</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">		atomic.</span><span style="color:#B392F0">Xadd</span><span style="color:#E1E4E8">(</span><span style="color:#F97583">&#x26;</span><span style="color:#E1E4E8">runningPanicDefers, </span><span style="color:#F97583">-</span><span style="color:#79B8FF">1</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"><span style="color:#B392F0">		printpanics</span><span style="color:#E1E4E8">(msgs)</span></span>
+<span class="line"><span style="color:#E1E4E8">	}</span></span>
+<span class="line"><span style="color:#F97583">	if</span><span style="color:#B392F0"> dopanic_m</span><span style="color:#E1E4E8">(gp, pc, sp) {</span></span>
+<span class="line"><span style="color:#B392F0">		crash</span><span style="color:#E1E4E8">()</span></span>
+<span class="line"><span style="color:#E1E4E8">	}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#B392F0">	exit</span><span style="color:#E1E4E8">(</span><span style="color:#79B8FF">2</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>打印崩溃消息后会调用 <a href="https://draveness.me/golang/tree/runtime.exit" rel="noopener noreferrer" target="_blank"><code>runtime.exit</code></a> 退出当前程序并返回错误码 2，程序的正常退出也是通过 <a href="https://draveness.me/golang/tree/runtime.exit" rel="noopener noreferrer" target="_blank"><code>runtime.exit</code></a> 实现的。</p>
+<h3 id="崩溃恢复">崩溃恢复</h3>
+<p>编译器会将关键字 <code>recover</code> 转换成 <a href="https://draveness.me/golang/tree/runtime.gorecover" rel="noopener noreferrer" target="_blank"><code>runtime.gorecover</code></a>：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">func</span><span style="color:#B392F0"> gorecover</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">argp</span><span style="color:#F97583"> uintptr</span><span style="color:#E1E4E8">) </span><span style="color:#F97583">interface</span><span style="color:#E1E4E8">{} {</span></span>
+<span class="line"><span style="color:#E1E4E8">	gp </span><span style="color:#F97583">:=</span><span style="color:#B392F0"> getg</span><span style="color:#E1E4E8">()</span></span>
+<span class="line"><span style="color:#E1E4E8">	p </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> gp._panic</span></span>
+<span class="line"><span style="color:#F97583">	if</span><span style="color:#E1E4E8"> p </span><span style="color:#F97583">!=</span><span style="color:#79B8FF"> nil</span><span style="color:#F97583"> &#x26;&#x26;</span><span style="color:#F97583"> !</span><span style="color:#E1E4E8">p.recovered </span><span style="color:#F97583">&#x26;&#x26;</span><span style="color:#E1E4E8"> argp </span><span style="color:#F97583">==</span><span style="color:#F97583"> uintptr</span><span style="color:#E1E4E8">(p.argp) {</span></span>
+<span class="line"><span style="color:#E1E4E8">		p.recovered </span><span style="color:#F97583">=</span><span style="color:#79B8FF"> true</span></span>
+<span class="line"><span style="color:#F97583">		return</span><span style="color:#E1E4E8"> p.arg</span></span>
+<span class="line"><span style="color:#E1E4E8">	}</span></span>
+<span class="line"><span style="color:#F97583">	return</span><span style="color:#79B8FF"> nil</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>该函数的实现很简单，如果当前 Goroutine 没有调用 <code>panic</code>，那么该函数会直接返回 <code>nil</code>，这也是崩溃恢复在非 <code>defer</code> 中调用会失效的原因。在正常情况下，它会修改 <a href="https://draveness.me/golang/tree/runtime._panic" rel="noopener noreferrer" target="_blank"><code>runtime._panic</code></a> 的 <code>recovered</code> 字段，<a href="https://draveness.me/golang/tree/runtime.gorecover" rel="noopener noreferrer" target="_blank"><code>runtime.gorecover</code></a> 函数中并不包含恢复程序的逻辑，程序的恢复是由 <a href="https://draveness.me/golang/tree/runtime.gopanic" rel="noopener noreferrer" target="_blank"><code>runtime.gopanic</code></a> 函数负责的：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">func</span><span style="color:#B392F0"> gopanic</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">e</span><span style="color:#F97583"> interface</span><span style="color:#E1E4E8">{}) {</span></span>
+<span class="line"><span style="color:#F97583">	...</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">	for</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#6A737D">		// 执行延迟调用函数，可能会设置 p.recovered = true</span></span>
+<span class="line"><span style="color:#F97583">		...</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#E1E4E8">		pc </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> d.pc</span></span>
+<span class="line"><span style="color:#E1E4E8">		sp </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> unsafe.</span><span style="color:#B392F0">Pointer</span><span style="color:#E1E4E8">(d.sp)</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">		...</span></span>
+<span class="line"><span style="color:#F97583">		if</span><span style="color:#E1E4E8"> p.recovered {</span></span>
+<span class="line"><span style="color:#E1E4E8">			gp._panic </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> p.link</span></span>
+<span class="line"><span style="color:#F97583">			for</span><span style="color:#E1E4E8"> gp._panic </span><span style="color:#F97583">!=</span><span style="color:#79B8FF"> nil</span><span style="color:#F97583"> &#x26;&#x26;</span><span style="color:#E1E4E8"> gp._panic.aborted {</span></span>
+<span class="line"><span style="color:#E1E4E8">				gp._panic </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> gp._panic.link</span></span>
+<span class="line"><span style="color:#E1E4E8">			}</span></span>
+<span class="line"><span style="color:#F97583">			if</span><span style="color:#E1E4E8"> gp._panic </span><span style="color:#F97583">==</span><span style="color:#79B8FF"> nil</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">				gp.sig </span><span style="color:#F97583">=</span><span style="color:#79B8FF"> 0</span></span>
+<span class="line"><span style="color:#E1E4E8">			}</span></span>
+<span class="line"><span style="color:#E1E4E8">			gp.sigcode0 </span><span style="color:#F97583">=</span><span style="color:#F97583"> uintptr</span><span style="color:#E1E4E8">(sp)</span></span>
+<span class="line"><span style="color:#E1E4E8">			gp.sigcode1 </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> pc</span></span>
+<span class="line"><span style="color:#B392F0">			mcall</span><span style="color:#E1E4E8">(recovery)</span></span>
+<span class="line"><span style="color:#B392F0">			throw</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">"recovery failed"</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"><span style="color:#E1E4E8">		}</span></span>
+<span class="line"><span style="color:#E1E4E8">	}</span></span>
+<span class="line"><span style="color:#F97583">	...</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>当我们在调用 <code>defer</code> 关键字时，调用时的栈指针 <code>sp</code> 和程序计数器 <code>pc</code> 就已经存储到了 <a href="https://draveness.me/golang/tree/runtime._defer" rel="noopener noreferrer" target="_blank"><code>runtime._defer</code></a> 结构体中，这里的 <a href="https://draveness.me/golang/tree/runtime.gogo" rel="noopener noreferrer" target="_blank"><code>runtime.gogo</code></a> 函数会跳回 <code>defer</code> 关键字调用的位置。</p>
+<p><a href="https://draveness.me/golang/tree/runtime.recovery" rel="noopener noreferrer" target="_blank"><code>runtime.recovery</code></a> 在调度过程中会将函数的返回值设置成 1。从 <a href="https://draveness.me/golang/tree/runtime.deferproc" rel="noopener noreferrer" target="_blank"><code>runtime.deferproc</code></a> 的注释中我们会发现，当 <a href="https://draveness.me/golang/tree/runtime.deferproc" rel="noopener noreferrer" target="_blank"><code>runtime.deferproc</code></a> 函数的返回值是 1 时，编译器生成的代码会直接跳转到调用方函数返回之前并执行 <a href="https://draveness.me/golang/tree/runtime.deferreturn" rel="noopener noreferrer" target="_blank"><code>runtime.deferreturn</code></a>：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">func</span><span style="color:#B392F0"> deferproc</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">siz</span><span style="color:#F97583"> int32</span><span style="color:#E1E4E8">, </span><span style="color:#FFAB70">fn</span><span style="color:#F97583"> *</span><span style="color:#B392F0">funcval</span><span style="color:#E1E4E8">) {</span></span>
+<span class="line"><span style="color:#F97583">	...</span></span>
+<span class="line"><span style="color:#B392F0">	return0</span><span style="color:#E1E4E8">()</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>跳转到 <a href="https://draveness.me/golang/tree/runtime.deferreturn" rel="noopener noreferrer" target="_blank"><code>runtime.deferreturn</code></a> 函数之后，程序就已经从 <code>panic</code> 中恢复了并执行正常的逻辑，而 <a href="https://draveness.me/golang/tree/runtime.gorecover" rel="noopener noreferrer" target="_blank"><code>runtime.gorecover</code></a> 函数也能从 <a href="https://draveness.me/golang/tree/runtime._panic" rel="noopener noreferrer" target="_blank"><code>runtime._panic</code></a> 结构中取出了调用 <code>panic</code> 时传入的 <code>arg</code> 参数并返回给调用方。</p>
+<h3 id="总结-1">总结</h3>
+<ol>
+<li>编译器会负责做转换关键字的工作；
+<ol>
+<li>将 <code>panic</code> 和 <code>recover</code> 分别转换成 <a href="https://draveness.me/golang/tree/runtime.gopanic" rel="noopener noreferrer" target="_blank"><code>runtime.gopanic</code></a> 和 <a href="https://draveness.me/golang/tree/runtime.gorecover" rel="noopener noreferrer" target="_blank"><code>runtime.gorecover</code></a>；</li>
+<li>将 <code>defer</code> 转换成 <a href="https://draveness.me/golang/tree/runtime.deferproc" rel="noopener noreferrer" target="_blank"><code>runtime.deferproc</code></a> 函数；</li>
+<li>在调用 <code>defer</code> 的函数末尾调用 <a href="https://draveness.me/golang/tree/runtime.deferreturn" rel="noopener noreferrer" target="_blank"><code>runtime.deferreturn</code></a> 函数；</li>
+</ol>
+</li>
+<li>在运行过程中遇到 <a href="https://draveness.me/golang/tree/runtime.gopanic" rel="noopener noreferrer" target="_blank"><code>runtime.gopanic</code></a> 方法时，会从 Goroutine 的链表依次取出 <a href="https://draveness.me/golang/tree/runtime._defer" rel="noopener noreferrer" target="_blank"><code>runtime._defer</code></a> 结构体并执行；</li>
+<li>如果调用延迟执行函数时遇到了 <code>runtime.gorecover</code>就会将<code>_panic.recovered</code>标记成 true 并返回<code>panic</code>的参数；
+<ol>
+<li>在这次调用结束之后，<a href="https://draveness.me/golang/tree/runtime.gopanic" rel="noopener noreferrer" target="_blank"><code>runtime.gopanic</code></a> 会从 <a href="https://draveness.me/golang/tree/runtime._defer" rel="noopener noreferrer" target="_blank"><code>runtime._defer</code></a> 结构体中取出程序计数器 <code>pc</code> 和栈指针 <code>sp</code> 并调用 <a href="https://draveness.me/golang/tree/runtime.recovery" rel="noopener noreferrer" target="_blank"><code>runtime.recovery</code></a> 函数进行恢复程序；</li>
+<li><a href="https://draveness.me/golang/tree/runtime.recovery" rel="noopener noreferrer" target="_blank"><code>runtime.recovery</code></a> 会根据传入的 <code>pc</code> 和 <code>sp</code> 跳转回 <a href="https://draveness.me/golang/tree/runtime.deferproc" rel="noopener noreferrer" target="_blank"><code>runtime.deferproc</code></a>；</li>
+<li>编译器自动生成的代码会发现 <a href="https://draveness.me/golang/tree/runtime.deferproc" rel="noopener noreferrer" target="_blank"><code>runtime.deferproc</code></a> 的返回值不为 0，这时会跳回 <a href="https://draveness.me/golang/tree/runtime.deferreturn" rel="noopener noreferrer" target="_blank"><code>runtime.deferreturn</code></a> 并恢复到正常的执行流程；</li>
+</ol>
+</li>
+<li>如果没有遇到 <a href="https://draveness.me/golang/tree/runtime.gorecover" rel="noopener noreferrer" target="_blank"><code>runtime.gorecover</code></a> 就会依次遍历所有的 <a href="https://draveness.me/golang/tree/runtime._defer" rel="noopener noreferrer" target="_blank"><code>runtime._defer</code></a>，并在最后调用 <a href="https://draveness.me/golang/tree/runtime.fatalpanic" rel="noopener noreferrer" target="_blank"><code>runtime.fatalpanic</code></a> 中止程序、打印 <code>panic</code> 的参数并返回错误码 2；</li>
+</ol>
+<p>参考链接：</p>
+<ul>
+<li><a href="https://draveness.me/golang/docs/part2-foundation/ch05-keyword/golang-panic-recover/" rel="noopener noreferrer" target="_blank">Go 语言 panic 和 recover 的原理 | Go 语言设计与实现 (draveness.me)</a></li>
+<li><a href="https://draveness.me/golang/docs/part2-foundation/ch05-keyword/golang-defer/" rel="noopener noreferrer" target="_blank">理解 Go 语言 defer 关键字的原理 | Go 语言设计与实现 (draveness.me)</a></li>
+</ul></main><aside class="toc"><p class="toc-title">本页目录</p><ul><li class="toc-d2"><a href="#defer">defer</a></li><li class="toc-d3"><a href="#defer函数执行顺序">defer函数执行顺序</a></li><li class="toc-d3"><a href="#defer数据结构">defer数据结构</a></li><li class="toc-d3"><a href="#执行">执行</a></li><li class="toc-d3"><a href="#堆上分配">堆上分配</a></li><li class="toc-d3"><a href="#栈上分配">栈上分配</a></li><li class="toc-d3"><a href="#开放编码">开放编码</a></li><li class="toc-d3"><a href="#总结">总结</a></li><li class="toc-d2"><a href="#paincrecovery">painc&amp;&amp;recovery</a></li><li class="toc-d3"><a href="#现象">现象</a></li><li class="toc-d3"><a href="#panic数据结构">panic数据结构</a></li><li class="toc-d3"><a href="#程序崩溃">程序崩溃</a></li><li class="toc-d3"><a href="#崩溃恢复">崩溃恢复</a></li><li class="toc-d3"><a href="#总结-1">总结</a></li></ul></aside></div><div class="lightbox" id="lightbox" aria-hidden="true"><img alt=""></div><script type="module" src="/_astro/Base.astro_astro_type_script_index_0_lang.7IsV0x-z.js"></script></body></html>

@@ -1,0 +1,798 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>GMP调度原理</title><script>
+      (function () {
+        var s = localStorage.getItem('theme');
+        if (s === 'light' || s === 'dark') {
+          document.documentElement.setAttribute('data-theme', s);
+        }
+      })();
+    </script><link rel="stylesheet" href="/_astro/Base.CUYrCnW9.css"></head><body><header class="topbar"><a href="/" class="brand">HLDay</a><nav><a href="/">书</a><a href="/posts/">博客</a><a href="https://github.com/hTangle" class="nav-github" aria-label="GitHub">GitHub</a></nav><button class="theme-toggle" id="themeToggle" type="button" title="切换主题（自动/浅色/深色）" aria-label="切换主题">🖥️</button></header><div class="layout"><aside class="booknav"><ul class="nav-tree"><li><p class="nav-group">Go</p><ul><li><p class="nav-subgroup">并发编程</p><ul><li class><a href="/gmp/">GMP 调度器</a></li><li class><a href="/sync-lock/">同步和锁</a></li><li class><a href="/channel/">Channel</a></li><li class><a href="/context/">Context</a></li></ul></li></ul></li><li><p class="nav-group">Agent 开发</p><ul><li><p class="nav-subgroup">核心协议与机制</p><ul><li class><a href="/mcp/">MCP</a></li><li class><a href="/skill/">Skill</a></li><li class><a href="/tool-call/">Tool Call</a></li></ul></li></ul></li></ul></aside><main class="prose"><h1>GMP调度原理</h1><ul>
+<li>
+<p>G是goroutine实现的核心结构，它包含了栈，指令指针，以及其他对调度goroutine很重要的信息，例如其阻塞的channel。表示 Goroutine，它是一个待执行的任务</p>
+</li>
+<li>
+<p><code>M结构是Machine，系统线程</code>，它由操作系统管理，goroutine就是跑在M之上的；M是一个很大的结构，里面维护小对象内存cache（mcache）、当前执行的goroutine、随机数发生器等等非常多的信息。M的PC寄存器会执行G提供的函数。表示操作系统的线程，它由操作系统的调度器调度和管理；</p>
+</li>
+<li>
+<p>P结构是Processor，处理器</p>
+<p>，它的主要用途就是用来执行goroutine，它维护了一个goroutine队列，即runqueue。Processor的让我们从N:1调度到M:N调度的重要部分。</p>
+<p>表示处理器，它可以被看做运行在线程上的本地调度器；</p>
+<ul>
+<li>本地队列：本地的队列是无锁的，没有数据竞争问题，处理速度比较高；</li>
+<li>全局队列：是用来平衡不同的P的任务数量，所有的M共享P的全局队列。</li>
+</ul>
+</li>
+</ul>
+<blockquote>
+<p>Processor的数量是在启动时被设置为环境变量GOMAXPROCS的值，或者通过运行时调度函数GOMAXPROCS()进行设置。Processor数量固定意味着任意时刻只有GOMAXPROCS个线程在运行着go代码</p>
+</blockquote>
+<blockquote>
+<p>进程，线程和协程的区别</p>
+<ol>
+<li>进程：系统进行资源分配的基本单位，每个进程有独立且隔离的内存空间；</li>
+<li>线程：线程是CPU调度的基本单位，线程依赖于进程的存在，每个线程会共享父进程的资源；</li>
+<li>协程：用户态的轻量级线程，协程的调度完全由用户控制，协程切换只需要保存任务的上下文，没有内核开销</li>
+</ol>
+</blockquote>
+<h2 id="数据结构">数据结构</h2>
+<h3 id="g">G</h3>
+<p>Goroutine 是 Go 语言调度器中待执行的任务，它在运行时调度器中的地位与线程在操作系统中差不多，但是它占用了更小的内存空间，也降低了上下文切换的开销。</p>
+<p>Goroutine 只存在于 Go 语言的运行时，它是 Go 语言在用户态提供的线程，作为一种粒度更细的资源调度单元，如果使用得当能够在高并发的场景下更高效地利用机器的 CPU。</p>
+<p>Goroutine 在 Go 语言运行时使用私有结构体<a href="https://draveness.me/golang/tree/runtime.g" rel="noopener noreferrer" target="_blank"> <code>runtime.g</code></a> 表示。这个私有结构体非常复杂，总共包含 40 多个用于表示各种状态的成员变量</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">type</span><span style="color:#B392F0"> g</span><span style="color:#F97583"> struct</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">        stack       </span><span style="color:#B392F0">stack</span></span>
+<span class="line"><span style="color:#E1E4E8">        stackguard0 </span><span style="color:#F97583">uintptr</span></span>
+<span class="line"><span style="color:#E1E4E8">        preempt       </span><span style="color:#F97583">bool</span><span style="color:#6A737D"> // 抢占信号</span></span>
+<span class="line"><span style="color:#E1E4E8">        preemptStop   </span><span style="color:#F97583">bool</span><span style="color:#6A737D"> // 抢占时将状态修改成 `_Gpreempted`</span></span>
+<span class="line"><span style="color:#E1E4E8">        preemptShrink </span><span style="color:#F97583">bool</span><span style="color:#6A737D"> // 在同步安全点收缩栈</span></span>
+<span class="line"><span style="color:#E1E4E8">        _panic       </span><span style="color:#F97583">*</span><span style="color:#B392F0">_panic</span><span style="color:#6A737D"> // 最内侧的 panic 结构体</span></span>
+<span class="line"><span style="color:#E1E4E8">        _defer       </span><span style="color:#F97583">*</span><span style="color:#B392F0">_defer</span><span style="color:#6A737D"> // 最内侧的延迟函数结构体</span></span>
+<span class="line"><span style="color:#E1E4E8">        m              </span><span style="color:#F97583">*</span><span style="color:#B392F0">m</span><span style="color:#6A737D">  // 当前 Goroutine 占用的线程，可能为空；</span></span>
+<span class="line"><span style="color:#E1E4E8">        sched          </span><span style="color:#B392F0">gobuf</span><span style="color:#6A737D"> // 存储 Goroutine 的调度相关的数据；</span></span>
+<span class="line"><span style="color:#E1E4E8">        atomicstatus   </span><span style="color:#F97583">uint32</span><span style="color:#6A737D"> //Goroutine 的状态；</span></span>
+<span class="line"><span style="color:#E1E4E8">        goid           </span><span style="color:#F97583">int64</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span>
+<span class="line"><span style="color:#F97583">type</span><span style="color:#B392F0"> gobuf</span><span style="color:#F97583"> struct</span><span style="color:#E1E4E8"> { </span><span style="color:#6A737D">//在调度器保存或者恢复上下文的时候用到，其中的栈指针和程序计数器会用来存储或者恢复寄存器中的值，改变程序即将执行的代码。</span></span>
+<span class="line"><span style="color:#E1E4E8">        sp   </span><span style="color:#F97583">uintptr</span><span style="color:#6A737D"> //栈指针</span></span>
+<span class="line"><span style="color:#E1E4E8">        pc   </span><span style="color:#F97583">uintptr</span><span style="color:#6A737D"> //程序计数器；</span></span>
+<span class="line"><span style="color:#E1E4E8">        g    </span><span style="color:#B392F0">guintptr</span><span style="color:#6A737D"> // 持有 runtime.gobuf 的 Goroutine；</span></span>
+<span class="line"><span style="color:#E1E4E8">        ret  </span><span style="color:#B392F0">sys</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">Uintreg</span><span style="color:#6A737D"> // 系统调用的返回值；</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>其中 <code>stack</code> 字段描述了当前 Goroutine 的栈内存范围 [stack.lo, stack.hi)，另一个字段 <code>stackguard0</code> 可以用于调度器抢占式调度。除了 <code>stackguard0</code> 之外，Goroutine 中还包含另外三个与抢占密切相关的字段：preempt、preemptStop、preemptShrink</p>
+<p>结构体 <a href="https://draveness.me/golang/tree/runtime.g" rel="noopener noreferrer" target="_blank"><code>runtime.g</code></a> 的 <code>atomicstatus</code> 字段存储了当前 Goroutine 的状态。除了几个已经不被使用的以及与 GC 相关的状态之外，Goroutine 可能处于以下 9 种状态：</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>状态</th><th>描述</th></tr></thead><tbody><tr><td><code>_Gidle</code></td><td>刚刚被分配并且还没有被初始化</td></tr><tr><td><code>_Grunnable</code></td><td>没有执行代码，没有栈的所有权，存储在运行队列中</td></tr><tr><td><code>_Grunning</code></td><td>可以执行代码，拥有栈的所有权，被赋予了内核线程 M 和处理器 P</td></tr><tr><td><code>_Gsyscall</code></td><td>正在执行系统调用，拥有栈的所有权，没有执行用户代码，被赋予了内核线程 M 但是不在运行队列上</td></tr><tr><td><code>_Gwaiting</code></td><td>由于运行时而被阻塞，没有执行用户代码并且不在运行队列上，但是可能存在于 Channel 的等待队列上</td></tr><tr><td><code>_Gdead</code></td><td>没有被使用，没有执行代码，可能有分配的栈</td></tr><tr><td><code>_Gcopystack</code></td><td>栈正在被拷贝，没有执行代码，不在运行队列上</td></tr><tr><td><code>_Gpreempted</code></td><td>由于抢占而被阻塞，没有执行用户代码并且不在运行队列上，等待唤醒</td></tr><tr><td><code>_Gscan</code></td><td>GC 正在扫描栈空间，没有执行代码，可以与其他状态同时存在</td></tr></tbody></table>
+<p>虽然 Goroutine 在运行时中定义的状态非常多而且复杂，但是我们可以将这些不同的状态聚合成三种：等待中、可运行、运行中，运行期间会在这三种状态来回切换：</p>
+<ul>
+<li>等待中：Goroutine 正在等待某些条件满足，例如：系统调用结束等，包括 <code>_Gwaiting</code>、<code>_Gsyscall</code> 和 <code>_Gpreempted</code> 几个状态；</li>
+<li>可运行：Goroutine 已经准备就绪，可以在线程运行，如果当前程序中有非常多的 Goroutine，每个 Goroutine 就可能会等待更多的时间，即 <code>_Grunnable</code>；</li>
+<li>运行中：Goroutine 正在某个线程上运行，即 <code>_Grunning</code>；</li>
+</ul>
+<h3 id="m">M</h3>
+<p>Go 语言并发模型中的 M 是操作系统线程。调度器最多可以创建 10000 个线程，但是其中大多数的线程都不会执行用户代码（可能陷入系统调用），最多只会有 <code>GOMAXPROCS</code> 个活跃线程能够正常运行。</p>
+<p>在默认情况下，运行时会将 <code>GOMAXPROCS</code> 设置成当前机器的核数，我们也可以在程序中使用 <a href="https://draveness.me/golang/tree/runtime.GOMAXPROCS" rel="noopener noreferrer" target="_blank"><code>runtime.GOMAXPROCS</code></a> 来改变最大的活跃线程数。</p>
+<p>在大多数情况下，我们都会使用 Go 的默认设置，也就是线程数等于 CPU 数，默认的设置不会频繁触发操作系统的线程调度和上下文切换，所有的调度都会发生在用户态，由 Go 语言调度器触发，能够减少很多额外开销。</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">type</span><span style="color:#B392F0"> m</span><span style="color:#F97583"> struct</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">        g0   </span><span style="color:#F97583">*</span><span style="color:#B392F0">g</span></span>
+<span class="line"><span style="color:#E1E4E8">        curg </span><span style="color:#F97583">*</span><span style="color:#B392F0">g</span></span>
+<span class="line"><span style="color:#E1E4E8">        p             </span><span style="color:#B392F0">puintptr</span></span>
+<span class="line"><span style="color:#E1E4E8">        nextp         </span><span style="color:#B392F0">puintptr</span></span>
+<span class="line"><span style="color:#E1E4E8">        oldp          </span><span style="color:#B392F0">puintptr</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>其中 g0 是持有调度栈的 Goroutine，<code>curg</code> 是在当前线程上运行的用户 Goroutine，这也是操作系统线程唯一关心的两个 Goroutine。</p>
+<p>g0 是一个运行时中比较特殊的 Goroutine，它会深度参与运行时的调度过程，包括 Goroutine 的创建、大内存分配和 CGO 函数的执行。在后面的小节中，我们会经常看到 g0 的身影。</p>
+<p>还存在三个与处理器相关的字段，它们分别表示正在运行代码的处理器 <code>p</code>、暂存的处理器 <code>nextp</code> 和执行系统调用之前使用线程的处理器 <code>oldp</code></p>
+<h3 id="p">P</h3>
+<p>调度器中的处理器 P 是线程和 Goroutine 的中间层，它能提供线程需要的上下文环境，也会负责调度线程上的等待队列，通过处理器 P 的调度，每一个内核线程都能够执行多个 Goroutine，它能在 Goroutine 进行一些 I/O 操作时及时让出计算资源，提高线程的利用率。</p>
+<p>因为调度器在启动时就会创建 <code>GOMAXPROCS</code> 个处理器，所以 Go 语言程序的处理器数量一定会等于 <code>GOMAXPROCS</code>，这些处理器会绑定到不同的内核线程上。</p>
+<p><code>runtime.p</code> 是处理器的运行时表示，作为调度器的内部实现，它包含的字段也非常多，其中包括与性能追踪、垃圾回收和计时器相关的字段，这些字段也非常重要，但是在这里就不展示了，我们主要关注处理器中的线程和运行队列：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">type</span><span style="color:#B392F0"> p</span><span style="color:#F97583"> struct</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">        m           </span><span style="color:#B392F0">muintptr</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#E1E4E8">        runqhead </span><span style="color:#F97583">uint32</span></span>
+<span class="line"><span style="color:#E1E4E8">        runqtail </span><span style="color:#F97583">uint32</span></span>
+<span class="line"><span style="color:#E1E4E8">        runq     [</span><span style="color:#79B8FF">256</span><span style="color:#E1E4E8">]</span><span style="color:#B392F0">guintptr</span></span>
+<span class="line"><span style="color:#E1E4E8">        runnext </span><span style="color:#B392F0">guintptr</span></span>
+<span class="line"><span style="color:#F97583">        ...</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>反向存储的线程维护着线程与处理器之间的关系，而 <code>runqhead</code>、<code>runqtail</code> 和 <code>runq</code> 三个字段表示处理器持有的运行队列，其中存储着待执行的 Goroutine 列表，<code>runnext</code> 中是线程下一个需要执行的 Goroutine。</p>
+<p><a href="https://draveness.me/golang/tree/runtime.p" rel="noopener noreferrer" target="_blank"><code>runtime.p</code></a> 结构体中的状态 <code>status</code> 字段会是以下五种中的一种：</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>状态</th><th>描述</th></tr></thead><tbody><tr><td><code>_Pidle</code></td><td>处理器没有运行用户代码或者调度器，被空闲队列或者改变其状态的结构持有，运行队列为空</td></tr><tr><td><code>_Prunning</code></td><td>被线程 M 持有，并且正在执行用户代码或者调度器</td></tr><tr><td><code>_Psyscall</code></td><td>没有执行用户代码，当前线程陷入系统调用</td></tr><tr><td><code>_Pgcstop</code></td><td>被线程 M 持有，当前处理器由于垃圾回收被停止</td></tr><tr><td><code>_Pdead</code></td><td>当前处理器已经不被使用</td></tr></tbody></table>
+<p>通过分析处理器 P 的状态，我们能够对处理器的工作过程有一些简单理解，例如处理器在执行用户代码时会处于 <code>_Prunning</code> 状态，在当前线程执行 I/O 操作时会陷入 <code>_Psyscall</code> 状态。</p>
+<h2 id="原理">原理</h2>
+<h3 id="单线程调度器">单线程调度器</h3>
+<p>0.x 版本调度器只包含表示 Goroutine 的 G 和表示线程的 M 两种结构，全局也只有一个线程。我们可以在 <a href="https://github.com/golang/go/commit/96824000ed89d13665f6f24ddc10b3bf812e7f47" rel="noopener noreferrer" target="_blank">clean up scheduler</a> 提交中找到单线程调度器的源代码，在这时 Go 语言的调度器还是由 C 语言实现的，调度函数 <code>runtime.scheduler:9682400</code> 也只包含 40 多行代码 ：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="c"><code><span class="line"><span style="color:#F97583">static</span><span style="color:#F97583"> void</span><span style="color:#B392F0"> scheduler</span><span style="color:#E1E4E8">(</span><span style="color:#F97583">void</span><span style="color:#E1E4E8">) {</span></span>
+<span class="line"><span style="color:#E1E4E8">        G</span><span style="color:#F97583">*</span><span style="color:#E1E4E8"> gp;</span></span>
+<span class="line"><span style="color:#B392F0">        lock</span><span style="color:#E1E4E8">(</span><span style="color:#F97583">&#x26;</span><span style="color:#E1E4E8">sched);</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">        if</span><span style="color:#E1E4E8">(</span><span style="color:#B392F0">gosave</span><span style="color:#E1E4E8">(</span><span style="color:#F97583">&#x26;</span><span style="color:#E1E4E8">m->sched)){</span></span>
+<span class="line"><span style="color:#B392F0">                lock</span><span style="color:#E1E4E8">(</span><span style="color:#F97583">&#x26;</span><span style="color:#E1E4E8">sched);</span></span>
+<span class="line"><span style="color:#E1E4E8">                gp </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> m->curg;</span></span>
+<span class="line"><span style="color:#F97583">                switch</span><span style="color:#E1E4E8">(gp->status){</span></span>
+<span class="line"><span style="color:#F97583">                case</span><span style="color:#E1E4E8"> Grunnable:</span></span>
+<span class="line"><span style="color:#F97583">                case</span><span style="color:#E1E4E8"> Grunning:</span></span>
+<span class="line"><span style="color:#E1E4E8">                        gp->status </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> Grunnable;</span></span>
+<span class="line"><span style="color:#B392F0">                        gput</span><span style="color:#E1E4E8">(gp);</span></span>
+<span class="line"><span style="color:#F97583">                        break</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#E1E4E8">                ...</span></span>
+<span class="line"><span style="color:#E1E4E8">                }</span></span>
+<span class="line"><span style="color:#B392F0">                notewakeup</span><span style="color:#E1E4E8">(</span><span style="color:#F97583">&#x26;</span><span style="color:#E1E4E8">gp->stopped);</span></span>
+<span class="line"><span style="color:#E1E4E8">        }</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#E1E4E8">        gp </span><span style="color:#F97583">=</span><span style="color:#B392F0"> nextgandunlock</span><span style="color:#E1E4E8">();</span></span>
+<span class="line"><span style="color:#B392F0">        noteclear</span><span style="color:#E1E4E8">(</span><span style="color:#F97583">&#x26;</span><span style="color:#E1E4E8">gp->stopped);</span></span>
+<span class="line"><span style="color:#E1E4E8">        gp->status </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> Grunning;</span></span>
+<span class="line"><span style="color:#E1E4E8">        m->curg </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> gp;</span></span>
+<span class="line"><span style="color:#E1E4E8">        g </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> gp;</span></span>
+<span class="line"><span style="color:#B392F0">        gogo</span><span style="color:#E1E4E8">(</span><span style="color:#F97583">&#x26;</span><span style="color:#E1E4E8">gp->sched);</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>该函数会遵循如下的过程调度 Goroutine：</p>
+<ol>
+<li>获取调度器的全局锁；</li>
+<li>调用 <a href="https://draveness.me/golang/tree/runtime.gosave:9682400" rel="noopener noreferrer" target="_blank"><code>runtime.gosave:9682400</code> </a>保存栈寄存器和程序计数器；</li>
+<li>调用 <a href="https://draveness.me/golang/tree/runtime.nextgandunlock:9682400" rel="noopener noreferrer" target="_blank"><code>runtime.nextgandunlock:9682400</code></a> 获取下一个需要运行的 Goroutine 并解锁调度器；</li>
+<li>修改全局线程 <code>m</code> 上要执行的 Goroutine；</li>
+<li>调用 <a href="https://draveness.me/golang/tree/runtime.gogo:9682400" rel="noopener noreferrer" target="_blank">runtime.gogo:9682400</a> 函数运行最新的 Goroutine；</li>
+</ol>
+<p>虽然这个单线程调度器的唯一优点就是<strong>能运行</strong>，但是这次提交已经包含了 G 和 M 两个重要的数据结构，也建立了 Go 语言调度器的框架。</p>
+<h3 id="多线程调度器">多线程调度器</h3>
+<p>Go 语言在 1.0 版本正式发布时就支持了多线程的调度器，与上一个版本几乎不可用的调度器相比，Go 语言团队在这一阶段实现了从不可用到可用的跨越。我们可以在 <a href="https://github.com/golang/go/blob/go1.0.1/src/pkg/runtime/proc.c" rel="noopener noreferrer" target="_blank"><code>pkg/runtime/proc.c</code> </a>文件中找到 1.0.1 版本的调度器，多线程版本的调度函数<a href="https://draveness.me/golang/tree/runtime.schedule:go1.0.1" rel="noopener noreferrer" target="_blank"> <code>runtime.schedule:go1.0.1</code> </a>包含 70 多行代码，我们在这里保留了该函数的核心逻辑：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="c"><code><span class="line"><span style="color:#F97583">static</span><span style="color:#F97583"> void</span><span style="color:#B392F0"> schedule</span><span style="color:#E1E4E8">(G </span><span style="color:#F97583">*</span><span style="color:#FFAB70">gp</span><span style="color:#E1E4E8">) {</span></span>
+<span class="line"><span style="color:#B392F0">        schedlock</span><span style="color:#E1E4E8">();</span></span>
+<span class="line"><span style="color:#F97583">        if</span><span style="color:#E1E4E8">(gp </span><span style="color:#F97583">!=</span><span style="color:#E1E4E8"> nil) {</span></span>
+<span class="line"><span style="color:#E1E4E8">                gp->m </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> nil;</span></span>
+<span class="line"><span style="color:#E1E4E8">                uint32 v </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> runtime·</span><span style="color:#B392F0">xadd</span><span style="color:#E1E4E8">(</span><span style="color:#F97583">&#x26;</span><span style="color:#E1E4E8">runtime·sched.atomic, </span><span style="color:#F97583">-</span><span style="color:#79B8FF">1</span><span style="color:#F97583">&#x3C;&#x3C;</span><span style="color:#E1E4E8">mcpuShift);</span></span>
+<span class="line"><span style="color:#F97583">                if</span><span style="color:#E1E4E8">(</span><span style="color:#B392F0">atomic_mcpu</span><span style="color:#E1E4E8">(v) </span><span style="color:#F97583">></span><span style="color:#E1E4E8"> maxgomaxprocs)</span></span>
+<span class="line"><span style="color:#E1E4E8">                        runtime·</span><span style="color:#B392F0">throw</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">"negative mcpu in scheduler"</span><span style="color:#E1E4E8">);</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">                switch</span><span style="color:#E1E4E8">(gp->status){</span></span>
+<span class="line"><span style="color:#F97583">                case</span><span style="color:#E1E4E8"> Grunning:</span></span>
+<span class="line"><span style="color:#E1E4E8">                        gp->status </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> Grunnable;</span></span>
+<span class="line"><span style="color:#B392F0">                        gput</span><span style="color:#E1E4E8">(gp);</span></span>
+<span class="line"><span style="color:#F97583">                        break</span><span style="color:#E1E4E8">;</span></span>
+<span class="line"><span style="color:#F97583">                case</span><span style="color:#E1E4E8"> ...:</span></span>
+<span class="line"><span style="color:#E1E4E8">                }</span></span>
+<span class="line"><span style="color:#E1E4E8">        } </span><span style="color:#F97583">else</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">                ...</span></span>
+<span class="line"><span style="color:#E1E4E8">        }</span></span>
+<span class="line"><span style="color:#E1E4E8">        gp </span><span style="color:#F97583">=</span><span style="color:#B392F0"> nextgandunlock</span><span style="color:#E1E4E8">();</span></span>
+<span class="line"><span style="color:#E1E4E8">        gp->status </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> Grunning;</span></span>
+<span class="line"><span style="color:#E1E4E8">        m->curg </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> gp;</span></span>
+<span class="line"><span style="color:#E1E4E8">        gp->m </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> m;</span></span>
+<span class="line"><span style="color:#E1E4E8">        runtime·</span><span style="color:#B392F0">gogo</span><span style="color:#E1E4E8">(</span><span style="color:#F97583">&#x26;</span><span style="color:#E1E4E8">gp->sched, </span><span style="color:#79B8FF">0</span><span style="color:#E1E4E8">);</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>整体的逻辑与单线程调度器没有太多区别，因为我们的程序中可能同时存在多个活跃线程，所以多线程调度器引入了 <code>GOMAXPROCS</code> 变量帮助我们灵活控制程序中的最大处理器数，即活跃线程数。</p>
+<p>多线程调度器的主要问题是调度时的锁竞争会严重浪费资源，<a href="http://golang.org/s/go11sched" rel="noopener noreferrer" target="_blank">Scalable Go Scheduler Design Doc</a> 中对调度器做的性能测试发现 14% 的时间都花费在 <a href="https://draveness.me/golang/tree/runtime.futex:go1.0.1" rel="noopener noreferrer" target="_blank"><code>runtime.futex:go1.0.1</code> </a>上，该调度器有以下问题需要解决：</p>
+<ol>
+<li>调度器和锁是全局资源，所有的调度状态都是中心化存储的，锁竞争问题严重；</li>
+<li>线程需要经常互相传递可运行的 Goroutine，引入了大量的延迟；</li>
+<li>每个线程都需要处理内存缓存，导致大量的内存占用并影响数据局部性；</li>
+<li>系统调用频繁阻塞和解除阻塞正在运行的线程，增加了额外开销；</li>
+</ol>
+<blockquote>
+<ul>
+<li>io 与系统调用不能混淆，一个 io 过程可能包括多次系统调用。</li>
+<li>（经过一个系统调用发现文件描述符还未可用而）阻塞的 io 首先会导致 G 的挂起，此时 G 与 M 分离，且不在任何 P 的运行队列中，当前的 P 会调度下一个 G，这个阶段不涉及新线程的创建。</li>
+<li>被 io 挂起的 G 由网络轮询器维护，直到文件描述符可用。</li>
+<li>网络轮询器既会被（在独立线程中的）系统监控 Goroutine 触发，也会被其他各个活跃线程上的 Goroutine 触发。</li>
+<li>当文件描述符可用时，G 会重新加入到原来的 P 中等待被调度。</li>
+<li>当 G 被重新调度时，会重新发起读/写系统调用。</li>
+<li>当 G 进行系统调用的时候，对应的 M 和 P 也阻塞在系统调用，并不会立刻发生抢占，只有当这个阻塞持续时间过长（10 ms）时，才会将 P（及之上的其他 G）抢占并分配到空闲的 M 上，此时如果没有空闲的，才会创建新的线程。</li>
+</ul>
+<p>通过以上过程可见，密集的 io 通常并不会产生过多的线程。</p>
+</blockquote>
+<h3 id="任务窃取调度器">任务窃取调度器</h3>
+<p>2012 年 Google 的工程师 Dmitry Vyukov 在 <a href="http://golang.org/s/go11sched" rel="noopener noreferrer" target="_blank">Scalable Go Scheduler Design Doc</a> 中指出了现有多线程调度器的问题并在多线程调度器上提出了两个改进的手段：</p>
+<ol>
+<li>在当前的 G-M 模型中引入了处理器 P，增加中间层；</li>
+<li>在处理器 P 的基础上实现基于工作窃取的调度器；</li>
+</ol>
+<p>基于任务窃取的 Go 语言调度器使用了沿用至今的 G-M-P 模型，我们能在 <a href="https://github.com/golang/go/commit/779c45a50700bda0f6ec98429720802e6c1624e8" rel="noopener noreferrer" target="_blank">runtime: improved scheduler</a> 提交中找到任务窃取调度器刚被实现时的<a href="https://github.com/golang/go/blob/779c45a50700bda0f6ec98429720802e6c1624e8/src/pkg/runtime/proc.c" rel="noopener noreferrer" target="_blank">源代码</a>，调度器的 <code>runtime.schedule:779c45a</code> 在这个版本的调度器中反而更简单了：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#E1E4E8">static void </span><span style="color:#B392F0">schedule</span><span style="color:#E1E4E8">(void) {</span></span>
+<span class="line"><span style="color:#E1E4E8">    G </span><span style="color:#F97583">*</span><span style="color:#E1E4E8">gp;</span></span>
+<span class="line"><span style="color:#E1E4E8"> top:</span></span>
+<span class="line"><span style="color:#F97583">    if</span><span style="color:#E1E4E8">(runtime·gcwaiting) {</span></span>
+<span class="line"><span style="color:#B392F0">        gcstopm</span><span style="color:#E1E4E8">();</span></span>
+<span class="line"><span style="color:#F97583">        goto</span><span style="color:#E1E4E8"> top;</span></span>
+<span class="line"><span style="color:#E1E4E8">    }</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#E1E4E8">    gp </span><span style="color:#F97583">=</span><span style="color:#B392F0"> runqget</span><span style="color:#E1E4E8">(m</span><span style="color:#F97583">-></span><span style="color:#E1E4E8">p);</span></span>
+<span class="line"><span style="color:#F97583">    if</span><span style="color:#E1E4E8">(gp </span><span style="color:#F97583">==</span><span style="color:#79B8FF"> nil</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"><span style="color:#E1E4E8">        gp </span><span style="color:#F97583">=</span><span style="color:#B392F0"> findrunnable</span><span style="color:#E1E4E8">();</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">    ...</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#B392F0">    execute</span><span style="color:#E1E4E8">(gp);</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<ol>
+<li>如果当前运行时在等待垃圾回收，调用 <code>runtime.gcstopm:779c45a</code> 函数；</li>
+<li>调用 <code>runtime.runqget:779c45a</code> 和 <code>runtime.findrunnable:779c45a</code> 从本地或者全局的运行队列中获取待执行的 Goroutine；</li>
+<li>调用 <code>runtime.execute:779c45a</code> 在当前线程 M 上运行 Goroutine；</li>
+</ol>
+<p>当前处理器本地的运行队列中不包含 Goroutine 时，调用 <a href="https://draveness.me/golang/tree/runtime.findrunnable:779c45a" rel="noopener noreferrer" target="_blank"><code>runtime.findrunnable:779c45a</code></a> 会触发工作窃取，从其它的处理器的队列中随机获取一些 Goroutine。</p>
+<p>运行时 G-M-P 模型中引入的处理器 P 是线程和 Goroutine 的中间层，我们从它的结构体中就能看到处理器与 M 和 G 的关系：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">struct</span><span style="color:#E1E4E8"> P {</span></span>
+<span class="line"><span style="color:#E1E4E8">	Lock;</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">	uint32</span><span style="color:#E1E4E8">	status;</span></span>
+<span class="line"><span style="color:#E1E4E8">	P</span><span style="color:#F97583">*</span><span style="color:#E1E4E8">	link;</span></span>
+<span class="line"><span style="color:#F97583">	uint32</span><span style="color:#E1E4E8">	tick;</span></span>
+<span class="line"><span style="color:#E1E4E8">	M</span><span style="color:#F97583">*</span><span style="color:#E1E4E8">	m;</span></span>
+<span class="line"><span style="color:#E1E4E8">	MCache</span><span style="color:#F97583">*</span><span style="color:#E1E4E8">	mcache;</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#E1E4E8">	G</span><span style="color:#F97583">**</span><span style="color:#E1E4E8">	runq;</span></span>
+<span class="line"><span style="color:#F97583">	int32</span><span style="color:#E1E4E8">	runqhead;</span></span>
+<span class="line"><span style="color:#F97583">	int32</span><span style="color:#E1E4E8">	runqtail;</span></span>
+<span class="line"><span style="color:#F97583">	int32</span><span style="color:#E1E4E8">	runqsize;</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#E1E4E8">	G</span><span style="color:#F97583">*</span><span style="color:#E1E4E8">	gfree;</span></span>
+<span class="line"><span style="color:#F97583">	int32</span><span style="color:#E1E4E8">	gfreecnt;</span></span>
+<span class="line"><span style="color:#E1E4E8">};</span></span></code></pre>
+<p>处理器持有一个由可运行的 Goroutine 组成的环形的运行队列 <code>runq</code>，还反向持有一个线程。调度器在调度时会从处理器的队列中选择队列头的 Goroutine 放到线程 M 上执行。</p>
+<p>基于工作窃取的多线程调度器将每一个线程绑定到了独立的 CPU 上，这些线程会被不同处理器管理，不同的处理器通过工作窃取对任务进行再分配实现任务的平衡，也能提升调度器和 Go 语言程序的整体性能。</p>
+<h3 id="抢占式调度">抢占式调度</h3>
+<p>对 Go 语言并发模型的修改提升了调度器的性能，但是 1.1 版本中的调度器仍然不支持抢占式调度，程序只能依靠 Goroutine 主动让出 CPU 资源才能触发调度。Go 语言的调度器在 1.2 版本中引入基于协作的抢占式调度解决下面的问题：</p>
+<ul>
+<li>某些 Goroutine 可以长时间占用线程，造成其它 Goroutine 的饥饿；</li>
+<li>垃圾回收需要暂停整个程序（Stop-the-world，STW），最长可能需要几分钟的时间，导致整个程序无法工作；</li>
+</ul>
+<p>1.2 版本的抢占式调度虽然能够缓解这个问题，但是它实现的抢占式调度是基于协作的，在之后很长的一段时间里 Go 语言的调度器都有一些无法被抢占的边缘情况，例如：for 循环或者垃圾回收长时间占用线程，这些问题中的一部分直到 1.14 才被基于信号的抢占式调度解决。</p>
+<h4 id="基于协作的抢占式调度">基于协作的抢占式调度</h4>
+<p>可以在 <a href="https://github.com/golang/go/blob/go1.2/src/pkg/runtime/proc.c" rel="noopener noreferrer" target="_blank"><code>pkg/runtime/proc.c</code></a> 文件中找到引入基于协作的抢占式调度后的调度器。Go 语言会在分段栈的机制上实现抢占调度，利用编译器在分段栈上插入的函数，所有 Goroutine 在函数调用时都有机会进入运行时检查是否需要执行抢占。Go 团队通过以下的多个提交实现该特性：</p>
+<ul>
+<li>runtime: add stackguard0 to G
+<ul>
+<li>为 Goroutine 引入 <code>stackguard0</code> 字段，该字段被设置成 <code>StackPreempt</code> 意味着当前 Goroutine 发出了抢占请求；</li>
+</ul>
+</li>
+<li>runtime: introduce preemption function (not used for now)
+<ul>
+<li>引入抢占函数 <a href="https://draveness.me/golang/tree/runtime.preemptone:1e112cd" rel="noopener noreferrer" target="_blank"><code>runtime.preemptone:1e112cd</code></a> 和 <a href="https://draveness.me/golang/tree/runtime.preemptall:1e112cd" rel="noopener noreferrer" target="_blank"><code>runtime.preemptall:1e112cd</code></a>，这两个函数会改变 Goroutine 的 <code>stackguard0</code> 字段发出抢占请求；</li>
+<li>定义抢占请求 <code>StackPreempt</code>；</li>
+</ul>
+</li>
+<li>runtime: preempt goroutines for GC
+<ul>
+<li>在 <a href="https://draveness.me/golang/tree/runtime.stoptheworld:1e112cd" rel="noopener noreferrer" target="_blank"><code>runtime.stoptheworld:1e112cd</code></a> 中调用 <a href="https://draveness.me/golang/tree/runtime.preemptall:1e112cd" rel="noopener noreferrer" target="_blank"><code>runtime.preemptall:1e112cd</code></a> 设置所有处理器上正在运行的 Goroutine 的 <code>stackguard0</code> 为 <code>StackPreempt</code>；</li>
+<li>在 <a href="https://draveness.me/golang/tree/runtime.newstack:1e112cd" rel="noopener noreferrer" target="_blank"><code>runtime.newstack:1e112cd</code></a> 中增加抢占的代码，当 <code>stackguard0</code> 等于 <code>StackPreempt</code> 时触发调度器抢占让出线程；</li>
+</ul>
+</li>
+<li>runtime: preempt long-running goroutines
+<ul>
+<li>在系统监控中，如果一个 Goroutine 的运行时间超过 10ms，就会调用 <a href="https://draveness.me/golang/tree/runtime.retake:1e112cd" rel="noopener noreferrer" target="_blank"><code>runtime.retake:1e112cd</code></a> 和 <a href="https://draveness.me/golang/tree/runtime.preemptone:1e112cd" rel="noopener noreferrer" target="_blank"><code>runtime.preemptone:1e112cd</code></a>；</li>
+</ul>
+</li>
+<li>runtime: more reliable preemption
+<ul>
+<li>修复 Goroutine 因为周期性执行非阻塞的 CGO 或者系统调用不会被抢占的问题；</li>
+</ul>
+</li>
+</ul>
+<p>上面的多个提交实现了抢占式调度，但是还缺少最关键的一个环节 — 编译器如何在函数调用前插入函数，我们能在非常古老的提交 <a href="https://github.com/golang/go/commit/7343e03c433ebb0c302ed97bf832ad3bd3170de6" rel="noopener noreferrer" target="_blank">runtime: stack growth adjustments, cleanup</a> 中找到编译器插入函数的雏形，最新版本的 Go 语言会通过 <a href="https://draveness.me/golang/tree/cmd/internal/obj/x86.stacksplit" rel="noopener noreferrer" target="_blank"><code>cmd/internal/obj/x86.stacksplit</code></a> 插入 <a href="https://draveness.me/golang/tree/runtime.morestack" rel="noopener noreferrer" target="_blank"><code>runtime.morestack</code></a>，该函数可能会调用 <a href="https://draveness.me/golang/tree/runtime.newstack" rel="noopener noreferrer" target="_blank"><code>runtime.newstack</code></a> 触发抢占。从上面的多个提交中，我们能归纳出基于协作的抢占式调度的工作原理：</p>
+<ol>
+<li>编译器会在调用函数前插入 <a href="https://draveness.me/golang/tree/runtime.morestack" rel="noopener noreferrer" target="_blank"><code>runtime.morestack</code></a>；</li>
+<li>Go 语言运行时会在垃圾回收暂停程序、系统监控发现 Goroutine 运行超过 10ms 时发出抢占请求 <code>StackPreempt</code>；</li>
+<li>当发生函数调用时，可能会执行编译器插入的 <a href="https://draveness.me/golang/tree/runtime.morestack" rel="noopener noreferrer" target="_blank"><code>runtime.morestack</code></a>，它调用的 <a href="https://draveness.me/golang/tree/runtime.newstack" rel="noopener noreferrer" target="_blank"><code>runtime.newstack</code></a> 会检查 Goroutine 的 <code>stackguard0</code> 字段是否为 <code>StackPreempt</code>；</li>
+<li>如果 <code>stackguard0</code> 是 <code>StackPreempt</code>，就会触发抢占让出当前线程；</li>
+</ol>
+<p>这种实现方式虽然增加了运行时的复杂度，但是实现相对简单，也没有带来过多的额外开销，总体来看还是比较成功的实现，也在 Go 语言中使用了 10 几个版本。因为这里的抢占是通过编译器插入函数实现的，还是需要函数调用作为入口才能触发抢占，所以这是一种<strong>协作式的抢占式调度</strong>。</p>
+<h4 id="基于信号的抢占式调度">基于信号的抢占式调度</h4>
+<p>基于协作的抢占式调度虽然实现巧妙，但是并不完备，我们能在 <a href="https://github.com/golang/go/issues/24543" rel="noopener noreferrer" target="_blank">runtime: non-cooperative goroutine preemption</a> 中找到一些遗留问题：</p>
+<ul>
+<li><a href="https://github.com/golang/go/issues/10958" rel="noopener noreferrer" target="_blank">runtime: tight loops should be preemptible #10958</a></li>
+<li><a href="https://github.com/golang/go/issues/17174" rel="noopener noreferrer" target="_blank">An empty for{} will block large slice allocation in another goroutine, even with GOMAXPROCS > 1 ? #17174</a></li>
+<li><a href="https://github.com/golang/go/issues/15442" rel="noopener noreferrer" target="_blank">runtime: tight loop hangs process completely after some time #15442</a></li>
+<li>…</li>
+</ul>
+<p>Go 语言在 1.14 版本中实现了非协作的抢占式调度，在实现的过程中我们重构已有的逻辑并为 Goroutine 增加新的状态和字段来支持抢占。Go 团队通过下面的一系列提交实现了这一功能，我们可以按时间顺序分析相关提交理解它的工作原理：</p>
+<ul>
+<li>runtime: add general suspendG/resumeG
+<ul>
+<li>挂起 Goroutine 的过程是在垃圾回收的栈扫描时完成的，我们通过 <a href="https://draveness.me/golang/tree/runtime.suspendG" rel="noopener noreferrer" target="_blank"><code>runtime.suspendG</code></a> 和 <a href="https://draveness.me/golang/tree/runtime.resumeG" rel="noopener noreferrer" target="_blank"><code>runtime.resumeG</code></a> 两个函数重构栈扫描这一过程；</li>
+<li>调用 <a href="https://draveness.me/golang/tree/runtime.suspendG" rel="noopener noreferrer" target="_blank"><code>runtime.suspendG</code></a> 时会将处于运行状态的 Goroutine 的 <code>preemptStop</code> 标记成 <code>true</code>；</li>
+<li>调用 <a href="https://draveness.me/golang/tree/runtime.preemptPark" rel="noopener noreferrer" target="_blank"><code>runtime.preemptPark</code></a> 可以挂起当前 Goroutine、将其状态更新成 <code>_Gpreempted</code> 并触发调度器的重新调度，该函数能够交出线程控制权；</li>
+</ul>
+</li>
+<li>runtime: asynchronous preemption function for x86
+<ul>
+<li>在 x86 架构上增加异步抢占的函数 <a href="https://draveness.me/golang/tree/runtime.asyncPreempt" rel="noopener noreferrer" target="_blank"><code>runtime.asyncPreempt</code></a> 和 <a href="https://draveness.me/golang/tree/runtime.asyncPreempt2" rel="noopener noreferrer" target="_blank"><code>runtime.asyncPreempt2</code></a>；</li>
+</ul>
+</li>
+<li>runtime: use signals to preempt Gs for suspendG
+<ul>
+<li>支持通过向线程发送信号的方式暂停运行的 Goroutine；</li>
+<li>在 <a href="https://draveness.me/golang/tree/runtime.sighandler" rel="noopener noreferrer" target="_blank"><code>runtime.sighandler</code></a> 函数中注册 <code>SIGURG</code> 信号的处理函数 <a href="https://draveness.me/golang/tree/runtime.doSigPreempt" rel="noopener noreferrer" target="_blank"><code>runtime.doSigPreempt</code></a>；</li>
+<li>实现 <a href="https://draveness.me/golang/tree/runtime.preemptM" rel="noopener noreferrer" target="_blank"><code>runtime.preemptM</code></a>，它可以通过 <code>SIGURG</code> 信号向线程发送抢占请求；</li>
+</ul>
+</li>
+<li>runtime: implement async scheduler preemption
+<ul>
+<li>修改 <a href="https://draveness.me/golang/tree/runtime.preemptone" rel="noopener noreferrer" target="_blank"><code>runtime.preemptone</code></a> 函数的实现，加入异步抢占的逻辑；</li>
+</ul>
+</li>
+</ul>
+<p>目前的抢占式调度也只会在垃圾回收扫描任务时触发，我们可以梳理一下上述代码实现的抢占式调度过程：</p>
+<ol>
+<li>程序启动时，在 <a href="https://draveness.me/golang/tree/runtime.sighandler" rel="noopener noreferrer" target="_blank"><code>runtime.sighandler</code></a> 中注册 <code>SIGURG</code> 信号的处理函数 <a href="https://draveness.me/golang/tree/runtime.doSigPreempt" rel="noopener noreferrer" target="_blank"><code>runtime.doSigPreempt</code></a>；</li>
+<li>在触发垃圾回收的栈扫描时会调用<code>runtime.suspendG</code>挂起 Goroutine，该函数会执行下面的逻辑：
+<ol>
+<li>将 <code>_Grunning</code> 状态的 Goroutine 标记成可以被抢占，即将 <code>preemptStop</code> 设置成 <code>true</code>；</li>
+<li>调用 <a href="https://draveness.me/golang/tree/runtime.preemptM" rel="noopener noreferrer" target="_blank"><code>runtime.preemptM</code></a> 触发抢占；</li>
+</ol>
+</li>
+<li><a href="https://draveness.me/golang/tree/runtime.preemptM" rel="noopener noreferrer" target="_blank"><code>runtime.preemptM</code></a> 会调用 <a href="https://draveness.me/golang/tree/runtime.signalM" rel="noopener noreferrer" target="_blank"><code>runtime.signalM</code></a> 向线程发送信号 <code>SIGURG</code>；</li>
+<li>操作系统会中断正在运行的线程并执行预先注册的信号处理函数 <a href="https://draveness.me/golang/tree/runtime.doSigPreempt" rel="noopener noreferrer" target="_blank"><code>runtime.doSigPreempt</code></a>；</li>
+<li><a href="https://draveness.me/golang/tree/runtime.doSigPreempt" rel="noopener noreferrer" target="_blank"><code>runtime.doSigPreempt</code></a> 函数会处理抢占信号，获取当前的 SP 和 PC 寄存器并调用 <a href="https://draveness.me/golang/tree/runtime.sigctxt.pushCall" rel="noopener noreferrer" target="_blank"><code>runtime.sigctxt.pushCall</code></a>；</li>
+<li><a href="https://draveness.me/golang/tree/runtime.sigctxt.pushCall" rel="noopener noreferrer" target="_blank"><code>runtime.sigctxt.pushCall</code></a> 会修改寄存器并在程序回到用户态时执行 <a href="https://draveness.me/golang/tree/runtime.asyncPreempt" rel="noopener noreferrer" target="_blank"><code>runtime.asyncPreempt</code></a>；</li>
+<li>汇编指令 <a href="https://draveness.me/golang/tree/runtime.asyncPreempt" rel="noopener noreferrer" target="_blank"><code>runtime.asyncPreempt</code></a> 会调用运行时函数 <a href="https://draveness.me/golang/tree/runtime.asyncPreempt2" rel="noopener noreferrer" target="_blank"><code>runtime.asyncPreempt2</code></a>；</li>
+<li><a href="https://draveness.me/golang/tree/runtime.asyncPreempt2" rel="noopener noreferrer" target="_blank"><code>runtime.asyncPreempt2</code></a> 会调用 <a href="https://draveness.me/golang/tree/runtime.preemptPark" rel="noopener noreferrer" target="_blank"><code>runtime.preemptPark</code></a>；</li>
+<li><a href="https://draveness.me/golang/tree/runtime.preemptPark" rel="noopener noreferrer" target="_blank"><code>runtime.preemptPark</code></a> 会修改当前 Goroutine 的状态到 <code>_Gpreempted</code> 并调用 <a href="https://draveness.me/golang/tree/runtime.schedule" rel="noopener noreferrer" target="_blank"><code>runtime.schedule</code></a> 让当前函数陷入休眠并让出线程，调度器会选择其它的 Goroutine 继续执行；</li>
+</ol>
+<p>上述 9 个步骤展示了基于信号的抢占式调度的执行过程。除了分析抢占的过程之外，我们还需要讨论一下抢占信号的选择，提案根据以下的四个原因选择 <code>SIGURG</code> 作为触发异步抢占的信号；</p>
+<ol>
+<li>该信号需要被调试器透传；</li>
+<li>该信号不会被内部的 libc 库使用并拦截；</li>
+<li>该信号可以随意出现并且不触发任何后果；</li>
+<li>我们需要处理多个平台上的不同信号；</li>
+</ol>
+<p>STW 和栈扫描是一个可以抢占的安全点（Safe-points），所以 Go 语言会在这里先加入抢占功能。基于信号的抢占式调度只解决了垃圾回收和栈扫描时存在的问题，它到目前为止没有解决所有问题，但是这种真抢占式调度是调度器走向完备的开始，相信在未来我们会在更多的地方触发抢占。</p>
+<h2 id="调度器启动">调度器启动</h2>
+<p>调度器的启动过程是我们平时比较难以接触的过程，不过作为程序启动前的准备工作，理解调度器的启动过程对我们理解调度器的实现原理很有帮助，运行时通过 <a href="https://draveness.me/golang/tree/runtime.schedinit" rel="noopener noreferrer" target="_blank"><code>runtime.schedinit</code></a> 初始化调度器：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">func</span><span style="color:#B392F0"> schedinit</span><span style="color:#E1E4E8">() {</span></span>
+<span class="line"><span style="color:#E1E4E8">	_g_ </span><span style="color:#F97583">:=</span><span style="color:#B392F0"> getg</span><span style="color:#E1E4E8">()</span></span>
+<span class="line"><span style="color:#F97583">	...</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#E1E4E8">	sched.maxmcount </span><span style="color:#F97583">=</span><span style="color:#79B8FF"> 10000</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">	...</span></span>
+<span class="line"><span style="color:#E1E4E8">	sched.lastpoll </span><span style="color:#F97583">=</span><span style="color:#F97583"> uint64</span><span style="color:#E1E4E8">(</span><span style="color:#B392F0">nanotime</span><span style="color:#E1E4E8">())</span></span>
+<span class="line"><span style="color:#E1E4E8">	procs </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> ncpu</span></span>
+<span class="line"><span style="color:#F97583">	if</span><span style="color:#E1E4E8"> n, ok </span><span style="color:#F97583">:=</span><span style="color:#B392F0"> atoi32</span><span style="color:#E1E4E8">(</span><span style="color:#B392F0">gogetenv</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">"GOMAXPROCS"</span><span style="color:#E1E4E8">)); ok </span><span style="color:#F97583">&#x26;&#x26;</span><span style="color:#E1E4E8"> n </span><span style="color:#F97583">></span><span style="color:#79B8FF"> 0</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">		procs </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> n</span></span>
+<span class="line"><span style="color:#E1E4E8">	}</span></span>
+<span class="line"><span style="color:#F97583">	if</span><span style="color:#B392F0"> procresize</span><span style="color:#E1E4E8">(procs) </span><span style="color:#F97583">!=</span><span style="color:#79B8FF"> nil</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#B392F0">		throw</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">"unknown runnable goroutine during bootstrap"</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"><span style="color:#E1E4E8">	}</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>在调度器初始函数执行的过程中会将 <code>maxmcount</code> 设置成 10000，这也就是一个 Go 语言程序能够创建的最大线程数，虽然最多可以创建 10000 个线程，但是可以同时运行的线程还是由 <code>GOMAXPROCS</code> 变量控制。</p>
+<p>我们从环境变量 <code>GOMAXPROCS</code> 获取了程序能够同时运行的最大处理器数之后就会调用 <a href="https://draveness.me/golang/tree/runtime.procresize" rel="noopener noreferrer" target="_blank"><code>runtime.procresize</code></a> 更新程序中处理器的数量，在这时整个程序不会执行任何用户 Goroutine，调度器也会进入锁定状态，<a href="https://draveness.me/golang/tree/runtime.procresize" rel="noopener noreferrer" target="_blank"><code>runtime.procresize</code></a> 的执行过程如下：</p>
+<ol>
+<li>如果全局变量 <code>allp</code> 切片中的处理器数量少于期望数量，会对切片进行扩容；</li>
+<li>使用 <code>new</code> 创建新的处理器结构体并调用 <a href="https://draveness.me/golang/tree/runtime.p.init" rel="noopener noreferrer" target="_blank"><code>runtime.p.init</code></a> 初始化刚刚扩容的处理器；</li>
+<li>通过指针将线程 m0 和处理器 <code>allp[0]</code> 绑定到一起；</li>
+<li>调用 <a href="https://draveness.me/golang/tree/runtime.p.destroy" rel="noopener noreferrer" target="_blank"><code>runtime.p.destroy</code></a> 释放不再使用的处理器结构；</li>
+<li>通过截断改变全局变量 <code>allp</code> 的长度保证与期望处理器数量相等；</li>
+<li>将除 <code>allp[0]</code> 之外的处理器 P 全部设置成 <code>_Pidle</code> 并加入到全局的空闲队列中；</li>
+</ol>
+<p>调用 <a href="https://draveness.me/golang/tree/runtime.procresize" rel="noopener noreferrer" target="_blank"><code>runtime.procresize</code></a> 是调度器启动的最后一步，在这一步过后调度器会完成相应数量处理器的启动，等待用户创建运行新的 Goroutine 并为 Goroutine 调度处理器资源。</p>
+<h2 id="创建-goroutine">创建 Goroutine</h2>
+<p>想要启动一个新的 Goroutine 来执行任务时，我们需要使用 Go 语言的 <code>go</code> 关键字，编译器会通过 <a href="https://draveness.me/golang/tree/cmd/compile/internal/gc.state.stmt" rel="noopener noreferrer" target="_blank"><code>cmd/compile/internal/gc.state.stmt</code></a> 和 <a href="https://draveness.me/golang/tree/cmd/compile/internal/gc.state.call" rel="noopener noreferrer" target="_blank"><code>cmd/compile/internal/gc.state.call</code></a> 两个方法将该关键字转换成 <a href="https://draveness.me/golang/tree/runtime.newproc" rel="noopener noreferrer" target="_blank"><code>runtime.newproc</code></a> 函数调用：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">func</span><span style="color:#E1E4E8"> (</span><span style="color:#FFAB70">s </span><span style="color:#F97583">*</span><span style="color:#B392F0">state</span><span style="color:#E1E4E8">) </span><span style="color:#B392F0">call</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">n</span><span style="color:#F97583"> *</span><span style="color:#B392F0">Node</span><span style="color:#E1E4E8">, </span><span style="color:#FFAB70">k</span><span style="color:#B392F0"> callKind</span><span style="color:#E1E4E8">) </span><span style="color:#F97583">*</span><span style="color:#B392F0">ssa</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">Value</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">	if</span><span style="color:#E1E4E8"> k </span><span style="color:#F97583">==</span><span style="color:#E1E4E8"> callDeferStack {</span></span>
+<span class="line"><span style="color:#F97583">		...</span></span>
+<span class="line"><span style="color:#E1E4E8">	} </span><span style="color:#F97583">else</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">		switch</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">		case</span><span style="color:#E1E4E8"> k </span><span style="color:#F97583">==</span><span style="color:#E1E4E8"> callGo:</span></span>
+<span class="line"><span style="color:#E1E4E8">			call </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> s.</span><span style="color:#B392F0">newValue1A</span><span style="color:#E1E4E8">(ssa.OpStaticCall, types.TypeMem, newproc, s.</span><span style="color:#B392F0">mem</span><span style="color:#E1E4E8">())</span></span>
+<span class="line"><span style="color:#F97583">		default</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#E1E4E8">		}</span></span>
+<span class="line"><span style="color:#E1E4E8">	}</span></span>
+<span class="line"><span style="color:#F97583">	...</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p><a href="https://draveness.me/golang/tree/runtime.newproc" rel="noopener noreferrer" target="_blank"><code>runtime.newproc</code></a> 的入参是参数大小和表示函数的指针 <code>funcval</code>，它会获取 Goroutine 以及调用方的程序计数器，然后调用 <a href="https://draveness.me/golang/tree/runtime.newproc1" rel="noopener noreferrer" target="_blank"><code>runtime.newproc1</code></a> 函数获取新的 Goroutine 结构体、将其加入处理器的运行队列并在满足条件时调用 <a href="https://draveness.me/golang/tree/runtime.wakep" rel="noopener noreferrer" target="_blank"><code>runtime.wakep</code></a> 唤醒新的处理执行 Goroutine：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">func</span><span style="color:#B392F0"> newproc</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">siz</span><span style="color:#F97583"> int32</span><span style="color:#E1E4E8">, </span><span style="color:#FFAB70">fn</span><span style="color:#F97583"> *</span><span style="color:#B392F0">funcval</span><span style="color:#E1E4E8">) {</span></span>
+<span class="line"><span style="color:#E1E4E8">	argp </span><span style="color:#F97583">:=</span><span style="color:#B392F0"> add</span><span style="color:#E1E4E8">(unsafe.</span><span style="color:#B392F0">Pointer</span><span style="color:#E1E4E8">(</span><span style="color:#F97583">&#x26;</span><span style="color:#E1E4E8">fn), sys.PtrSize)</span></span>
+<span class="line"><span style="color:#E1E4E8">	gp </span><span style="color:#F97583">:=</span><span style="color:#B392F0"> getg</span><span style="color:#E1E4E8">()</span></span>
+<span class="line"><span style="color:#E1E4E8">	pc </span><span style="color:#F97583">:=</span><span style="color:#B392F0"> getcallerpc</span><span style="color:#E1E4E8">()</span></span>
+<span class="line"><span style="color:#B392F0">	systemstack</span><span style="color:#E1E4E8">(</span><span style="color:#F97583">func</span><span style="color:#E1E4E8">() {</span></span>
+<span class="line"><span style="color:#E1E4E8">		newg </span><span style="color:#F97583">:=</span><span style="color:#B392F0"> newproc1</span><span style="color:#E1E4E8">(fn, argp, siz, gp, pc)</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#E1E4E8">		_p_ </span><span style="color:#F97583">:=</span><span style="color:#B392F0"> getg</span><span style="color:#E1E4E8">().m.p.</span><span style="color:#B392F0">ptr</span><span style="color:#E1E4E8">()</span></span>
+<span class="line"><span style="color:#B392F0">		runqput</span><span style="color:#E1E4E8">(_p_, newg, </span><span style="color:#79B8FF">true</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">		if</span><span style="color:#E1E4E8"> mainStarted {</span></span>
+<span class="line"><span style="color:#B392F0">			wakep</span><span style="color:#E1E4E8">()</span></span>
+<span class="line"><span style="color:#E1E4E8">		}</span></span>
+<span class="line"><span style="color:#E1E4E8">	})</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p><a href="https://draveness.me/golang/tree/runtime.newproc1" rel="noopener noreferrer" target="_blank"><code>runtime.newproc1</code></a> 会根据传入参数初始化一个 <code>g</code> 结构体，我们可以将该函数分成以下几个部分介绍它的实现：</p>
+<ol>
+<li>获取或者创建新的 Goroutine 结构体；</li>
+<li>将传入的参数移到 Goroutine 的栈上；</li>
+<li>更新 Goroutine 调度相关的属性；</li>
+</ol>
+<p>首先是 Goroutine 结构体的创建过程：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">func</span><span style="color:#B392F0"> newproc1</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">fn</span><span style="color:#F97583"> *</span><span style="color:#B392F0">funcval</span><span style="color:#E1E4E8">, </span><span style="color:#FFAB70">argp</span><span style="color:#B392F0"> unsafe</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">Pointer</span><span style="color:#E1E4E8">, </span><span style="color:#FFAB70">narg</span><span style="color:#F97583"> int32</span><span style="color:#E1E4E8">, </span><span style="color:#FFAB70">callergp</span><span style="color:#F97583"> *</span><span style="color:#B392F0">g</span><span style="color:#E1E4E8">, </span><span style="color:#FFAB70">callerpc</span><span style="color:#F97583"> uintptr</span><span style="color:#E1E4E8">) </span><span style="color:#F97583">*</span><span style="color:#B392F0">g</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">	_g_ </span><span style="color:#F97583">:=</span><span style="color:#B392F0"> getg</span><span style="color:#E1E4E8">()</span></span>
+<span class="line"><span style="color:#E1E4E8">	siz </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> narg</span></span>
+<span class="line"><span style="color:#E1E4E8">	siz </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> (siz </span><span style="color:#F97583">+</span><span style="color:#79B8FF"> 7</span><span style="color:#E1E4E8">) </span><span style="color:#F97583">&#x26;^</span><span style="color:#79B8FF"> 7</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#E1E4E8">	_p_ </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> _g_.m.p.</span><span style="color:#B392F0">ptr</span><span style="color:#E1E4E8">()</span></span>
+<span class="line"><span style="color:#E1E4E8">	newg </span><span style="color:#F97583">:=</span><span style="color:#B392F0"> gfget</span><span style="color:#E1E4E8">(_p_)</span></span>
+<span class="line"><span style="color:#F97583">	if</span><span style="color:#E1E4E8"> newg </span><span style="color:#F97583">==</span><span style="color:#79B8FF"> nil</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">		newg </span><span style="color:#F97583">=</span><span style="color:#B392F0"> malg</span><span style="color:#E1E4E8">(_StackMin)</span></span>
+<span class="line"><span style="color:#B392F0">		casgstatus</span><span style="color:#E1E4E8">(newg, _Gidle, _Gdead)</span></span>
+<span class="line"><span style="color:#B392F0">		allgadd</span><span style="color:#E1E4E8">(newg)</span></span>
+<span class="line"><span style="color:#E1E4E8">	}</span></span>
+<span class="line"><span style="color:#F97583">	...</span></span></code></pre>
+<p>上述代码会先从处理器的 <code>gFree</code> 列表中查找空闲的 Goroutine，如果不存在空闲的 Goroutine，会通过 <a href="https://draveness.me/golang/tree/runtime.malg" rel="noopener noreferrer" target="_blank"><code>runtime.malg</code></a> 创建一个栈大小足够的新结构体。</p>
+<p>接下来，我们会调用 <a href="https://draveness.me/golang/tree/runtime.memmove" rel="noopener noreferrer" target="_blank"><code>runtime.memmove</code></a> 将 <code>fn</code> 函数的所有参数拷贝到栈上，<code>argp</code> 和 <code>narg</code> 分别是参数的内存空间和大小，我们在该方法中会将参数对应的内存空间整块拷贝到栈上：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">	...</span></span>
+<span class="line"><span style="color:#E1E4E8">	totalSize </span><span style="color:#F97583">:=</span><span style="color:#79B8FF"> 4</span><span style="color:#F97583">*</span><span style="color:#E1E4E8">sys.RegSize </span><span style="color:#F97583">+</span><span style="color:#F97583"> uintptr</span><span style="color:#E1E4E8">(siz) </span><span style="color:#F97583">+</span><span style="color:#E1E4E8"> sys.MinFrameSize</span></span>
+<span class="line"><span style="color:#E1E4E8">	totalSize </span><span style="color:#F97583">+=</span><span style="color:#F97583"> -</span><span style="color:#E1E4E8">totalSize </span><span style="color:#F97583">&#x26;</span><span style="color:#E1E4E8"> (sys.SpAlign </span><span style="color:#F97583">-</span><span style="color:#79B8FF"> 1</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"><span style="color:#E1E4E8">	sp </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> newg.stack.hi </span><span style="color:#F97583">-</span><span style="color:#E1E4E8"> totalSize</span></span>
+<span class="line"><span style="color:#E1E4E8">	spArg </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> sp</span></span>
+<span class="line"><span style="color:#F97583">	if</span><span style="color:#E1E4E8"> narg </span><span style="color:#F97583">></span><span style="color:#79B8FF"> 0</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#B392F0">		memmove</span><span style="color:#E1E4E8">(unsafe.</span><span style="color:#B392F0">Pointer</span><span style="color:#E1E4E8">(spArg), argp, </span><span style="color:#F97583">uintptr</span><span style="color:#E1E4E8">(narg))</span></span>
+<span class="line"><span style="color:#E1E4E8">	}</span></span>
+<span class="line"><span style="color:#F97583">	...</span></span></code></pre>
+<p>拷贝了栈上的参数之后，<a href="https://draveness.me/golang/tree/runtime.newproc1" rel="noopener noreferrer" target="_blank"><code>runtime.newproc1</code></a> 会设置新的 Goroutine 结构体的参数，包括栈指针、程序计数器并更新其状态到 <code>_Grunnable</code> 并返回：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">	...</span></span>
+<span class="line"><span style="color:#B392F0">	memclrNoHeapPointers</span><span style="color:#E1E4E8">(unsafe.</span><span style="color:#B392F0">Pointer</span><span style="color:#E1E4E8">(</span><span style="color:#F97583">&#x26;</span><span style="color:#E1E4E8">newg.sched), unsafe.</span><span style="color:#B392F0">Sizeof</span><span style="color:#E1E4E8">(newg.sched))</span></span>
+<span class="line"><span style="color:#E1E4E8">	newg.sched.sp </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> sp</span></span>
+<span class="line"><span style="color:#E1E4E8">	newg.stktopsp </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> sp</span></span>
+<span class="line"><span style="color:#E1E4E8">	newg.sched.pc </span><span style="color:#F97583">=</span><span style="color:#B392F0"> funcPC</span><span style="color:#E1E4E8">(goexit) </span><span style="color:#F97583">+</span><span style="color:#E1E4E8"> sys.PCQuantum</span></span>
+<span class="line"><span style="color:#E1E4E8">	newg.sched.g </span><span style="color:#F97583">=</span><span style="color:#B392F0"> guintptr</span><span style="color:#E1E4E8">(unsafe.</span><span style="color:#B392F0">Pointer</span><span style="color:#E1E4E8">(newg))</span></span>
+<span class="line"><span style="color:#B392F0">	gostartcallfn</span><span style="color:#E1E4E8">(</span><span style="color:#F97583">&#x26;</span><span style="color:#E1E4E8">newg.sched, fn)</span></span>
+<span class="line"><span style="color:#E1E4E8">	newg.gopc </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> callerpc</span></span>
+<span class="line"><span style="color:#E1E4E8">	newg.startpc </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> fn.fn</span></span>
+<span class="line"><span style="color:#B392F0">	casgstatus</span><span style="color:#E1E4E8">(newg, _Gdead, _Grunnable)</span></span>
+<span class="line"><span style="color:#E1E4E8">	newg.goid </span><span style="color:#F97583">=</span><span style="color:#F97583"> int64</span><span style="color:#E1E4E8">(_p_.goidcache)</span></span>
+<span class="line"><span style="color:#E1E4E8">	_p_.goidcache</span><span style="color:#F97583">++</span></span>
+<span class="line"><span style="color:#F97583">	return</span><span style="color:#E1E4E8"> newg</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<h3 id="初始化结构体">初始化结构体</h3>
+<p><a href="https://draveness.me/golang/tree/runtime.gfget" rel="noopener noreferrer" target="_blank"><code>runtime.gfget</code></a> 通过两种不同的方式获取新的 <a href="https://draveness.me/golang/tree/runtime.g" rel="noopener noreferrer" target="_blank"><code>runtime.g</code></a>：</p>
+<ol>
+<li>从 Goroutine 所在处理器的 <code>gFree</code> 列表或者调度器的 <code>sched.gFree</code> 列表中获取 <a href="https://draveness.me/golang/tree/runtime.g" rel="noopener noreferrer" target="_blank"><code>runtime.g</code></a>；</li>
+<li>调用 <a href="https://draveness.me/golang/tree/runtime.malg" rel="noopener noreferrer" target="_blank"><code>runtime.malg</code></a> 生成一个新的 <a href="https://draveness.me/golang/tree/runtime.g" rel="noopener noreferrer" target="_blank"><code>runtime.g</code></a> 并将结构体追加到全局的 Goroutine 列表 <code>allgs</code> 中。</li>
+</ol>
+<p><a href="https://draveness.me/golang/tree/runtime.gfget" rel="noopener noreferrer" target="_blank"><code>runtime.gfget</code></a> 中包含两部分逻辑，它会根据处理器中 <code>gFree</code> 列表中 Goroutine 的数量做出不同的决策：</p>
+<ol>
+<li>当处理器的 Goroutine 列表为空时，会将调度器持有的空闲 Goroutine 转移到当前处理器上，直到 <code>gFree</code> 列表中的 Goroutine 数量达到 32；</li>
+<li>当处理器的 Goroutine 数量充足时，会从列表头部返回一个新的 Goroutine；</li>
+</ol>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">func</span><span style="color:#B392F0"> gfget</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">_p_</span><span style="color:#F97583"> *</span><span style="color:#B392F0">p</span><span style="color:#E1E4E8">) </span><span style="color:#F97583">*</span><span style="color:#B392F0">g</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">retry:</span></span>
+<span class="line"><span style="color:#F97583">	if</span><span style="color:#E1E4E8"> _p_.gFree.</span><span style="color:#B392F0">empty</span><span style="color:#E1E4E8">() </span><span style="color:#F97583">&#x26;&#x26;</span><span style="color:#E1E4E8"> (</span><span style="color:#F97583">!</span><span style="color:#E1E4E8">sched.gFree.stack.</span><span style="color:#B392F0">empty</span><span style="color:#E1E4E8">() </span><span style="color:#F97583">||</span><span style="color:#F97583"> !</span><span style="color:#E1E4E8">sched.gFree.noStack.</span><span style="color:#B392F0">empty</span><span style="color:#E1E4E8">()) {</span></span>
+<span class="line"><span style="color:#F97583">		for</span><span style="color:#E1E4E8"> _p_.gFree.n </span><span style="color:#F97583">&#x3C;</span><span style="color:#79B8FF"> 32</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">			gp </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> sched.gFree.stack.</span><span style="color:#B392F0">pop</span><span style="color:#E1E4E8">()</span></span>
+<span class="line"><span style="color:#F97583">			if</span><span style="color:#E1E4E8"> gp </span><span style="color:#F97583">==</span><span style="color:#79B8FF"> nil</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">				gp </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> sched.gFree.noStack.</span><span style="color:#B392F0">pop</span><span style="color:#E1E4E8">()</span></span>
+<span class="line"><span style="color:#F97583">				if</span><span style="color:#E1E4E8"> gp </span><span style="color:#F97583">==</span><span style="color:#79B8FF"> nil</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">					break</span></span>
+<span class="line"><span style="color:#E1E4E8">				}</span></span>
+<span class="line"><span style="color:#E1E4E8">			}</span></span>
+<span class="line"><span style="color:#E1E4E8">			_p_.gFree.</span><span style="color:#B392F0">push</span><span style="color:#E1E4E8">(gp)</span></span>
+<span class="line"><span style="color:#E1E4E8">		}</span></span>
+<span class="line"><span style="color:#F97583">		goto</span><span style="color:#E1E4E8"> retry</span></span>
+<span class="line"><span style="color:#E1E4E8">	}</span></span>
+<span class="line"><span style="color:#E1E4E8">	gp </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> _p_.gFree.</span><span style="color:#B392F0">pop</span><span style="color:#E1E4E8">()</span></span>
+<span class="line"><span style="color:#F97583">	if</span><span style="color:#E1E4E8"> gp </span><span style="color:#F97583">==</span><span style="color:#79B8FF"> nil</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">		return</span><span style="color:#79B8FF"> nil</span></span>
+<span class="line"><span style="color:#E1E4E8">	}</span></span>
+<span class="line"><span style="color:#F97583">	return</span><span style="color:#E1E4E8"> gp</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span>
+<span class="line"></span></code></pre>
+<p>当调度器的 <code>gFree</code> 和处理器的 <code>gFree</code> 列表都不存在结构体时，运行时会调用 <a href="https://draveness.me/golang/tree/runtime.malg" rel="noopener noreferrer" target="_blank"><code>runtime.malg</code></a> 初始化新的 <a href="https://draveness.me/golang/tree/runtime.g" rel="noopener noreferrer" target="_blank"><code>runtime.g</code></a> 结构，如果申请的堆栈大小大于 0，这里会通过 <a href="https://draveness.me/golang/tree/runtime.stackalloc" rel="noopener noreferrer" target="_blank"><code>runtime.stackalloc</code></a> 分配 2KB 的栈空间：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">func</span><span style="color:#B392F0"> malg</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">stacksize</span><span style="color:#F97583"> int32</span><span style="color:#E1E4E8">) </span><span style="color:#F97583">*</span><span style="color:#B392F0">g</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">	newg </span><span style="color:#F97583">:=</span><span style="color:#B392F0"> new</span><span style="color:#E1E4E8">(</span><span style="color:#B392F0">g</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"><span style="color:#F97583">	if</span><span style="color:#E1E4E8"> stacksize </span><span style="color:#F97583">>=</span><span style="color:#79B8FF"> 0</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">		stacksize </span><span style="color:#F97583">=</span><span style="color:#B392F0"> round2</span><span style="color:#E1E4E8">(_StackSystem </span><span style="color:#F97583">+</span><span style="color:#E1E4E8"> stacksize)</span></span>
+<span class="line"><span style="color:#E1E4E8">		newg.stack </span><span style="color:#F97583">=</span><span style="color:#B392F0"> stackalloc</span><span style="color:#E1E4E8">(</span><span style="color:#F97583">uint32</span><span style="color:#E1E4E8">(stacksize))</span></span>
+<span class="line"><span style="color:#E1E4E8">		newg.stackguard0 </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> newg.stack.lo </span><span style="color:#F97583">+</span><span style="color:#E1E4E8"> _StackGuard</span></span>
+<span class="line"><span style="color:#E1E4E8">		newg.stackguard1 </span><span style="color:#F97583">=</span><span style="color:#F97583"> ^uintptr</span><span style="color:#E1E4E8">(</span><span style="color:#79B8FF">0</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"><span style="color:#E1E4E8">	}</span></span>
+<span class="line"><span style="color:#F97583">	return</span><span style="color:#E1E4E8"> newg</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p><a href="https://draveness.me/golang/tree/runtime.malg" rel="noopener noreferrer" target="_blank"><code>runtime.malg</code></a> 返回的 Goroutine 会存储到全局变量 <code>allgs</code> 中。</p>
+<p>简单总结一下，<a href="https://draveness.me/golang/tree/runtime.newproc1" rel="noopener noreferrer" target="_blank"><code>runtime.newproc1</code></a> 会从处理器或者调度器的缓存中获取新的结构体，也可以调用 <a href="https://draveness.me/golang/tree/runtime.malg" rel="noopener noreferrer" target="_blank"><code>runtime.malg</code></a> 函数创建。</p>
+<h3 id="运行队列">运行队列</h3>
+<p><a href="https://draveness.me/golang/tree/runtime.runqput" rel="noopener noreferrer" target="_blank"><code>runtime.runqput</code></a> 会将 Goroutine 放到运行队列上，这既可能是全局的运行队列，也可能是处理器本地的运行队列：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">func</span><span style="color:#B392F0"> runqput</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">_p_</span><span style="color:#F97583"> *</span><span style="color:#B392F0">p</span><span style="color:#E1E4E8">, </span><span style="color:#FFAB70">gp</span><span style="color:#F97583"> *</span><span style="color:#B392F0">g</span><span style="color:#E1E4E8">, </span><span style="color:#FFAB70">next</span><span style="color:#F97583"> bool</span><span style="color:#E1E4E8">) {</span></span>
+<span class="line"><span style="color:#F97583">	if</span><span style="color:#E1E4E8"> next {</span></span>
+<span class="line"><span style="color:#E1E4E8">	retryNext:</span></span>
+<span class="line"><span style="color:#E1E4E8">		oldnext </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> _p_.runnext</span></span>
+<span class="line"><span style="color:#F97583">		if</span><span style="color:#F97583"> !</span><span style="color:#E1E4E8">_p_.runnext.</span><span style="color:#B392F0">cas</span><span style="color:#E1E4E8">(oldnext, </span><span style="color:#B392F0">guintptr</span><span style="color:#E1E4E8">(unsafe.</span><span style="color:#B392F0">Pointer</span><span style="color:#E1E4E8">(gp))) {</span></span>
+<span class="line"><span style="color:#F97583">			goto</span><span style="color:#E1E4E8"> retryNext</span></span>
+<span class="line"><span style="color:#E1E4E8">		}</span></span>
+<span class="line"><span style="color:#F97583">		if</span><span style="color:#E1E4E8"> oldnext </span><span style="color:#F97583">==</span><span style="color:#79B8FF"> 0</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">			return</span></span>
+<span class="line"><span style="color:#E1E4E8">		}</span></span>
+<span class="line"><span style="color:#E1E4E8">		gp </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> oldnext.</span><span style="color:#B392F0">ptr</span><span style="color:#E1E4E8">()</span></span>
+<span class="line"><span style="color:#E1E4E8">	}</span></span>
+<span class="line"><span style="color:#E1E4E8">retry:</span></span>
+<span class="line"><span style="color:#E1E4E8">	h </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> atomic.</span><span style="color:#B392F0">LoadAcq</span><span style="color:#E1E4E8">(</span><span style="color:#F97583">&#x26;</span><span style="color:#E1E4E8">_p_.runqhead)</span></span>
+<span class="line"><span style="color:#E1E4E8">	t </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> _p_.runqtail</span></span>
+<span class="line"><span style="color:#F97583">	if</span><span style="color:#E1E4E8"> t</span><span style="color:#F97583">-</span><span style="color:#E1E4E8">h </span><span style="color:#F97583">&#x3C;</span><span style="color:#F97583"> uint32</span><span style="color:#E1E4E8">(</span><span style="color:#B392F0">len</span><span style="color:#E1E4E8">(_p_.runq)) {</span></span>
+<span class="line"><span style="color:#E1E4E8">		_p_.runq[t</span><span style="color:#F97583">%uint32</span><span style="color:#E1E4E8">(</span><span style="color:#B392F0">len</span><span style="color:#E1E4E8">(_p_.runq))].</span><span style="color:#B392F0">set</span><span style="color:#E1E4E8">(gp)</span></span>
+<span class="line"><span style="color:#E1E4E8">		atomic.</span><span style="color:#B392F0">StoreRel</span><span style="color:#E1E4E8">(</span><span style="color:#F97583">&#x26;</span><span style="color:#E1E4E8">_p_.runqtail, t</span><span style="color:#F97583">+</span><span style="color:#79B8FF">1</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"><span style="color:#F97583">		return</span></span>
+<span class="line"><span style="color:#E1E4E8">	}</span></span>
+<span class="line"><span style="color:#F97583">	if</span><span style="color:#B392F0"> runqputslow</span><span style="color:#E1E4E8">(_p_, gp, h, t) {</span></span>
+<span class="line"><span style="color:#F97583">		return</span></span>
+<span class="line"><span style="color:#E1E4E8">	}</span></span>
+<span class="line"><span style="color:#F97583">	goto</span><span style="color:#E1E4E8"> retry</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<ol>
+<li>当 <code>next</code> 为 <code>true</code> 时，将 Goroutine 设置到处理器的 <code>runnext</code> 作为下一个处理器执行的任务；</li>
+<li>当 <code>next</code> 为 <code>false</code> 并且本地运行队列还有剩余空间时，将 Goroutine 加入处理器持有的本地运行队列；</li>
+<li>当处理器的本地运行队列已经没有剩余空间时就会把本地队列中的一部分 Goroutine 和待加入的 Goroutine 通过 <a href="https://draveness.me/golang/tree/runtime.runqputslow" rel="noopener noreferrer" target="_blank"><code>runtime.runqputslow</code></a> 添加到调度器持有的全局运行队列上；</li>
+</ol>
+<p>处理器本地的运行队列是一个使用数组构成的环形链表，它最多可以存储 256 个待执行任务。</p>
+<blockquote>
+<p>Go 语言有两个运行队列，其中一个是处理器本地的运行队列，另一个是调度器持有的全局运行队列，只有在本地运行队列没有剩余空间时才会使用全局队列。</p>
+</blockquote>
+<h3 id="调度信息">调度信息</h3>
+<p>运行时创建 Goroutine 时会通过下面的代码设置调度相关的信息，前两行代码会分别将程序计数器和 Goroutine 设置成 <a href="https://draveness.me/golang/tree/runtime.goexit" rel="noopener noreferrer" target="_blank"><code>runtime.goexit</code></a> 和新创建 Goroutine 运行的函数：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">	...</span></span>
+<span class="line"><span style="color:#E1E4E8">	newg.sched.pc </span><span style="color:#F97583">=</span><span style="color:#B392F0"> funcPC</span><span style="color:#E1E4E8">(goexit) </span><span style="color:#F97583">+</span><span style="color:#E1E4E8"> sys.PCQuantum</span></span>
+<span class="line"><span style="color:#E1E4E8">	newg.sched.g </span><span style="color:#F97583">=</span><span style="color:#B392F0"> guintptr</span><span style="color:#E1E4E8">(unsafe.</span><span style="color:#B392F0">Pointer</span><span style="color:#E1E4E8">(newg))</span></span>
+<span class="line"><span style="color:#B392F0">	gostartcallfn</span><span style="color:#E1E4E8">(</span><span style="color:#F97583">&#x26;</span><span style="color:#E1E4E8">newg.sched, fn)</span></span>
+<span class="line"><span style="color:#F97583">	...</span></span></code></pre>
+<p>上述调度信息 <code>sched</code> 不是初始化后的 Goroutine 的最终结果，它还需要经过 <a href="https://draveness.me/golang/tree/runtime.gostartcallfn" rel="noopener noreferrer" target="_blank"><code>runtime.gostartcallfn</code></a> 和 <a href="https://draveness.me/golang/tree/runtime.gostartcall" rel="noopener noreferrer" target="_blank"><code>runtime.gostartcall</code></a> 的处理：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">func</span><span style="color:#B392F0"> gostartcallfn</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">gobuf</span><span style="color:#F97583"> *</span><span style="color:#B392F0">gobuf</span><span style="color:#E1E4E8">, </span><span style="color:#FFAB70">fv</span><span style="color:#F97583"> *</span><span style="color:#B392F0">funcval</span><span style="color:#E1E4E8">) {</span></span>
+<span class="line"><span style="color:#B392F0">	gostartcall</span><span style="color:#E1E4E8">(gobuf, unsafe.</span><span style="color:#B392F0">Pointer</span><span style="color:#E1E4E8">(fv.fn), unsafe.</span><span style="color:#B392F0">Pointer</span><span style="color:#E1E4E8">(fv))</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">func</span><span style="color:#B392F0"> gostartcall</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">buf</span><span style="color:#F97583"> *</span><span style="color:#B392F0">gobuf</span><span style="color:#E1E4E8">, </span><span style="color:#FFAB70">fn</span><span style="color:#E1E4E8">, </span><span style="color:#FFAB70">ctxt</span><span style="color:#B392F0"> unsafe</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">Pointer</span><span style="color:#E1E4E8">) {</span></span>
+<span class="line"><span style="color:#E1E4E8">	sp </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> buf.sp</span></span>
+<span class="line"><span style="color:#F97583">	if</span><span style="color:#E1E4E8"> sys.RegSize </span><span style="color:#F97583">></span><span style="color:#E1E4E8"> sys.PtrSize {</span></span>
+<span class="line"><span style="color:#E1E4E8">		sp </span><span style="color:#F97583">-=</span><span style="color:#E1E4E8"> sys.PtrSize</span></span>
+<span class="line"><span style="color:#F97583">		*</span><span style="color:#E1E4E8">(</span><span style="color:#F97583">*uintptr</span><span style="color:#E1E4E8">)(unsafe.</span><span style="color:#B392F0">Pointer</span><span style="color:#E1E4E8">(sp)) </span><span style="color:#F97583">=</span><span style="color:#79B8FF"> 0</span></span>
+<span class="line"><span style="color:#E1E4E8">	}</span></span>
+<span class="line"><span style="color:#E1E4E8">	sp </span><span style="color:#F97583">-=</span><span style="color:#E1E4E8"> sys.PtrSize</span></span>
+<span class="line"><span style="color:#F97583">	*</span><span style="color:#E1E4E8">(</span><span style="color:#F97583">*uintptr</span><span style="color:#E1E4E8">)(unsafe.</span><span style="color:#B392F0">Pointer</span><span style="color:#E1E4E8">(sp)) </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> buf.pc</span></span>
+<span class="line"><span style="color:#E1E4E8">	buf.sp </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> sp</span></span>
+<span class="line"><span style="color:#E1E4E8">	buf.pc </span><span style="color:#F97583">=</span><span style="color:#F97583"> uintptr</span><span style="color:#E1E4E8">(fn)</span></span>
+<span class="line"><span style="color:#E1E4E8">	buf.ctxt </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> ctxt</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>调度信息的 <code>sp</code> 中存储了 <a href="https://draveness.me/golang/tree/runtime.goexit" rel="noopener noreferrer" target="_blank"><code>runtime.goexit</code></a> 函数的程序计数器，而 <code>pc</code> 中存储了传入函数的程序计数器。因为 <code>pc</code> 寄存器的作用就是存储程序接下来运行的位置，所以 <code>pc</code> 的使用比较好理解，但是 <code>sp</code> 中存储的 <a href="https://draveness.me/golang/tree/runtime.goexit" rel="noopener noreferrer" target="_blank"><code>runtime.goexit</code></a> 会让人感到困惑，我们需要配合下面的调度循环来理解它的作用。</p>
+<h2 id="循环调度">循环调度</h2>
+<p>调度器启动之后，Go 语言运行时会调用 <a href="https://draveness.me/golang/tree/runtime.mstart" rel="noopener noreferrer" target="_blank"><code>runtime.mstart</code></a> 以及 <a href="https://draveness.me/golang/tree/runtime.mstart1" rel="noopener noreferrer" target="_blank"><code>runtime.mstart1</code></a>，前者会初始化 g0 的 <code>stackguard0</code> 和 <code>stackguard1</code> 字段，后者会初始化线程并调用 <a href="https://draveness.me/golang/tree/runtime.schedule" rel="noopener noreferrer" target="_blank"><code>runtime.schedule</code></a> 进入调度循环：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">func</span><span style="color:#B392F0"> schedule</span><span style="color:#E1E4E8">() {</span></span>
+<span class="line"><span style="color:#E1E4E8">	_g_ </span><span style="color:#F97583">:=</span><span style="color:#B392F0"> getg</span><span style="color:#E1E4E8">()</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#E1E4E8">top:</span></span>
+<span class="line"><span style="color:#F97583">	var</span><span style="color:#E1E4E8"> gp </span><span style="color:#F97583">*</span><span style="color:#B392F0">g</span></span>
+<span class="line"><span style="color:#F97583">	var</span><span style="color:#E1E4E8"> inheritTime </span><span style="color:#F97583">bool</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">	if</span><span style="color:#E1E4E8"> gp </span><span style="color:#F97583">==</span><span style="color:#79B8FF"> nil</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">		if</span><span style="color:#E1E4E8"> _g_.m.p.</span><span style="color:#B392F0">ptr</span><span style="color:#E1E4E8">().schedtick</span><span style="color:#F97583">%</span><span style="color:#79B8FF">61</span><span style="color:#F97583"> ==</span><span style="color:#79B8FF"> 0</span><span style="color:#F97583"> &#x26;&#x26;</span><span style="color:#E1E4E8"> sched.runqsize </span><span style="color:#F97583">></span><span style="color:#79B8FF"> 0</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#B392F0">			lock</span><span style="color:#E1E4E8">(</span><span style="color:#F97583">&#x26;</span><span style="color:#E1E4E8">sched.lock)</span></span>
+<span class="line"><span style="color:#E1E4E8">			gp </span><span style="color:#F97583">=</span><span style="color:#B392F0"> globrunqget</span><span style="color:#E1E4E8">(_g_.m.p.</span><span style="color:#B392F0">ptr</span><span style="color:#E1E4E8">(), </span><span style="color:#79B8FF">1</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"><span style="color:#B392F0">			unlock</span><span style="color:#E1E4E8">(</span><span style="color:#F97583">&#x26;</span><span style="color:#E1E4E8">sched.lock)</span></span>
+<span class="line"><span style="color:#E1E4E8">		}</span></span>
+<span class="line"><span style="color:#E1E4E8">	}</span></span>
+<span class="line"><span style="color:#F97583">	if</span><span style="color:#E1E4E8"> gp </span><span style="color:#F97583">==</span><span style="color:#79B8FF"> nil</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">		gp, inheritTime </span><span style="color:#F97583">=</span><span style="color:#B392F0"> runqget</span><span style="color:#E1E4E8">(_g_.m.p.</span><span style="color:#B392F0">ptr</span><span style="color:#E1E4E8">())</span></span>
+<span class="line"><span style="color:#E1E4E8">	}</span></span>
+<span class="line"><span style="color:#F97583">	if</span><span style="color:#E1E4E8"> gp </span><span style="color:#F97583">==</span><span style="color:#79B8FF"> nil</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">		gp, inheritTime </span><span style="color:#F97583">=</span><span style="color:#B392F0"> findrunnable</span><span style="color:#E1E4E8">()</span></span>
+<span class="line"><span style="color:#E1E4E8">	}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#B392F0">	execute</span><span style="color:#E1E4E8">(gp, inheritTime)</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p><a href="https://draveness.me/golang/tree/runtime.schedule" rel="noopener noreferrer" target="_blank"><code>runtime.schedule</code></a> 函数会从下面几个地方查找待执行的 Goroutine：</p>
+<ol>
+<li>为了保证公平，当全局运行队列中有待执行的 Goroutine 时，通过 <code>schedtick</code> 保证有一定几率会从全局的运行队列中查找对应的 Goroutine；</li>
+<li>从处理器本地的运行队列中查找待执行的 Goroutine；</li>
+<li>如果前两种方法都没有找到 Goroutine，会通过 <a href="https://draveness.me/golang/tree/runtime.findrunnable" rel="noopener noreferrer" target="_blank"><code>runtime.findrunnable</code></a> 进行阻塞地查找 Goroutine；</li>
+</ol>
+<p><a href="https://draveness.me/golang/tree/runtime.findrunnable" rel="noopener noreferrer" target="_blank"><code>runtime.findrunnable</code></a> 的实现非常复杂，这个 300 多行的函数通过以下的过程获取可运行的 Goroutine：</p>
+<ol>
+<li>从本地运行队列、全局运行队列中查找；</li>
+<li>从网络轮询器中查找是否有 Goroutine 等待运行；</li>
+<li>通过 <a href="https://draveness.me/golang/tree/runtime.runqsteal" rel="noopener noreferrer" target="_blank"><code>runtime.runqsteal</code></a> 尝试从其他随机的处理器中窃取待运行的 Goroutine，该函数还可能窃取处理器的计时器；</li>
+</ol>
+<p>因为函数的实现过于复杂，上述的执行过程是经过简化的，总而言之，当前函数一定会返回一个可执行的 Goroutine，如果当前不存在就会阻塞等待。</p>
+<p>接下来由 <a href="https://draveness.me/golang/tree/runtime.execute" rel="noopener noreferrer" target="_blank"><code>runtime.execute</code></a> 执行获取的 Goroutine，做好准备工作后，它会通过 <a href="https://draveness.me/golang/tree/runtime.gogo" rel="noopener noreferrer" target="_blank"><code>runtime.gogo</code></a> 将 Goroutine 调度到当前线程上。</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">func</span><span style="color:#B392F0"> execute</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">gp</span><span style="color:#F97583"> *</span><span style="color:#B392F0">g</span><span style="color:#E1E4E8">, </span><span style="color:#FFAB70">inheritTime</span><span style="color:#F97583"> bool</span><span style="color:#E1E4E8">) {</span></span>
+<span class="line"><span style="color:#E1E4E8">	_g_ </span><span style="color:#F97583">:=</span><span style="color:#B392F0"> getg</span><span style="color:#E1E4E8">()</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#E1E4E8">	_g_.m.curg </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> gp</span></span>
+<span class="line"><span style="color:#E1E4E8">	gp.m </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> _g_.m</span></span>
+<span class="line"><span style="color:#B392F0">	casgstatus</span><span style="color:#E1E4E8">(gp, _Grunnable, _Grunning)</span></span>
+<span class="line"><span style="color:#E1E4E8">	gp.waitsince </span><span style="color:#F97583">=</span><span style="color:#79B8FF"> 0</span></span>
+<span class="line"><span style="color:#E1E4E8">	gp.preempt </span><span style="color:#F97583">=</span><span style="color:#79B8FF"> false</span></span>
+<span class="line"><span style="color:#E1E4E8">	gp.stackguard0 </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> gp.stack.lo </span><span style="color:#F97583">+</span><span style="color:#E1E4E8"> _StackGuard</span></span>
+<span class="line"><span style="color:#F97583">	if</span><span style="color:#F97583"> !</span><span style="color:#E1E4E8">inheritTime {</span></span>
+<span class="line"><span style="color:#E1E4E8">		_g_.m.p.</span><span style="color:#B392F0">ptr</span><span style="color:#E1E4E8">().schedtick</span><span style="color:#F97583">++</span></span>
+<span class="line"><span style="color:#E1E4E8">	}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#B392F0">	gogo</span><span style="color:#E1E4E8">(</span><span style="color:#F97583">&#x26;</span><span style="color:#E1E4E8">gp.sched)</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p><a href="https://draveness.me/golang/tree/runtime.gogo" rel="noopener noreferrer" target="_blank"><code>runtime.gogo</code></a> 在不同处理器架构上的实现都不同，但是也都大同小异，下面是该函数在 386 架构上的实现：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#E1E4E8">TEXT runtime·</span><span style="color:#B392F0">gogo</span><span style="color:#E1E4E8">(SB), NOSPLIT, $</span><span style="color:#79B8FF">8</span><span style="color:#F97583">-</span><span style="color:#79B8FF">4</span></span>
+<span class="line"><span style="color:#E1E4E8">	MOVL buf</span><span style="color:#F97583">+</span><span style="color:#79B8FF">0</span><span style="color:#E1E4E8">(FP), BX     </span><span style="color:#6A737D">// 获取调度信息</span></span>
+<span class="line"><span style="color:#E1E4E8">	MOVL </span><span style="color:#B392F0">gobuf_g</span><span style="color:#E1E4E8">(BX), DX</span></span>
+<span class="line"><span style="color:#E1E4E8">	MOVL </span><span style="color:#79B8FF">0</span><span style="color:#E1E4E8">(DX), CX         </span><span style="color:#6A737D">// 保证 Goroutine 不为空</span></span>
+<span class="line"><span style="color:#B392F0">	get_tls</span><span style="color:#E1E4E8">(CX)</span></span>
+<span class="line"><span style="color:#E1E4E8">	MOVL DX, </span><span style="color:#B392F0">g</span><span style="color:#E1E4E8">(CX)</span></span>
+<span class="line"><span style="color:#E1E4E8">	MOVL </span><span style="color:#B392F0">gobuf_sp</span><span style="color:#E1E4E8">(BX), SP  </span><span style="color:#6A737D">// 将 runtime.goexit 函数的 PC 恢复到 SP 中</span></span>
+<span class="line"><span style="color:#E1E4E8">	MOVL </span><span style="color:#B392F0">gobuf_ret</span><span style="color:#E1E4E8">(BX), AX</span></span>
+<span class="line"><span style="color:#E1E4E8">	MOVL </span><span style="color:#B392F0">gobuf_ctxt</span><span style="color:#E1E4E8">(BX), DX</span></span>
+<span class="line"><span style="color:#E1E4E8">	MOVL $</span><span style="color:#79B8FF">0</span><span style="color:#E1E4E8">, </span><span style="color:#B392F0">gobuf_sp</span><span style="color:#E1E4E8">(BX)</span></span>
+<span class="line"><span style="color:#E1E4E8">	MOVL $</span><span style="color:#79B8FF">0</span><span style="color:#E1E4E8">, </span><span style="color:#B392F0">gobuf_ret</span><span style="color:#E1E4E8">(BX)</span></span>
+<span class="line"><span style="color:#E1E4E8">	MOVL $</span><span style="color:#79B8FF">0</span><span style="color:#E1E4E8">, </span><span style="color:#B392F0">gobuf_ctxt</span><span style="color:#E1E4E8">(BX)</span></span>
+<span class="line"><span style="color:#E1E4E8">	MOVL </span><span style="color:#B392F0">gobuf_pc</span><span style="color:#E1E4E8">(BX), BX  </span><span style="color:#6A737D">// 获取待执行函数的程序计数器</span></span>
+<span class="line"><span style="color:#E1E4E8">	JMP  BX                </span><span style="color:#6A737D">// 开始执行</span></span></code></pre>
+<p>它从 <a href="https://draveness.me/golang/tree/runtime.gobuf" rel="noopener noreferrer" target="_blank"><code>runtime.gobuf</code></a> 中取出了 <a href="https://draveness.me/golang/tree/runtime.goexit" rel="noopener noreferrer" target="_blank"><code>runtime.goexit</code></a> 的程序计数器和待执行函数的程序计数器，其中：</p>
+<ul>
+<li><a href="https://draveness.me/golang/tree/runtime.goexit" rel="noopener noreferrer" target="_blank"><code>runtime.goexit</code></a> 的程序计数器被放到了栈 SP 上；</li>
+<li>待执行函数的程序计数器被放到了寄存器 BX 上；</li>
+</ul>
+<p>在函数调用一节中，我们曾经介绍过 Go 语言的调用惯例，正常的函数调用都会使用 <code>CALL</code> 指令，该指令会将调用方的返回地址加入栈寄存器 SP 中，然后跳转到目标函数；当目标函数返回后，会从栈中查找调用的地址并跳转回调用方继续执行剩下的代码。</p>
+<p>经过一系列复杂的函数调用，我们最终在当前线程的 g0 的栈上调用 <a href="https://draveness.me/golang/tree/runtime.goexit0" rel="noopener noreferrer" target="_blank"><code>runtime.goexit0</code></a> 函数，该函数会将 Goroutine 转换会 <code>_Gdead</code> 状态、清理其中的字段、移除 Goroutine 和线程的关联并调用 <a href="https://draveness.me/golang/tree/runtime.gfput" rel="noopener noreferrer" target="_blank"><code>runtime.gfput</code></a> 重新加入处理器的 Goroutine 空闲列表 <code>gFree</code>：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">func</span><span style="color:#B392F0"> goexit0</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">gp</span><span style="color:#F97583"> *</span><span style="color:#B392F0">g</span><span style="color:#E1E4E8">) {</span></span>
+<span class="line"><span style="color:#E1E4E8">	_g_ </span><span style="color:#F97583">:=</span><span style="color:#B392F0"> getg</span><span style="color:#E1E4E8">()</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#B392F0">	casgstatus</span><span style="color:#E1E4E8">(gp, _Grunning, _Gdead)</span></span>
+<span class="line"><span style="color:#E1E4E8">	gp.m </span><span style="color:#F97583">=</span><span style="color:#79B8FF"> nil</span></span>
+<span class="line"><span style="color:#F97583">	...</span></span>
+<span class="line"><span style="color:#E1E4E8">	gp.param </span><span style="color:#F97583">=</span><span style="color:#79B8FF"> nil</span></span>
+<span class="line"><span style="color:#E1E4E8">	gp.labels </span><span style="color:#F97583">=</span><span style="color:#79B8FF"> nil</span></span>
+<span class="line"><span style="color:#E1E4E8">	gp.timer </span><span style="color:#F97583">=</span><span style="color:#79B8FF"> nil</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#B392F0">	dropg</span><span style="color:#E1E4E8">()</span></span>
+<span class="line"><span style="color:#B392F0">	gfput</span><span style="color:#E1E4E8">(_g_.m.p.</span><span style="color:#B392F0">ptr</span><span style="color:#E1E4E8">(), gp)</span></span>
+<span class="line"><span style="color:#B392F0">	schedule</span><span style="color:#E1E4E8">()</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>在最后 <a href="https://draveness.me/golang/tree/runtime.goexit0" rel="noopener noreferrer" target="_blank"><code>runtime.goexit0</code></a> 会重新调用 <a href="https://draveness.me/golang/tree/runtime.schedule" rel="noopener noreferrer" target="_blank"><code>runtime.schedule</code></a> 触发新一轮的 Goroutine 调度，Go 语言中的运行时调度循环会从 <a href="https://draveness.me/golang/tree/runtime.schedule" rel="noopener noreferrer" target="_blank"><code>runtime.schedule</code></a> 开始，最终又回到 <a href="https://draveness.me/golang/tree/runtime.schedule" rel="noopener noreferrer" target="_blank"><code>runtime.schedule</code></a>，我们可以认为调度循环永远都不会返回。</p>
+<h2 id="触发调度">触发调度</h2>
+<ul>
+<li>主动挂起 — <a href="https://draveness.me/golang/tree/runtime.gopark" rel="noopener noreferrer" target="_blank"><code>runtime.gopark</code></a> -> <a href="https://draveness.me/golang/tree/runtime.park_m" rel="noopener noreferrer" target="_blank"><code>runtime.park_m</code></a></li>
+<li>系统调用 — <a href="https://draveness.me/golang/tree/runtime.exitsyscall" rel="noopener noreferrer" target="_blank"><code>runtime.exitsyscall</code></a> -> <a href="https://draveness.me/golang/tree/runtime.exitsyscall0" rel="noopener noreferrer" target="_blank"><code>runtime.exitsyscall0</code></a></li>
+<li>协作式调度 — <a href="https://draveness.me/golang/tree/runtime.Gosched" rel="noopener noreferrer" target="_blank"><code>runtime.Gosched</code></a> -> <a href="https://draveness.me/golang/tree/runtime.gosched_m" rel="noopener noreferrer" target="_blank"><code>runtime.gosched_m</code></a> -> <a href="https://draveness.me/golang/tree/runtime.goschedImpl" rel="noopener noreferrer" target="_blank"><code>runtime.goschedImpl</code></a></li>
+<li>系统监控 — <a href="https://draveness.me/golang/tree/runtime.sysmon" rel="noopener noreferrer" target="_blank"><code>runtime.sysmon</code></a> -> <a href="https://draveness.me/golang/tree/runtime.retake" rel="noopener noreferrer" target="_blank"><code>runtime.retake</code></a> -> <a href="https://draveness.me/golang/tree/runtime.preemptone" rel="noopener noreferrer" target="_blank"><code>runtime.preemptone</code></a></li>
+</ul>
+<h3 id="主动挂起">主动挂起</h3>
+<p><a href="https://draveness.me/golang/tree/runtime.gopark" rel="noopener noreferrer" target="_blank"><code>runtime.gopark</code></a> 是触发调度最常见的方法，该函数会将当前 Goroutine 暂停，被暂停的任务不会放回运行队列，我们来分析该函数的实现原理：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">func</span><span style="color:#B392F0"> gopark</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">unlockf</span><span style="color:#F97583"> func</span><span style="color:#E1E4E8">(</span><span style="color:#F97583">*</span><span style="color:#B392F0">g</span><span style="color:#E1E4E8">, </span><span style="color:#B392F0">unsafe</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">Pointer</span><span style="color:#E1E4E8">) </span><span style="color:#F97583">bool</span><span style="color:#E1E4E8">, </span><span style="color:#FFAB70">lock</span><span style="color:#B392F0"> unsafe</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">Pointer</span><span style="color:#E1E4E8">, </span><span style="color:#FFAB70">reason</span><span style="color:#B392F0"> waitReason</span><span style="color:#E1E4E8">, </span><span style="color:#FFAB70">traceEv</span><span style="color:#F97583"> byte</span><span style="color:#E1E4E8">, </span><span style="color:#FFAB70">traceskip</span><span style="color:#F97583"> int</span><span style="color:#E1E4E8">) {</span></span>
+<span class="line"><span style="color:#E1E4E8">	mp </span><span style="color:#F97583">:=</span><span style="color:#B392F0"> acquirem</span><span style="color:#E1E4E8">()</span></span>
+<span class="line"><span style="color:#E1E4E8">	gp </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> mp.curg</span></span>
+<span class="line"><span style="color:#E1E4E8">	mp.waitlock </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> lock</span></span>
+<span class="line"><span style="color:#E1E4E8">	mp.waitunlockf </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> unlockf</span></span>
+<span class="line"><span style="color:#E1E4E8">	gp.waitreason </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> reason</span></span>
+<span class="line"><span style="color:#E1E4E8">	mp.waittraceev </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> traceEv</span></span>
+<span class="line"><span style="color:#E1E4E8">	mp.waittraceskip </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> traceskip</span></span>
+<span class="line"><span style="color:#B392F0">	releasem</span><span style="color:#E1E4E8">(mp)</span></span>
+<span class="line"><span style="color:#B392F0">	mcall</span><span style="color:#E1E4E8">(park_m)</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>上述会通过 <a href="https://draveness.me/golang/tree/runtime.mcall" rel="noopener noreferrer" target="_blank"><code>runtime.mcall</code></a> 切换到 g0 的栈上调用 <a href="https://draveness.me/golang/tree/runtime.park_m" rel="noopener noreferrer" target="_blank"><code>runtime.park_m</code></a>：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">func</span><span style="color:#B392F0"> park_m</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">gp</span><span style="color:#F97583"> *</span><span style="color:#B392F0">g</span><span style="color:#E1E4E8">) {</span></span>
+<span class="line"><span style="color:#E1E4E8">	_g_ </span><span style="color:#F97583">:=</span><span style="color:#B392F0"> getg</span><span style="color:#E1E4E8">()</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#B392F0">	casgstatus</span><span style="color:#E1E4E8">(gp, _Grunning, _Gwaiting)</span></span>
+<span class="line"><span style="color:#B392F0">	dropg</span><span style="color:#E1E4E8">()</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#B392F0">	schedule</span><span style="color:#E1E4E8">()</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p><a href="https://draveness.me/golang/tree/runtime.park_m" rel="noopener noreferrer" target="_blank"><code>runtime.park_m</code></a> 会将当前 Goroutine 的状态从 <code>_Grunning</code> 切换至 <code>_Gwaiting</code>，调用 <a href="https://draveness.me/golang/tree/runtime.dropg" rel="noopener noreferrer" target="_blank"><code>runtime.dropg</code></a> 移除线程和 Goroutine 之间的关联，在这之后就可以调用 <a href="https://draveness.me/golang/tree/runtime.schedule" rel="noopener noreferrer" target="_blank"><code>runtime.schedule</code></a> 触发新一轮的调度了。</p>
+<p>当 Goroutine 等待的特定条件满足后，运行时会调用 <a href="https://draveness.me/golang/tree/runtime.goready" rel="noopener noreferrer" target="_blank"><code>runtime.goready</code></a> 将因为调用 <a href="https://draveness.me/golang/tree/runtime.gopark" rel="noopener noreferrer" target="_blank"><code>runtime.gopark</code></a> 而陷入休眠的 Goroutine 唤醒。</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">func</span><span style="color:#B392F0"> goready</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">gp</span><span style="color:#F97583"> *</span><span style="color:#B392F0">g</span><span style="color:#E1E4E8">, </span><span style="color:#FFAB70">traceskip</span><span style="color:#F97583"> int</span><span style="color:#E1E4E8">) {</span></span>
+<span class="line"><span style="color:#B392F0">	systemstack</span><span style="color:#E1E4E8">(</span><span style="color:#F97583">func</span><span style="color:#E1E4E8">() {</span></span>
+<span class="line"><span style="color:#B392F0">		ready</span><span style="color:#E1E4E8">(gp, traceskip, </span><span style="color:#79B8FF">true</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"><span style="color:#E1E4E8">	})</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">func</span><span style="color:#B392F0"> ready</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">gp</span><span style="color:#F97583"> *</span><span style="color:#B392F0">g</span><span style="color:#E1E4E8">, </span><span style="color:#FFAB70">traceskip</span><span style="color:#F97583"> int</span><span style="color:#E1E4E8">, </span><span style="color:#FFAB70">next</span><span style="color:#F97583"> bool</span><span style="color:#E1E4E8">) {</span></span>
+<span class="line"><span style="color:#E1E4E8">	_g_ </span><span style="color:#F97583">:=</span><span style="color:#B392F0"> getg</span><span style="color:#E1E4E8">()</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#B392F0">	casgstatus</span><span style="color:#E1E4E8">(gp, _Gwaiting, _Grunnable)</span></span>
+<span class="line"><span style="color:#B392F0">	runqput</span><span style="color:#E1E4E8">(_g_.m.p.</span><span style="color:#B392F0">ptr</span><span style="color:#E1E4E8">(), gp, next)</span></span>
+<span class="line"><span style="color:#F97583">	if</span><span style="color:#E1E4E8"> atomic.</span><span style="color:#B392F0">Load</span><span style="color:#E1E4E8">(</span><span style="color:#F97583">&#x26;</span><span style="color:#E1E4E8">sched.npidle) </span><span style="color:#F97583">!=</span><span style="color:#79B8FF"> 0</span><span style="color:#F97583"> &#x26;&#x26;</span><span style="color:#E1E4E8"> atomic.</span><span style="color:#B392F0">Load</span><span style="color:#E1E4E8">(</span><span style="color:#F97583">&#x26;</span><span style="color:#E1E4E8">sched.nmspinning) </span><span style="color:#F97583">==</span><span style="color:#79B8FF"> 0</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#B392F0">		wakep</span><span style="color:#E1E4E8">()</span></span>
+<span class="line"><span style="color:#E1E4E8">	}</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p><a href="https://draveness.me/golang/tree/runtime.ready" rel="noopener noreferrer" target="_blank"><code>runtime.ready</code></a> 会将准备就绪的 Goroutine 的状态切换至 <code>_Grunnable</code> 并将其加入处理器的运行队列中，等待调度器的调度。</p>
+<h3 id="系统调用">系统调用</h3>
+<p>系统调用也会触发运行时调度器的调度，为了处理特殊的系统调用，我们甚至在 Goroutine 中加入了 <code>_Gsyscall</code> 状态，Go 语言通过 <a href="https://draveness.me/golang/tree/syscall.Syscall" rel="noopener noreferrer" target="_blank"><code>syscall.Syscall</code></a> 和 <a href="https://draveness.me/golang/tree/syscall.RawSyscall" rel="noopener noreferrer" target="_blank"><code>syscall.RawSyscall</code></a> 等使用汇编语言编写的方法封装操作系统提供的所有系统调用，其中 <a href="https://draveness.me/golang/tree/syscall.Syscall" rel="noopener noreferrer" target="_blank"><code>syscall.Syscall</code></a> 的实现如下：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#E1E4E8">#define INVOKE_SYSCALL	INT	$</span><span style="color:#F97583">0x</span><span style="color:#79B8FF">80</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#E1E4E8">TEXT ·</span><span style="color:#B392F0">Syscall</span><span style="color:#E1E4E8">(SB),NOSPLIT,$</span><span style="color:#79B8FF">0</span><span style="color:#F97583">-</span><span style="color:#79B8FF">28</span></span>
+<span class="line"><span style="color:#E1E4E8">	CALL	runtime·</span><span style="color:#B392F0">entersyscall</span><span style="color:#E1E4E8">(SB)</span></span>
+<span class="line"><span style="color:#F97583">	...</span></span>
+<span class="line"><span style="color:#E1E4E8">	INVOKE_SYSCALL</span></span>
+<span class="line"><span style="color:#F97583">	...</span></span>
+<span class="line"><span style="color:#E1E4E8">	CALL	runtime·</span><span style="color:#B392F0">exitsyscall</span><span style="color:#E1E4E8">(SB)</span></span>
+<span class="line"><span style="color:#E1E4E8">	RET</span></span>
+<span class="line"><span style="color:#E1E4E8">ok:</span></span>
+<span class="line"><span style="color:#F97583">	...</span></span>
+<span class="line"><span style="color:#E1E4E8">	CALL	runtime·</span><span style="color:#B392F0">exitsyscall</span><span style="color:#E1E4E8">(SB)</span></span>
+<span class="line"><span style="color:#E1E4E8">	RET</span></span></code></pre>
+<p>在通过汇编指令 <code>INVOKE_SYSCALL</code> 执行系统调用前后，上述函数会调用运行时的 <a href="https://draveness.me/golang/tree/runtime.entersyscall" rel="noopener noreferrer" target="_blank"><code>runtime.entersyscall</code></a> 和 <a href="https://draveness.me/golang/tree/runtime.exitsyscall" rel="noopener noreferrer" target="_blank"><code>runtime.exitsyscall</code></a>，正是这一层包装能够让我们在陷入系统调用前触发运行时的准备和清理工作。</p>
+<h3 id="协作式调度">协作式调度</h3>
+<p>协作式调度<a href="https://draveness.me/golang/tree/runtime.Gosched" rel="noopener noreferrer" target="_blank"><code>runtime.Gosched</code></a> 函数会主动让出处理器，允许其他 Goroutine 运行。该函数无法挂起 Goroutine，调度器可能会将当前 Goroutine 调度到其他线程上：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">func</span><span style="color:#B392F0"> Gosched</span><span style="color:#E1E4E8">() {</span></span>
+<span class="line"><span style="color:#B392F0">	checkTimeouts</span><span style="color:#E1E4E8">()</span></span>
+<span class="line"><span style="color:#B392F0">	mcall</span><span style="color:#E1E4E8">(gosched_m)</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">func</span><span style="color:#B392F0"> gosched_m</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">gp</span><span style="color:#F97583"> *</span><span style="color:#B392F0">g</span><span style="color:#E1E4E8">) {</span></span>
+<span class="line"><span style="color:#B392F0">	goschedImpl</span><span style="color:#E1E4E8">(gp)</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">func</span><span style="color:#B392F0"> goschedImpl</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">gp</span><span style="color:#F97583"> *</span><span style="color:#B392F0">g</span><span style="color:#E1E4E8">) {</span></span>
+<span class="line"><span style="color:#B392F0">	casgstatus</span><span style="color:#E1E4E8">(gp, _Grunning, _Grunnable)</span></span>
+<span class="line"><span style="color:#B392F0">	dropg</span><span style="color:#E1E4E8">()</span></span>
+<span class="line"><span style="color:#B392F0">	lock</span><span style="color:#E1E4E8">(</span><span style="color:#F97583">&#x26;</span><span style="color:#E1E4E8">sched.lock)</span></span>
+<span class="line"><span style="color:#B392F0">	globrunqput</span><span style="color:#E1E4E8">(gp)</span></span>
+<span class="line"><span style="color:#B392F0">	unlock</span><span style="color:#E1E4E8">(</span><span style="color:#F97583">&#x26;</span><span style="color:#E1E4E8">sched.lock)</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#B392F0">	schedule</span><span style="color:#E1E4E8">()</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>经过连续几次跳转，我们最终在 g0 的栈上调用 <a href="https://draveness.me/golang/tree/runtime.goschedImpl" rel="noopener noreferrer" target="_blank"><code>runtime.goschedImpl</code></a>，运行时会更新 Goroutine 的状态到 <code>_Grunnable</code>，让出当前的处理器并将 Goroutine 重新放回全局队列，在最后，该函数会调用 <a href="https://draveness.me/golang/tree/runtime.schedule" rel="noopener noreferrer" target="_blank"><code>runtime.schedule</code></a> 触发调度。</p></main><aside class="toc"><p class="toc-title">本页目录</p><ul><li class="toc-d2"><a href="#数据结构">数据结构</a></li><li class="toc-d3"><a href="#g">G</a></li><li class="toc-d3"><a href="#m">M</a></li><li class="toc-d3"><a href="#p">P</a></li><li class="toc-d2"><a href="#原理">原理</a></li><li class="toc-d3"><a href="#单线程调度器">单线程调度器</a></li><li class="toc-d3"><a href="#多线程调度器">多线程调度器</a></li><li class="toc-d3"><a href="#任务窃取调度器">任务窃取调度器</a></li><li class="toc-d3"><a href="#抢占式调度">抢占式调度</a></li><li class="toc-d2"><a href="#调度器启动">调度器启动</a></li><li class="toc-d2"><a href="#创建-goroutine">创建 Goroutine</a></li><li class="toc-d3"><a href="#初始化结构体">初始化结构体</a></li><li class="toc-d3"><a href="#运行队列">运行队列</a></li><li class="toc-d3"><a href="#调度信息">调度信息</a></li><li class="toc-d2"><a href="#循环调度">循环调度</a></li><li class="toc-d2"><a href="#触发调度">触发调度</a></li><li class="toc-d3"><a href="#主动挂起">主动挂起</a></li><li class="toc-d3"><a href="#系统调用">系统调用</a></li><li class="toc-d3"><a href="#协作式调度">协作式调度</a></li></ul></aside></div><div class="lightbox" id="lightbox" aria-hidden="true"><img alt=""></div><script type="module" src="/_astro/Base.astro_astro_type_script_index_0_lang.7IsV0x-z.js"></script></body></html>

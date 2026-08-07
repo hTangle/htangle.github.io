@@ -1,0 +1,100 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>分布式ID生成算法</title><script>
+      (function () {
+        var s = localStorage.getItem('theme');
+        if (s === 'light' || s === 'dark') {
+          document.documentElement.setAttribute('data-theme', s);
+        }
+      })();
+    </script><link rel="stylesheet" href="/_astro/Base.CUYrCnW9.css"></head><body><header class="topbar"><a href="/" class="brand">HLDay</a><nav><a href="/">书</a><a href="/posts/">博客</a><a href="https://github.com/hTangle" class="nav-github" aria-label="GitHub">GitHub</a></nav><button class="theme-toggle" id="themeToggle" type="button" title="切换主题（自动/浅色/深色）" aria-label="切换主题">🖥️</button></header><div class="layout"><aside class="booknav"><ul class="nav-tree"><li><p class="nav-group">Go</p><ul><li><p class="nav-subgroup">并发编程</p><ul><li class><a href="/gmp/">GMP 调度器</a></li><li class><a href="/sync-lock/">同步和锁</a></li><li class><a href="/channel/">Channel</a></li><li class><a href="/context/">Context</a></li></ul></li></ul></li><li><p class="nav-group">Agent 开发</p><ul><li><p class="nav-subgroup">核心协议与机制</p><ul><li class><a href="/mcp/">MCP</a></li><li class><a href="/skill/">Skill</a></li><li class><a href="/tool-call/">Tool Call</a></li></ul></li></ul></li></ul></aside><main class="prose"><h1>分布式ID生成算法</h1><p>在实际业务建模过程中，大多数情况下我们需要通过一个唯一ID来标记一条数据例如用户信息等，而这些唯一ID需要在插入数据库之前在程序中生成，如果存在多个不同的后端pod同时接受请求，则需要使用一个分布式的ID生成器来解耦ID生成与后端Pod的依赖。</p>
+<p>因此一个分布式的ID生成器需要满足以下几个要求：</p>
+<ul>
+<li>唯一性：不同client任意时刻生成的id需要不同；</li>
+<li>高性能：ID生成往往涉及到新用户和新业务的接入，所以需要高性能的ID生成器，ID生成器不应该成为业务的瓶颈</li>
+<li>高可用：ID生成器的不可用往往会导致业务的不可用；</li>
+</ul>
+<p>常见的ID生成算法包括：</p>
+<ul>
+<li>UUID</li>
+<li>数据库自增ID</li>
+<li>号段模式</li>
+<li>雪花算法</li>
+</ul>
+<h2 id="uuid">UUID</h2>
+<p>在go中，可以简单通过</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="shell"><code><span class="line"><span style="color:#B392F0">go</span><span style="color:#9ECBFF"> get</span><span style="color:#9ECBFF"> github.com/google/uuid</span></span></code></pre>
+<p>然后在代码中生成uuid</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#E1E4E8">uuid2.</span><span style="color:#B392F0">New</span><span style="color:#E1E4E8">().</span><span style="color:#B392F0">String</span><span style="color:#E1E4E8">()</span></span></code></pre>
+<p>即可生成一个长度为36的uuid</p>
+<p>优点：</p>
+<ul>
+<li>简单，成本低，占用资源低，基本不可能重复</li>
+</ul>
+<p>缺点：</p>
+<ul>
+<li>无序：随机字符串，不具备自增的趋势，如果以uuid为主键，则主键索引分页的概率较大，数据页越多，磁盘IO的次数也会越多，查询速度也会越慢；自增主键记录会顺序添加到当前索引节点的后续位置，当16kb的一页写满时，会自动新建一页。而非自增主键的插入顺序类似于随机，插入容易导致B+树数据的频繁的移动和分页操作；</li>
+<li>长度过长在<a href="https://dev.mysql.com/doc/refman/5.7/en/innodb-index-types.html" rel="noopener noreferrer" target="_blank">MySQL :: MySQL 5.7 Reference Manual :: 14.6.2.1 Clustered and Secondary Indexes</a>中提到<code>If the primary key is long, the secondary indexes use more space, so it is advantageous to have a short primary key.</code>；</li>
+</ul>
+<h2 id="数据库自增id">数据库自增ID</h2>
+<p>通过在数据库中新建一个表，使用数据库的自增ID作为业务的ID</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="sql"><code><span class="line"><span style="color:#F97583">CREATE</span><span style="color:#F97583"> TABLE</span><span style="color:#B392F0"> ID_GEN</span><span style="color:#E1E4E8"> (</span></span>
+<span class="line"><span style="color:#E1E4E8">    id </span><span style="color:#F97583">bigint</span><span style="color:#E1E4E8">(</span><span style="color:#79B8FF">20</span><span style="color:#E1E4E8">) unsigned </span><span style="color:#F97583">NOT NULL</span><span style="color:#E1E4E8"> auto_increment, </span></span>
+<span class="line"><span style="color:#F97583">    value</span><span style="color:#F97583"> char</span><span style="color:#E1E4E8">(</span><span style="color:#79B8FF">10</span><span style="color:#E1E4E8">) </span><span style="color:#F97583">NOT NULL</span><span style="color:#F97583"> default</span><span style="color:#9ECBFF"> ''</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#F97583">    PRIMARY KEY</span><span style="color:#E1E4E8"> (id),</span></span>
+<span class="line"><span style="color:#E1E4E8">) ENGINE</span><span style="color:#F97583">=</span><span style="color:#E1E4E8">MyISAM;</span></span></code></pre>
+<p>优点：</p>
+<ul>
+<li>实现简单，ID单调自增，数值类型查询速度快；</li>
+</ul>
+<p>缺点：</p>
+<ul>
+<li>DB可能存在宕机风险；</li>
+<li>MySQL查询QPS有限制；</li>
+</ul>
+<p>其他优化可以通过扩展DB的实例数量，设定ID的起始值和步长来解决MySQL的瓶颈，但是这种类型的ID扩展性不强，扩容的时候操作风险高。</p>
+<blockquote>
+<p>设定起始值的时候有个坑，如果设定的起始值1，但是没有往表里插入数据，这个时候数据库宕机重启了，此时起始值会失效！</p>
+</blockquote>
+<h2 id="号段模式">号段模式</h2>
+<p>在数据库自增ID中，使用的时数据库提供的自增ID的多业务可扩展性不强，可以通过号段模式来优化</p>
+<p>号段模式为：业务每次使用事务的方式来数据库取一个号段存储到内存中，然后每次生成ID的时候从内存中取数据；</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="sql"><code><span class="line"><span style="color:#F97583">CREATE</span><span style="color:#F97583"> TABLE</span><span style="color:#B392F0"> IDS</span><span style="color:#E1E4E8"> (</span></span>
+<span class="line"><span style="color:#E1E4E8">  id </span><span style="color:#F97583">int</span><span style="color:#E1E4E8">(</span><span style="color:#79B8FF">10</span><span style="color:#E1E4E8">) </span><span style="color:#F97583">NOT NULL</span><span style="color:#E1E4E8"> auto_increment,</span></span>
+<span class="line"><span style="color:#E1E4E8">  max_id </span><span style="color:#F97583">bigint</span><span style="color:#E1E4E8">(</span><span style="color:#79B8FF">20</span><span style="color:#E1E4E8">) </span><span style="color:#F97583">NOT NULL</span><span style="color:#E1E4E8"> COMMENT </span><span style="color:#9ECBFF">'当前最大id'</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">  step </span><span style="color:#F97583">int</span><span style="color:#E1E4E8">(</span><span style="color:#79B8FF">20</span><span style="color:#E1E4E8">) </span><span style="color:#F97583">NOT NULL</span><span style="color:#E1E4E8"> COMMENT </span><span style="color:#9ECBFF">'号段的步长'</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#E1E4E8">  biz_type	</span><span style="color:#F97583">varchar</span><span style="color:#E1E4E8">(</span><span style="color:#79B8FF">64</span><span style="color:#E1E4E8">) </span><span style="color:#F97583">NOT NULL</span><span style="color:#E1E4E8"> COMMENT </span><span style="color:#9ECBFF">'业务类型'</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#F97583">  PRIMARY KEY</span><span style="color:#E1E4E8"> (</span><span style="color:#9ECBFF">`id`</span><span style="color:#E1E4E8">),</span></span>
+<span class="line"><span style="color:#F97583">  UNIQUE</span><span style="color:#F97583"> KEY</span><span style="color:#9ECBFF"> `biz_type`</span><span style="color:#E1E4E8"> (</span><span style="color:#9ECBFF">`biz_type`</span><span style="color:#E1E4E8">) </span></span>
+<span class="line"><span style="color:#E1E4E8">) </span></span></code></pre>
+<p>通过<code>biz_type</code>来区分不同的业务，每次业务取号时，新建一个事务，然后锁定对于的<code>biz_type</code>的行，更新<code>max_id</code>，写表，提交事务，然后就可以获取到一个完整的ID；</p>
+<p>优点：</p>
+<ul>
+<li>便于扩展；</li>
+<li>ID为64位且有递增趋势；</li>
+<li>服务内有缓存，DB暂时性宕机对业务基本无影响；</li>
+<li><code>max_id</code>可以自定义，便于迁移；</li>
+</ul>
+<p>缺点：</p>
+<ul>
+<li>ID不随机；</li>
+<li>号段用完的时候需要取号段，此时会对业务产生一定的影响，如果取号段的时候DB挂掉，则业务不可用；</li>
+<li>DB宕机时间过长会导致整个系统不可用；</li>
+</ul>
+<p>为了解决上述问题，可以通过采用下面的架构：内存中存储了多个号段，当号段消耗超过一定比例的时候，启动一个异步任务取更新号段，此时即使DB宕机，服务也会缓存一定的号段（可以为峰值QPS的倍数）维持业务的运行；</p>
+<p><img src="https://ahsup.oss-cn-beijing.aliyuncs.com//draw/id-generator-double-leaf-1.png" alt="id-generator-double-leaf-1"></p>
+<h2 id="雪花算法">雪花算法</h2>
+<p>雪花算法（Snowflake）是twitter公司内部分布式项目采用的ID生成算法。<code>Snowflake</code>生成的是Long类型的ID</p>
+<p><img src="https://ahsup.oss-cn-beijing.aliyuncs.com/image-20220313165822591.png" alt="image-20220313165822591"></p>
+<p><code>Snowflake</code>ID组成结构如上图：正数位(1 bit)+时间戳(41 bits)+机器ID(10 bits)+ 自增值(12 bits)</p>
+<p>从上面的介绍可以看出</p>
+<ul>
+<li>同一ms时间内，每个节点最大可生成的ID数量为4096个；</li>
+<li>最多支持1024个实例；</li>
+<li>41bits的时间戳会在69年内耗尽（所以不要使用当前时间戳，使用相对值）；</li>
+</ul>
+<p>go可以参考<a href="https://github.com/godruoyi/go-snowflake" rel="noopener noreferrer" target="_blank">godruoyi/go-snowflake: ❄ An Lock Free ID Generator for Golang based on Snowflake Algorithm (Twitter announced). (github.com)</a></p>
+<p>其他各种类型的ID生成器都是号段模式和雪花算法的变种：</p>
+<ul>
+<li>美团leaf-snowflake：通过zk管理节点的worker-id并在本地缓存worker-id来解决zk的强依赖问题；通过周期性的上传机器时间来解决时间回拨问题；</li>
+<li>百度uid-generator<a href="https://github.com/baidu/uid-generator" rel="noopener noreferrer" target="_blank">baidu/uid-generator: UniqueID generator (github.com)</a>：通过与数据库配合自定义时间戳、worker-id和序列号</li>
+<li><a href="https://github.com/didi/tinyid" rel="noopener noreferrer" target="_blank">didi/tinyid: ID Generator id生成器 分布式id生成系统，简单易用、高性能、高可用的id生成系统 (github.com)</a></li>
+</ul></main><aside class="toc"><p class="toc-title">本页目录</p><ul><li class="toc-d2"><a href="#uuid">UUID</a></li><li class="toc-d2"><a href="#数据库自增id">数据库自增ID</a></li><li class="toc-d2"><a href="#号段模式">号段模式</a></li><li class="toc-d2"><a href="#雪花算法">雪花算法</a></li></ul></aside></div><div class="lightbox" id="lightbox" aria-hidden="true"><img alt=""></div><script type="module" src="/_astro/Base.astro_astro_type_script_index_0_lang.7IsV0x-z.js"></script></body></html>

@@ -1,0 +1,114 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>必应每日一图api接口</title><script>
+      (function () {
+        var s = localStorage.getItem('theme');
+        if (s === 'light' || s === 'dark') {
+          document.documentElement.setAttribute('data-theme', s);
+        }
+      })();
+    </script><link rel="stylesheet" href="/_astro/Base.CUYrCnW9.css"></head><body><header class="topbar"><a href="/" class="brand">HLDay</a><nav><a href="/">书</a><a href="/posts/">博客</a><a href="https://github.com/hTangle" class="nav-github" aria-label="GitHub">GitHub</a></nav><button class="theme-toggle" id="themeToggle" type="button" title="切换主题（自动/浅色/深色）" aria-label="切换主题">🖥️</button></header><div class="layout"><aside class="booknav"><ul class="nav-tree"><li><p class="nav-group">Go</p><ul><li><p class="nav-subgroup">并发编程</p><ul><li class><a href="/gmp/">GMP 调度器</a></li><li class><a href="/sync-lock/">同步和锁</a></li><li class><a href="/channel/">Channel</a></li><li class><a href="/context/">Context</a></li></ul></li></ul></li><li><p class="nav-group">Agent 开发</p><ul><li><p class="nav-subgroup">核心协议与机制</p><ul><li class><a href="/mcp/">MCP</a></li><li class><a href="/skill/">Skill</a></li><li class><a href="/tool-call/">Tool Call</a></li></ul></li></ul></li></ul></aside><main class="prose"><h1>必应每日一图api接口</h1><h2 id="接口介绍">接口介绍</h2>
+<p>本站提供了一个简单的必应每日一图的接口，</p>
+<ul>
+<li>uri: <code>https://bing.hxsup.top/bing/page</code></li>
+<li>参数：
+<ul>
+<li>page: 当前页码</li>
+<li>page_size: 每一页的数量</li>
+</ul>
+</li>
+<li>返回值格式
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">type</span><span style="color:#B392F0"> Images</span><span style="color:#F97583"> struct</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">  Images []</span><span style="color:#B392F0">ImageInfo</span><span style="color:#9ECBFF"> `json:"images"`</span></span>
+<span class="line"><span style="color:#E1E4E8">  Total  </span><span style="color:#F97583">int</span><span style="color:#9ECBFF">         `json:"total"`</span><span style="color:#6A737D"> // 总数</span></span>
+<span class="line"><span style="color:#E1E4E8">  Pages  </span><span style="color:#F97583">int</span><span style="color:#9ECBFF">         `json:"pages"`</span><span style="color:#6A737D"> // 总页数</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span>
+<span class="line"><span style="color:#F97583">type</span><span style="color:#B392F0"> ImageInfo</span><span style="color:#F97583"> struct</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">  Startdate     </span><span style="color:#F97583">string</span><span style="color:#9ECBFF"> `json:"startdate"`</span></span>
+<span class="line"><span style="color:#E1E4E8">  Enddate       </span><span style="color:#F97583">string</span><span style="color:#9ECBFF"> `json:"enddate"`</span></span>
+<span class="line"><span style="color:#E1E4E8">  URL           </span><span style="color:#F97583">string</span><span style="color:#9ECBFF"> `json:"url"`</span></span>
+<span class="line"><span style="color:#E1E4E8">  Urlbase       </span><span style="color:#F97583">string</span><span style="color:#9ECBFF"> `json:"urlbase"`</span></span>
+<span class="line"><span style="color:#E1E4E8">  Copyright     </span><span style="color:#F97583">string</span><span style="color:#9ECBFF"> `json:"copyright"`</span></span>
+<span class="line"><span style="color:#E1E4E8">  Copyrightlink </span><span style="color:#F97583">string</span><span style="color:#9ECBFF"> `json:"copyrightlink"`</span></span>
+<span class="line"><span style="color:#E1E4E8">  Title         </span><span style="color:#F97583">string</span><span style="color:#9ECBFF"> `json:"title"`</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+</li>
+</ul>
+<p>国内域名：<code>https://ahsup.top/bing/page</code></p>
+<h2 id="示例">示例</h2>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="shell"><code><span class="line"><span style="color:#B392F0">curl</span><span style="color:#9ECBFF"> "https://bing.hxsup.top/bing/page"</span></span></code></pre>
+<p>返回值</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="json"><code><span class="line"><span style="color:#E1E4E8">{</span></span>
+<span class="line"><span style="color:#79B8FF">    "images"</span><span style="color:#E1E4E8">: [</span></span>
+<span class="line"><span style="color:#E1E4E8">        {</span></span>
+<span class="line"><span style="color:#79B8FF">            "startdate"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"20221204"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">            "fullstartdate"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">""</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">            "enddate"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"20221205"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">            "url"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"/th?id=OHR.BambooTreesIndia_ZH-CN3943852151_UHD.jpg&#x26;rf=LaDigue_UHD.jpg&#x26;pid=hp&#x26;w=1920&#x26;h=1080&#x26;rs=1&#x26;c=4"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">            "urlbase"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"/th?id=OHR.BambooTreesIndia_ZH-CN3943852151"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">            "copyright"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"古瓦哈提的竹子，印度阿萨姆邦 (© Page Bazar/500px/Getty Images)"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">            "copyrightlink"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"https://www.bing.com/search?q=%E5%8F%A4%E7%93%A6%E5%93%88%E6%8F%90&#x26;form=hpcapt&#x26;mkt=zh-cn"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">            "title"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"绿意盎然"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">            "quiz"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">""</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">            "wp"</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">false</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">            "hsh"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">""</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">            "drk"</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">0</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">            "top"</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">0</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">            "bot"</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">0</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">            "hs"</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">null</span></span>
+<span class="line"><span style="color:#E1E4E8">        },</span></span>
+<span class="line"><span style="color:#E1E4E8">        {</span></span>
+<span class="line"><span style="color:#79B8FF">            "startdate"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"20221203"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">            "fullstartdate"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"202212031600"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">            "enddate"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"20221204"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">            "url"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"/th?id=OHR.KilimanjaroElephants_ZH-CN3779609103_UHD.jpg&#x26;rf=LaDigue_UHD.jpg&#x26;pid=hp&#x26;w=1920&#x26;h=1080&#x26;rs=1&#x26;c=4"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">            "urlbase"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"/th?id=OHR.KilimanjaroElephants_ZH-CN3779609103"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">            "copyright"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"乞力马扎罗山附近的大象，安波塞利国家公园，肯尼亚 (© Diana Robinson Photography/Getty Images)"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">            "copyrightlink"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"https://www.bing.com/search?q=%E4%B9%9E%E5%8A%9B%E9%A9%AC%E6%89%8E%E7%BD%97&#x26;form=hpcapt&#x26;mkt=zh-cn"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">            "title"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"象群在路上"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">            "quiz"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"/search?q=Bing+homepage+quiz&#x26;filters=WQOskey:%22HPQuiz_20221203_KilimanjaroElephants%22&#x26;FORM=HPQUIZ"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">            "wp"</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">true</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">            "hsh"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"faaac886595573846ad23814d4a1a595"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">            "drk"</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">1</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">            "top"</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">1</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">            "bot"</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">1</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">            "hs"</span><span style="color:#E1E4E8">: []</span></span>
+<span class="line"><span style="color:#E1E4E8">        },</span></span>
+<span class="line"><span style="color:#E1E4E8">        {</span></span>
+<span class="line"><span style="color:#79B8FF">            "startdate"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"20221202"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">            "fullstartdate"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"202212021600"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">            "enddate"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"20221203"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">            "url"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"/th?id=OHR.MiamiDT_ZH-CN3528760113_UHD.jpg&#x26;rf=LaDigue_UHD.jpg&#x26;pid=hp&#x26;w=1920&#x26;h=1080&#x26;rs=1&#x26;c=4"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">            "urlbase"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"/th?id=OHR.MiamiDT_ZH-CN3528760113"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">            "copyright"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"迈阿密海滩海洋大道，美国佛罗里达州 (© Matteo Colombo/Getty Images)"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">            "copyrightlink"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"https://www.bing.com/search?q=%E8%BF%88%E9%98%BF%E5%AF%86%E6%B5%B7%E6%BB%A9%E6%B5%B7%E6%B4%8B%E5%A4%A7%E9%81%93&#x26;form=hpcapt&#x26;mkt=zh-cn"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">            "title"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"在艺术天堂追逐夏天"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">            "quiz"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"/search?q=Bing+homepage+quiz&#x26;filters=WQOskey:%22HPQuiz_20221202_MiamiDT%22&#x26;FORM=HPQUIZ"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">            "wp"</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">true</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">            "hsh"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"73e343e98870e5265047d9dfdc9b1fb6"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">            "drk"</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">1</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">            "top"</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">1</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">            "bot"</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">1</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">            "hs"</span><span style="color:#E1E4E8">: []</span></span>
+<span class="line"><span style="color:#E1E4E8">        },</span></span>
+<span class="line"><span style="color:#E1E4E8">        {</span></span>
+<span class="line"><span style="color:#79B8FF">            "startdate"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"20221201"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">            "fullstartdate"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"202212011600"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">            "enddate"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"20221202"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">            "url"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"/th?id=OHR.BraidedRiverDelta_ZH-CN3352462511_UHD.jpg&#x26;rf=LaDigue_UHD.jpg&#x26;pid=hp&#x26;w=1920&#x26;h=1080&#x26;rs=1&#x26;c=4"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">            "urlbase"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"/th?id=OHR.BraidedRiverDelta_ZH-CN3352462511"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">            "copyright"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"特里卡基拉河三角洲，阿拉斯加州克拉克湖国家公园，美国 (© Dawn Wilson Photography/Getty Images)"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">            "copyrightlink"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"https://www.bing.com/search?q=%E9%98%BF%E6%8B%89%E6%96%AF%E5%8A%A0%E5%B7%9E%E5%85%8B%E6%8B%89%E5%85%8B%E6%B9%96%E5%9B%BD%E5%AE%B6%E5%85%AC%E5%9B%AD&#x26;form=hpcapt&#x26;mkt=zh-cn"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">            "title"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"保护阿拉斯加的自然之美"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">            "quiz"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"/search?q=Bing+homepage+quiz&#x26;filters=WQOskey:%22HPQuiz_20221201_BraidedRiverDelta%22&#x26;FORM=HPQUIZ"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">            "wp"</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">true</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">            "hsh"</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">"fa5b3e8191e47576b943dd5a3cfc1fd6"</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">            "drk"</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">1</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">            "top"</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">1</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">            "bot"</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">1</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">            "hs"</span><span style="color:#E1E4E8">: []</span></span>
+<span class="line"><span style="color:#E1E4E8">        }</span></span>
+<span class="line"><span style="color:#E1E4E8">    ],</span></span>
+<span class="line"><span style="color:#79B8FF">    "total"</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">1320</span><span style="color:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#79B8FF">    "pages"</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">330</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<h2 id="小程序体验">小程序体验</h2>
+<p><img src="https://ahsup.oss-cn-beijing.aliyuncs.com/mini-bing.png" alt=""></p></main><aside class="toc"><p class="toc-title">本页目录</p><ul><li class="toc-d2"><a href="#接口介绍">接口介绍</a></li><li class="toc-d2"><a href="#示例">示例</a></li><li class="toc-d2"><a href="#小程序体验">小程序体验</a></li></ul></aside></div><div class="lightbox" id="lightbox" aria-hidden="true"><img alt=""></div><script type="module" src="/_astro/Base.astro_astro_type_script_index_0_lang.7IsV0x-z.js"></script></body></html>

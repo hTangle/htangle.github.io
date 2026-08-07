@@ -1,0 +1,153 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Go调用系统编辑器编辑文件</title><script>
+      (function () {
+        var s = localStorage.getItem('theme');
+        if (s === 'light' || s === 'dark') {
+          document.documentElement.setAttribute('data-theme', s);
+        }
+      })();
+    </script><link rel="stylesheet" href="/_astro/Base.CUYrCnW9.css"></head><body><header class="topbar"><a href="/" class="brand">HLDay</a><nav><a href="/">书</a><a href="/posts/">博客</a><a href="https://github.com/hTangle" class="nav-github" aria-label="GitHub">GitHub</a></nav><button class="theme-toggle" id="themeToggle" type="button" title="切换主题（自动/浅色/深色）" aria-label="切换主题">🖥️</button></header><div class="layout"><aside class="booknav"><ul class="nav-tree"><li><p class="nav-group">Go</p><ul><li><p class="nav-subgroup">并发编程</p><ul><li class><a href="/gmp/">GMP 调度器</a></li><li class><a href="/sync-lock/">同步和锁</a></li><li class><a href="/channel/">Channel</a></li><li class><a href="/context/">Context</a></li></ul></li></ul></li><li><p class="nav-group">Agent 开发</p><ul><li><p class="nav-subgroup">核心协议与机制</p><ul><li class><a href="/mcp/">MCP</a></li><li class><a href="/skill/">Skill</a></li><li class><a href="/tool-call/">Tool Call</a></li></ul></li></ul></li></ul></aside><main class="prose"><h1>Go调用系统编辑器编辑文件</h1><p>需求：通过go打开一个编辑器，编辑完成后需要处理修改后的文件</p>
+<p>流程分析：</p>
+<ol>
+<li>调用command打开编辑器，并传入待编辑的文件；</li>
+<li>等待编辑器退出，获取编辑后的文件；</li>
+</ol>
+<p>首先定义一个常量和数据结构：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">const</span><span style="color:#E1E4E8"> (</span></span>
+<span class="line"><span style="color:#79B8FF">	defaultEditor</span><span style="color:#F97583"> =</span><span style="color:#9ECBFF"> "vim"</span></span>
+<span class="line"><span style="color:#79B8FF">	defaultShell</span><span style="color:#F97583">  =</span><span style="color:#9ECBFF"> "/bin/bash"</span></span>
+<span class="line"><span style="color:#E1E4E8">)</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">type</span><span style="color:#B392F0"> Editor</span><span style="color:#F97583"> struct</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">	Args  []</span><span style="color:#F97583">string</span></span>
+<span class="line"><span style="color:#E1E4E8">	Shell </span><span style="color:#F97583">bool</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D">// 默认shell执行器</span></span>
+<span class="line"><span style="color:#F97583">func</span><span style="color:#B392F0"> defaultEnvShell</span><span style="color:#E1E4E8">() []</span><span style="color:#F97583">string</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">	shell </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> os.</span><span style="color:#B392F0">Getenv</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">"SHELL"</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"><span style="color:#F97583">	if</span><span style="color:#B392F0"> len</span><span style="color:#E1E4E8">(shell) </span><span style="color:#F97583">==</span><span style="color:#79B8FF"> 0</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">		shell </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> defaultShell</span></span>
+<span class="line"><span style="color:#E1E4E8">	}</span></span>
+<span class="line"><span style="color:#E1E4E8">	flag </span><span style="color:#F97583">:=</span><span style="color:#9ECBFF"> "-c"</span></span>
+<span class="line"><span style="color:#F97583">	return</span><span style="color:#E1E4E8"> []</span><span style="color:#F97583">string</span><span style="color:#E1E4E8">{shell, flag}</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D">// 默认编辑器</span></span>
+<span class="line"><span style="color:#F97583">func</span><span style="color:#B392F0"> defaultEnvEditor</span><span style="color:#E1E4E8">() ([]</span><span style="color:#F97583">string</span><span style="color:#E1E4E8">, </span><span style="color:#F97583">bool</span><span style="color:#E1E4E8">) {</span></span>
+<span class="line"><span style="color:#E1E4E8">	editor </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> defaultEditor</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">	if</span><span style="color:#F97583"> !</span><span style="color:#E1E4E8">strings.</span><span style="color:#B392F0">Contains</span><span style="color:#E1E4E8">(editor, </span><span style="color:#9ECBFF">" "</span><span style="color:#E1E4E8">) {</span></span>
+<span class="line"><span style="color:#F97583">		return</span><span style="color:#E1E4E8"> []</span><span style="color:#F97583">string</span><span style="color:#E1E4E8">{editor}, </span><span style="color:#79B8FF">false</span></span>
+<span class="line"><span style="color:#E1E4E8">	}</span></span>
+<span class="line"><span style="color:#F97583">	if</span><span style="color:#F97583"> !</span><span style="color:#E1E4E8">strings.</span><span style="color:#B392F0">ContainsAny</span><span style="color:#E1E4E8">(editor, </span><span style="color:#9ECBFF">"</span><span style="color:#79B8FF">\"</span><span style="color:#9ECBFF">'</span><span style="color:#79B8FF">\\</span><span style="color:#9ECBFF">"</span><span style="color:#E1E4E8">) {</span></span>
+<span class="line"><span style="color:#F97583">		return</span><span style="color:#E1E4E8"> strings.</span><span style="color:#B392F0">Split</span><span style="color:#E1E4E8">(editor, </span><span style="color:#9ECBFF">" "</span><span style="color:#E1E4E8">), </span><span style="color:#79B8FF">false</span></span>
+<span class="line"><span style="color:#E1E4E8">	}</span></span>
+<span class="line"><span style="color:#6A737D">	// rather than parse the shell arguments ourselves, punt to the shell</span></span>
+<span class="line"><span style="color:#E1E4E8">	shell </span><span style="color:#F97583">:=</span><span style="color:#B392F0"> defaultEnvShell</span><span style="color:#E1E4E8">()</span></span>
+<span class="line"><span style="color:#F97583">	return</span><span style="color:#B392F0"> append</span><span style="color:#E1E4E8">(shell, editor), </span><span style="color:#79B8FF">true</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D">// 默认编辑器结构体</span></span>
+<span class="line"><span style="color:#F97583">func</span><span style="color:#B392F0"> NewDefaultEditor</span><span style="color:#E1E4E8">() </span><span style="color:#B392F0">Editor</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">	args, shell </span><span style="color:#F97583">:=</span><span style="color:#B392F0"> defaultEnvEditor</span><span style="color:#E1E4E8">()</span></span>
+<span class="line"><span style="color:#F97583">	return</span><span style="color:#B392F0"> Editor</span><span style="color:#E1E4E8">{</span></span>
+<span class="line"><span style="color:#E1E4E8">		Args:  args,</span></span>
+<span class="line"><span style="color:#E1E4E8">		Shell: shell,</span></span>
+<span class="line"><span style="color:#E1E4E8">	}</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">func</span><span style="color:#E1E4E8"> (</span><span style="color:#FFAB70">e </span><span style="color:#B392F0">Editor</span><span style="color:#E1E4E8">) </span><span style="color:#B392F0">args</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">path</span><span style="color:#F97583"> string</span><span style="color:#E1E4E8">) []</span><span style="color:#F97583">string</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">	args </span><span style="color:#F97583">:=</span><span style="color:#B392F0"> make</span><span style="color:#E1E4E8">([]</span><span style="color:#F97583">string</span><span style="color:#E1E4E8">, </span><span style="color:#B392F0">len</span><span style="color:#E1E4E8">(e.Args))</span></span>
+<span class="line"><span style="color:#B392F0">	copy</span><span style="color:#E1E4E8">(args, e.Args)</span></span>
+<span class="line"><span style="color:#F97583">	if</span><span style="color:#E1E4E8"> e.Shell {</span></span>
+<span class="line"><span style="color:#E1E4E8">		last </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> args[</span><span style="color:#B392F0">len</span><span style="color:#E1E4E8">(args)</span><span style="color:#F97583">-</span><span style="color:#79B8FF">1</span><span style="color:#E1E4E8">]</span></span>
+<span class="line"><span style="color:#E1E4E8">		args[</span><span style="color:#B392F0">len</span><span style="color:#E1E4E8">(args)</span><span style="color:#F97583">-</span><span style="color:#79B8FF">1</span><span style="color:#E1E4E8">] </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> fmt.</span><span style="color:#B392F0">Sprintf</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">"</span><span style="color:#79B8FF">%s</span><span style="color:#79B8FF"> %q</span><span style="color:#9ECBFF">"</span><span style="color:#E1E4E8">, last, path)</span></span>
+<span class="line"><span style="color:#E1E4E8">	} </span><span style="color:#F97583">else</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">		args </span><span style="color:#F97583">=</span><span style="color:#B392F0"> append</span><span style="color:#E1E4E8">(args, path)</span></span>
+<span class="line"><span style="color:#E1E4E8">	}</span></span>
+<span class="line"><span style="color:#F97583">	return</span><span style="color:#E1E4E8"> args</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>定义如何启动一个编辑器</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">func</span><span style="color:#E1E4E8"> (</span><span style="color:#FFAB70">e </span><span style="color:#B392F0">Editor</span><span style="color:#E1E4E8">) </span><span style="color:#B392F0">Launch</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">path</span><span style="color:#F97583"> string</span><span style="color:#E1E4E8">) </span><span style="color:#F97583">error</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">	if</span><span style="color:#B392F0"> len</span><span style="color:#E1E4E8">(e.Args) </span><span style="color:#F97583">==</span><span style="color:#79B8FF"> 0</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">		return</span><span style="color:#E1E4E8"> fmt.</span><span style="color:#B392F0">Errorf</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">"no editor defined, can't open </span><span style="color:#79B8FF">%s</span><span style="color:#9ECBFF">"</span><span style="color:#E1E4E8">, path)</span></span>
+<span class="line"><span style="color:#E1E4E8">	}</span></span>
+<span class="line"><span style="color:#E1E4E8">	abs, err </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> filepath.</span><span style="color:#B392F0">Abs</span><span style="color:#E1E4E8">(path)</span></span>
+<span class="line"><span style="color:#F97583">	if</span><span style="color:#E1E4E8"> err </span><span style="color:#F97583">!=</span><span style="color:#79B8FF"> nil</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">		return</span><span style="color:#E1E4E8"> err</span></span>
+<span class="line"><span style="color:#E1E4E8">	}</span></span>
+<span class="line"><span style="color:#E1E4E8">	args </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> e.</span><span style="color:#B392F0">args</span><span style="color:#E1E4E8">(abs)</span></span>
+<span class="line"><span style="color:#E1E4E8">	cmd </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> exec.</span><span style="color:#B392F0">Command</span><span style="color:#E1E4E8">(args[</span><span style="color:#79B8FF">0</span><span style="color:#E1E4E8">], args[</span><span style="color:#79B8FF">1</span><span style="color:#E1E4E8">:]</span><span style="color:#F97583">...</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"><span style="color:#E1E4E8">	cmd.Stdout </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> os.Stdout</span></span>
+<span class="line"><span style="color:#E1E4E8">	cmd.Stderr </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> os.Stderr</span></span>
+<span class="line"><span style="color:#E1E4E8">	cmd.Stdin </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> os.Stdin</span></span>
+<span class="line"><span style="color:#E1E4E8">	logger.</span><span style="color:#B392F0">Infof</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">"Opening file with editor </span><span style="color:#79B8FF">%v</span><span style="color:#9ECBFF">"</span><span style="color:#E1E4E8">, args)</span></span>
+<span class="line"><span style="color:#F97583">	if</span><span style="color:#E1E4E8"> err </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> (</span><span style="color:#B392F0">term</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">TTY</span><span style="color:#E1E4E8">{In: os.Stdin, TryDev: </span><span style="color:#79B8FF">true</span><span style="color:#E1E4E8">}).</span><span style="color:#B392F0">Safe</span><span style="color:#E1E4E8">(cmd.Run); err </span><span style="color:#F97583">!=</span><span style="color:#79B8FF"> nil</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">		if</span><span style="color:#E1E4E8"> err, ok </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> err.(</span><span style="color:#F97583">*</span><span style="color:#B392F0">exec</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">Error</span><span style="color:#E1E4E8">); ok {</span></span>
+<span class="line"><span style="color:#F97583">			if</span><span style="color:#E1E4E8"> err.Err </span><span style="color:#F97583">==</span><span style="color:#E1E4E8"> exec.ErrNotFound {</span></span>
+<span class="line"><span style="color:#F97583">				return</span><span style="color:#E1E4E8"> fmt.</span><span style="color:#B392F0">Errorf</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">"unable to launch the editor </span><span style="color:#79B8FF">%q</span><span style="color:#9ECBFF">"</span><span style="color:#E1E4E8">, strings.</span><span style="color:#B392F0">Join</span><span style="color:#E1E4E8">(e.Args, </span><span style="color:#9ECBFF">" "</span><span style="color:#E1E4E8">))</span></span>
+<span class="line"><span style="color:#E1E4E8">			}</span></span>
+<span class="line"><span style="color:#E1E4E8">		}</span></span>
+<span class="line"><span style="color:#F97583">		return</span><span style="color:#E1E4E8"> fmt.</span><span style="color:#B392F0">Errorf</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">"there was a problem with the editor </span><span style="color:#79B8FF">%q</span><span style="color:#9ECBFF">"</span><span style="color:#E1E4E8">, strings.</span><span style="color:#B392F0">Join</span><span style="color:#E1E4E8">(e.Args, </span><span style="color:#9ECBFF">" "</span><span style="color:#E1E4E8">))</span></span>
+<span class="line"><span style="color:#E1E4E8">	}</span></span>
+<span class="line"><span style="color:#F97583">	return</span><span style="color:#79B8FF"> nil</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>最重要的是需要使用term.TTY：</p>
+<blockquote>
+<p>TTY helps invoke a function and preserve the state of the terminal, even if the process is terminated during execution. It also provides support for terminal resizing for remote command execution/attachment.</p>
+</blockquote>
+<p>Launch函数会直接编辑文件，但是一般情况了，程序需要编辑tmp文件：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">func</span><span style="color:#E1E4E8"> (</span><span style="color:#FFAB70">e </span><span style="color:#B392F0">Editor</span><span style="color:#E1E4E8">) </span><span style="color:#B392F0">LaunchTempFile</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">prefix</span><span style="color:#E1E4E8">, </span><span style="color:#FFAB70">suffix</span><span style="color:#F97583"> string</span><span style="color:#E1E4E8">, </span><span style="color:#FFAB70">r</span><span style="color:#B392F0"> io</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">Reader</span><span style="color:#E1E4E8">) ([]</span><span style="color:#F97583">byte</span><span style="color:#E1E4E8">, </span><span style="color:#F97583">string</span><span style="color:#E1E4E8">, </span><span style="color:#F97583">error</span><span style="color:#E1E4E8">) {</span></span>
+<span class="line"><span style="color:#E1E4E8">	f, err </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> os.</span><span style="color:#B392F0">CreateTemp</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">""</span><span style="color:#E1E4E8">, prefix</span><span style="color:#F97583">+</span><span style="color:#9ECBFF">"*"</span><span style="color:#F97583">+</span><span style="color:#E1E4E8">suffix)</span></span>
+<span class="line"><span style="color:#F97583">	if</span><span style="color:#E1E4E8"> err </span><span style="color:#F97583">!=</span><span style="color:#79B8FF"> nil</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">		return</span><span style="color:#79B8FF"> nil</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">""</span><span style="color:#E1E4E8">, err</span></span>
+<span class="line"><span style="color:#E1E4E8">	}</span></span>
+<span class="line"><span style="color:#F97583">	defer</span><span style="color:#E1E4E8"> f.</span><span style="color:#B392F0">Close</span><span style="color:#E1E4E8">()</span></span>
+<span class="line"><span style="color:#E1E4E8">	path </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> f.</span><span style="color:#B392F0">Name</span><span style="color:#E1E4E8">()</span></span>
+<span class="line"><span style="color:#F97583">	if</span><span style="color:#E1E4E8"> _, err </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> io.</span><span style="color:#B392F0">Copy</span><span style="color:#E1E4E8">(f, r); err </span><span style="color:#F97583">!=</span><span style="color:#79B8FF"> nil</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">		os.</span><span style="color:#B392F0">Remove</span><span style="color:#E1E4E8">(path)</span></span>
+<span class="line"><span style="color:#F97583">		return</span><span style="color:#79B8FF"> nil</span><span style="color:#E1E4E8">, path, err</span></span>
+<span class="line"><span style="color:#E1E4E8">	}</span></span>
+<span class="line"><span style="color:#6A737D">	// This file descriptor needs to close so the next process (Launch) can claim it.</span></span>
+<span class="line"><span style="color:#E1E4E8">	f.</span><span style="color:#B392F0">Close</span><span style="color:#E1E4E8">()</span></span>
+<span class="line"><span style="color:#F97583">	if</span><span style="color:#E1E4E8"> err </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> e.</span><span style="color:#B392F0">Launch</span><span style="color:#E1E4E8">(path); err </span><span style="color:#F97583">!=</span><span style="color:#79B8FF"> nil</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">		return</span><span style="color:#79B8FF"> nil</span><span style="color:#E1E4E8">, path, err</span></span>
+<span class="line"><span style="color:#E1E4E8">	}</span></span>
+<span class="line"><span style="color:#E1E4E8">	bytes, err </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> ioutil.</span><span style="color:#B392F0">ReadFile</span><span style="color:#E1E4E8">(path)</span></span>
+<span class="line"><span style="color:#F97583">	return</span><span style="color:#E1E4E8"> bytes, path, err</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">func</span><span style="color:#E1E4E8"> (</span><span style="color:#FFAB70">e </span><span style="color:#B392F0">Editor</span><span style="color:#E1E4E8">) </span><span style="color:#B392F0">LaunchTempFileWithJSON</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">v</span><span style="color:#F97583"> interface</span><span style="color:#E1E4E8">{}) ([]</span><span style="color:#F97583">byte</span><span style="color:#E1E4E8">, </span><span style="color:#F97583">bool</span><span style="color:#E1E4E8">, </span><span style="color:#F97583">error</span><span style="color:#E1E4E8">) {</span></span>
+<span class="line"><span style="color:#F97583">	if</span><span style="color:#E1E4E8"> data, err </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> json.</span><span style="color:#B392F0">Marshal</span><span style="color:#E1E4E8">(v); err </span><span style="color:#F97583">==</span><span style="color:#79B8FF"> nil</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">		var</span><span style="color:#E1E4E8"> prettyJSON </span><span style="color:#B392F0">bytes</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">Buffer</span></span>
+<span class="line"><span style="color:#E1E4E8">		err </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> json.</span><span style="color:#B392F0">Indent</span><span style="color:#E1E4E8">(</span><span style="color:#F97583">&#x26;</span><span style="color:#E1E4E8">prettyJSON, data, </span><span style="color:#9ECBFF">""</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">"  "</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"><span style="color:#F97583">		if</span><span style="color:#E1E4E8"> err </span><span style="color:#F97583">!=</span><span style="color:#79B8FF"> nil</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">			logger.</span><span style="color:#B392F0">Errorf</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">"JSON parse error: </span><span style="color:#79B8FF">%v</span><span style="color:#9ECBFF">"</span><span style="color:#E1E4E8">, err)</span></span>
+<span class="line"><span style="color:#F97583">			return</span><span style="color:#79B8FF"> nil</span><span style="color:#E1E4E8">, </span><span style="color:#79B8FF">false</span><span style="color:#E1E4E8">, err</span></span>
+<span class="line"><span style="color:#E1E4E8">		}</span></span>
+<span class="line"><span style="color:#E1E4E8">		buf </span><span style="color:#F97583">:=</span><span style="color:#F97583"> &#x26;</span><span style="color:#B392F0">bytes</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">Buffer</span><span style="color:#E1E4E8">{}</span></span>
+<span class="line"><span style="color:#F97583">		var</span><span style="color:#E1E4E8"> w </span><span style="color:#B392F0">io</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">Writer</span><span style="color:#F97583"> =</span><span style="color:#E1E4E8"> buf</span></span>
+<span class="line"><span style="color:#E1E4E8">		_, err </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> fmt.</span><span style="color:#B392F0">Fprintln</span><span style="color:#E1E4E8">(w, </span><span style="color:#F97583">string</span><span style="color:#E1E4E8">(prettyJSON.</span><span style="color:#B392F0">Bytes</span><span style="color:#E1E4E8">()))</span></span>
+<span class="line"><span style="color:#F97583">		if</span><span style="color:#E1E4E8"> err </span><span style="color:#F97583">!=</span><span style="color:#79B8FF"> nil</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">			return</span><span style="color:#79B8FF"> nil</span><span style="color:#E1E4E8">, </span><span style="color:#79B8FF">false</span><span style="color:#E1E4E8">, err</span></span>
+<span class="line"><span style="color:#E1E4E8">		}</span></span>
+<span class="line"><span style="color:#E1E4E8">		edited, file, err </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> e.</span><span style="color:#B392F0">LaunchTempFile</span><span style="color:#E1E4E8">(fmt.</span><span style="color:#B392F0">Sprintf</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">"</span><span style="color:#79B8FF">%s</span><span style="color:#9ECBFF">-tmp-"</span><span style="color:#E1E4E8">, filepath.</span><span style="color:#B392F0">Base</span><span style="color:#E1E4E8">(os.Args[</span><span style="color:#79B8FF">0</span><span style="color:#E1E4E8">])), fmt.</span><span style="color:#B392F0">Sprintf</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">"</span><span style="color:#79B8FF">%d</span><span style="color:#9ECBFF">"</span><span style="color:#E1E4E8">, time.</span><span style="color:#B392F0">Now</span><span style="color:#E1E4E8">().</span><span style="color:#B392F0">UnixNano</span><span style="color:#E1E4E8">()), buf)</span></span>
+<span class="line"><span style="color:#F97583">		if</span><span style="color:#E1E4E8"> err </span><span style="color:#F97583">!=</span><span style="color:#79B8FF"> nil</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">			return</span><span style="color:#79B8FF"> nil</span><span style="color:#E1E4E8">, </span><span style="color:#79B8FF">false</span><span style="color:#E1E4E8">, err</span></span>
+<span class="line"><span style="color:#E1E4E8">		}</span></span>
+<span class="line"><span style="color:#E1E4E8">		os.</span><span style="color:#B392F0">Remove</span><span style="color:#E1E4E8">(file)</span></span>
+<span class="line"><span style="color:#F97583">		if</span><span style="color:#F97583"> string</span><span style="color:#E1E4E8">(prettyJSON.</span><span style="color:#B392F0">Bytes</span><span style="color:#E1E4E8">()) </span><span style="color:#F97583">==</span><span style="color:#F97583"> string</span><span style="color:#E1E4E8">(edited) {</span></span>
+<span class="line"><span style="color:#E1E4E8">			logger.</span><span style="color:#B392F0">Warnf</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">"content not changed"</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"><span style="color:#F97583">			return</span><span style="color:#79B8FF"> nil</span><span style="color:#E1E4E8">, </span><span style="color:#79B8FF">false</span><span style="color:#E1E4E8">, </span><span style="color:#79B8FF">nil</span></span>
+<span class="line"><span style="color:#E1E4E8">		}</span></span>
+<span class="line"><span style="color:#F97583">		return</span><span style="color:#E1E4E8"> edited, </span><span style="color:#79B8FF">true</span><span style="color:#E1E4E8">, </span><span style="color:#79B8FF">nil</span></span>
+<span class="line"><span style="color:#E1E4E8">	} </span><span style="color:#F97583">else</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">		return</span><span style="color:#79B8FF"> nil</span><span style="color:#E1E4E8">, </span><span style="color:#79B8FF">false</span><span style="color:#E1E4E8">, err</span></span>
+<span class="line"><span style="color:#E1E4E8">	}</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>如何使用：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#E1E4E8">needToEdit</span><span style="color:#F97583">:=interface</span><span style="color:#E1E4E8">{} </span><span style="color:#6A737D">// change to some interface</span></span>
+<span class="line"><span style="color:#E1E4E8">edit </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> editor.</span><span style="color:#B392F0">NewDefaultEditor</span><span style="color:#E1E4E8">()</span></span>
+<span class="line"><span style="color:#E1E4E8">edited, changed, err </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> edit.</span><span style="color:#B392F0">LaunchTempFileWithJSON</span><span style="color:#E1E4E8">(status)</span></span>
+<span class="line"><span style="color:#6A737D">// edited is the content read from tmp file</span></span>
+<span class="line"><span style="color:#6A737D">// changed == true then the file have been edited</span></span></code></pre></main></div><div class="lightbox" id="lightbox" aria-hidden="true"><img alt=""></div><script type="module" src="/_astro/Base.astro_astro_type_script_index_0_lang.7IsV0x-z.js"></script></body></html>

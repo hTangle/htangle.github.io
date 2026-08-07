@@ -1,0 +1,172 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>PS1提示符</title><script>
+      (function () {
+        var s = localStorage.getItem('theme');
+        if (s === 'light' || s === 'dark') {
+          document.documentElement.setAttribute('data-theme', s);
+        }
+      })();
+    </script><link rel="stylesheet" href="/_astro/Base.CUYrCnW9.css"></head><body><header class="topbar"><a href="/" class="brand">HLDay</a><nav><a href="/">书</a><a href="/posts/">博客</a><a href="https://github.com/hTangle" class="nav-github" aria-label="GitHub">GitHub</a></nav><button class="theme-toggle" id="themeToggle" type="button" title="切换主题（自动/浅色/深色）" aria-label="切换主题">🖥️</button></header><div class="layout"><aside class="booknav"><ul class="nav-tree"><li><p class="nav-group">Go</p><ul><li><p class="nav-subgroup">并发编程</p><ul><li class><a href="/gmp/">GMP 调度器</a></li><li class><a href="/sync-lock/">同步和锁</a></li><li class><a href="/channel/">Channel</a></li><li class><a href="/context/">Context</a></li></ul></li></ul></li><li><p class="nav-group">Agent 开发</p><ul><li><p class="nav-subgroup">核心协议与机制</p><ul><li class><a href="/mcp/">MCP</a></li><li class><a href="/skill/">Skill</a></li><li class><a href="/tool-call/">Tool Call</a></li></ul></li></ul></li></ul></aside><main class="prose"><h1>PS1提示符</h1><pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="shell"><code><span class="line"><span style="color:#F97583">function</span><span style="color:#B392F0"> git-branch-name</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#B392F0">	git</span><span style="color:#9ECBFF"> symbolic-ref</span><span style="color:#9ECBFF"> HEAD</span><span style="color:#F97583"> 2></span><span style="color:#9ECBFF">/dev/null</span><span style="color:#F97583"> |</span><span style="color:#B392F0"> cut</span><span style="color:#79B8FF"> -d</span><span style="color:#9ECBFF">"/"</span><span style="color:#79B8FF"> -f</span><span style="color:#79B8FF"> 3</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span>
+<span class="line"><span style="color:#F97583">function</span><span style="color:#B392F0"> git-branch-prompt</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">	local</span><span style="color:#E1E4E8"> branch</span><span style="color:#F97583">=</span><span style="color:#9ECBFF">`</span><span style="color:#B392F0">git-branch-name</span><span style="color:#9ECBFF">`</span></span>
+<span class="line"><span style="color:#F97583">	if</span><span style="color:#E1E4E8"> [ $branch ]; </span><span style="color:#F97583">then</span><span style="color:#79B8FF"> printf</span><span style="color:#9ECBFF"> "(%s)"</span><span style="color:#E1E4E8"> $branch; </span><span style="color:#F97583">fi</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span>
+<span class="line"><span style="color:#F97583">export</span><span style="color:#E1E4E8"> PS1</span><span style="color:#F97583">=</span><span style="color:#9ECBFF">"\[\e[31;1m\][\[\e[33;1m\]\t\[\e[37;1m\]]\[\e[34;1m\]\W\[\e[31;1m\]</span><span style="color:#79B8FF">\$</span><span style="color:#9ECBFF">(git-branch-prompt)\[\033[0m\]</span><span style="color:#79B8FF">\$</span><span style="color:#9ECBFF">\[\e[32;1m\] "</span></span></code></pre>
+<p>如果需要显示IP</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="shell"><code><span class="line"><span style="color:#F97583">function</span><span style="color:#B392F0"> git-branch-name</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#B392F0">	git</span><span style="color:#9ECBFF"> symbolic-ref</span><span style="color:#9ECBFF"> HEAD</span><span style="color:#F97583"> 2></span><span style="color:#9ECBFF">/dev/null</span><span style="color:#F97583"> |</span><span style="color:#B392F0"> cut</span><span style="color:#79B8FF"> -d</span><span style="color:#9ECBFF">"/"</span><span style="color:#79B8FF"> -f</span><span style="color:#79B8FF"> 3</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span>
+<span class="line"><span style="color:#F97583">function</span><span style="color:#B392F0"> git-branch-prompt</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">	local</span><span style="color:#E1E4E8"> branch</span><span style="color:#F97583">=</span><span style="color:#9ECBFF">`</span><span style="color:#B392F0">git-branch-name</span><span style="color:#9ECBFF">`</span></span>
+<span class="line"><span style="color:#F97583">	if</span><span style="color:#E1E4E8"> [ $branch ]; </span><span style="color:#F97583">then</span><span style="color:#79B8FF"> printf</span><span style="color:#9ECBFF"> "(%s)"</span><span style="color:#E1E4E8"> $branch; </span><span style="color:#F97583">fi</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span>
+<span class="line"><span style="color:#F97583">export</span><span style="color:#E1E4E8"> PS1</span><span style="color:#F97583">=</span><span style="color:#9ECBFF">"\[\e[36;1m\](</span><span style="color:#79B8FF">\$</span><span style="color:#9ECBFF">(hostname -i)\[\e[36;1m\])\[\e[31;1m\][\[\e[33;1m\]\t\[\e[31;1m\]]\[\e[34;1m\]\W\[\e[31;1m\]</span><span style="color:#79B8FF">\$</span><span style="color:#9ECBFF">(git-branch-prompt)\[\033[0m\]</span><span style="color:#79B8FF">\$</span><span style="color:#9ECBFF">\[\e[32;1m\] "</span></span></code></pre>
+<p>每个符号的含义</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>符号</th><th>含义</th></tr></thead><tbody><tr><td>\d</td><td>代表日期，格式为weekday month date</td></tr><tr><td>\H</td><td>完整的主机名称</td></tr><tr><td>\h</td><td>仅取主机的第一个名字</td></tr><tr><td>\t</td><td>显示时间为24小时格式</td></tr><tr><td>\T</td><td>显示时间为12小时格式</td></tr><tr><td>\A</td><td>显示时间为24小时格式</td></tr><tr><td>\u</td><td>当前用户的账号名称</td></tr><tr><td>\v</td><td>BASH的版本信息</td></tr><tr><td>\w</td><td>完整的工作目录名称</td></tr><tr><td>\W</td><td>最后一个目录</td></tr><tr><td>#</td><td>下达的第几个命令</td></tr><tr><td>$</td><td>提示字符，如果是root时，提示符为：# ，普通用户则为：$</td></tr></tbody></table>
+<p>[\e[F;Bm]
+其中<code>F''为字体颜色，编号30~37；</code>B”为背景色，编号40~47。</p>
+<p>设置颜色</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>前景</th><th>背景</th><th>颜色</th></tr></thead><tbody><tr><td>30</td><td>40</td><td>黑色</td></tr><tr><td>31</td><td>41</td><td>红色</td></tr><tr><td>32</td><td>42</td><td>绿色</td></tr><tr><td>33</td><td>43</td><td>黄色</td></tr><tr><td>34</td><td>44</td><td>蓝色</td></tr><tr><td>35</td><td>45</td><td>紫红色</td></tr><tr><td>36</td><td>46</td><td>青蓝色</td></tr><tr><td>37</td><td>47</td><td>白色</td></tr></tbody></table>
+<p>代码意义</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>代码</th><th>意义</th></tr></thead><tbody><tr><td>0</td><td>OFF</td></tr><tr><td>1</td><td>高亮显示</td></tr><tr><td>4</td><td>underline</td></tr><tr><td>5</td><td>闪烁</td></tr><tr><td>7</td><td>反白显示</td></tr><tr><td>8</td><td>不可见</td></tr></tbody></table></main></div><div class="lightbox" id="lightbox" aria-hidden="true"><img alt=""></div><script type="module" src="/_astro/Base.astro_astro_type_script_index_0_lang.7IsV0x-z.js"></script></body></html>

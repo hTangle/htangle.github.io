@@ -1,0 +1,201 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>No private ipv4 address found</title><script>
+      (function () {
+        var s = localStorage.getItem('theme');
+        if (s === 'light' || s === 'dark') {
+          document.documentElement.setAttribute('data-theme', s);
+        }
+      })();
+    </script><link rel="stylesheet" href="/_astro/Base.CUYrCnW9.css"></head><body><header class="topbar"><a href="/" class="brand">HLDay</a><nav><a href="/">书</a><a href="/posts/">博客</a><a href="https://github.com/hTangle" class="nav-github" aria-label="GitHub">GitHub</a></nav><button class="theme-toggle" id="themeToggle" type="button" title="切换主题（自动/浅色/深色）" aria-label="切换主题">🖥️</button></header><div class="layout"><aside class="booknav"><ul class="nav-tree"><li><p class="nav-group">Go</p><ul><li><p class="nav-subgroup">并发编程</p><ul><li class><a href="/gmp/">GMP 调度器</a></li><li class><a href="/sync-lock/">同步和锁</a></li><li class><a href="/channel/">Channel</a></li><li class><a href="/context/">Context</a></li></ul></li></ul></li><li><p class="nav-group">Agent 开发</p><ul><li><p class="nav-subgroup">核心协议与机制</p><ul><li class><a href="/mcp/">MCP</a></li><li class><a href="/skill/">Skill</a></li><li class><a href="/tool-call/">Tool Call</a></li></ul></li></ul></li></ul></aside><main class="prose"><h1>No private ipv4 address found</h1><p>最近在启动Consul的时候，Consul只返回一条报错信息</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="plaintext"><code><span class="line"><span>No private IPv4 address found</span></span></code></pre>
+<p>直接看代码</p>
+<p><a href="https://github.com/hashicorp/consul/blob/main/agent/config/builder.go#L1156" rel="noopener noreferrer" target="_blank">consul/builder.go at main · hashicorp/consul (github.com)</a></p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">func</span><span style="color:#B392F0"> advertiseAddrFunc</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">opts</span><span style="color:#B392F0"> LoadOpts</span><span style="color:#E1E4E8">, </span><span style="color:#FFAB70">advertiseAddr</span><span style="color:#F97583"> *</span><span style="color:#B392F0">net</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">IPAddr</span><span style="color:#E1E4E8">) (</span><span style="color:#F97583">string</span><span style="color:#E1E4E8">, </span><span style="color:#F97583">func</span><span style="color:#E1E4E8">() ([]</span><span style="color:#F97583">*</span><span style="color:#B392F0">net</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">IPAddr</span><span style="color:#E1E4E8">, </span><span style="color:#F97583">error</span><span style="color:#E1E4E8">)) {</span></span>
+<span class="line"><span style="color:#F97583">	switch</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">	case</span><span style="color:#E1E4E8"> ipaddr.</span><span style="color:#B392F0">IsAnyV4</span><span style="color:#E1E4E8">(advertiseAddr):</span></span>
+<span class="line"><span style="color:#E1E4E8">		fn </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> opts.getPrivateIPv4</span></span>
+<span class="line"><span style="color:#F97583">		if</span><span style="color:#E1E4E8"> fn </span><span style="color:#F97583">==</span><span style="color:#79B8FF"> nil</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">			fn </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> ipaddr.GetPrivateIPv4</span></span>
+<span class="line"><span style="color:#E1E4E8">		}</span></span>
+<span class="line"><span style="color:#F97583">		return</span><span style="color:#9ECBFF"> "private IPv4"</span><span style="color:#E1E4E8">, fn</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">	case</span><span style="color:#E1E4E8"> ipaddr.</span><span style="color:#B392F0">IsAnyV6</span><span style="color:#E1E4E8">(advertiseAddr):</span></span>
+<span class="line"><span style="color:#E1E4E8">		fn </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> opts.getPublicIPv6</span></span>
+<span class="line"><span style="color:#F97583">		if</span><span style="color:#E1E4E8"> fn </span><span style="color:#F97583">==</span><span style="color:#79B8FF"> nil</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">			fn </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> ipaddr.GetPublicIPv6</span></span>
+<span class="line"><span style="color:#E1E4E8">		}</span></span>
+<span class="line"><span style="color:#F97583">		return</span><span style="color:#9ECBFF"> "public IPv6"</span><span style="color:#E1E4E8">, fn</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">	default</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#B392F0">		panic</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">"unsupported net.IPAddr Type"</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"><span style="color:#E1E4E8">	}</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>如果没有提供getPrivateIPv4函数，则直接使用<a href="https://github.com/hashicorp/consul/blob/main/ipaddr/detect.go#L14" rel="noopener noreferrer" target="_blank">consul/detect.go at main · hashicorp/consul (github.com)</a></p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#6A737D">// GetPrivateIPv4 returns the list of private network IPv4 addresses on</span></span>
+<span class="line"><span style="color:#6A737D">// all active interfaces.</span></span>
+<span class="line"><span style="color:#F97583">func</span><span style="color:#B392F0"> GetPrivateIPv4</span><span style="color:#E1E4E8">() ([]</span><span style="color:#F97583">*</span><span style="color:#B392F0">net</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">IPAddr</span><span style="color:#E1E4E8">, </span><span style="color:#F97583">error</span><span style="color:#E1E4E8">) {</span></span>
+<span class="line"><span style="color:#E1E4E8">	addresses, err </span><span style="color:#F97583">:=</span><span style="color:#B392F0"> activeInterfaceAddresses</span><span style="color:#E1E4E8">()</span></span>
+<span class="line"><span style="color:#F97583">	if</span><span style="color:#E1E4E8"> err </span><span style="color:#F97583">!=</span><span style="color:#79B8FF"> nil</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">		return</span><span style="color:#79B8FF"> nil</span><span style="color:#E1E4E8">, fmt.</span><span style="color:#B392F0">Errorf</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">"Failed to get interface addresses: </span><span style="color:#79B8FF">%v</span><span style="color:#9ECBFF">"</span><span style="color:#E1E4E8">, err)</span></span>
+<span class="line"><span style="color:#E1E4E8">	}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">	var</span><span style="color:#E1E4E8"> addrs []</span><span style="color:#F97583">*</span><span style="color:#B392F0">net</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">IPAddr</span></span>
+<span class="line"><span style="color:#F97583">	for</span><span style="color:#E1E4E8"> _, rawAddr </span><span style="color:#F97583">:=</span><span style="color:#F97583"> range</span><span style="color:#E1E4E8"> addresses {</span></span>
+<span class="line"><span style="color:#F97583">		var</span><span style="color:#E1E4E8"> ip </span><span style="color:#B392F0">net</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">IP</span></span>
+<span class="line"><span style="color:#F97583">		switch</span><span style="color:#E1E4E8"> addr </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> rawAddr.(</span><span style="color:#F97583">type</span><span style="color:#E1E4E8">) {</span></span>
+<span class="line"><span style="color:#F97583">		case</span><span style="color:#F97583"> *</span><span style="color:#B392F0">net</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">IPAddr</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#E1E4E8">			ip </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> addr.IP</span></span>
+<span class="line"><span style="color:#F97583">		case</span><span style="color:#F97583"> *</span><span style="color:#B392F0">net</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">IPNet</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#E1E4E8">			ip </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> addr.IP</span></span>
+<span class="line"><span style="color:#F97583">		default</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#F97583">			continue</span></span>
+<span class="line"><span style="color:#E1E4E8">		}</span></span>
+<span class="line"><span style="color:#F97583">		if</span><span style="color:#E1E4E8"> ip.</span><span style="color:#B392F0">To4</span><span style="color:#E1E4E8">() </span><span style="color:#F97583">==</span><span style="color:#79B8FF"> nil</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">			continue</span></span>
+<span class="line"><span style="color:#E1E4E8">		}</span></span>
+<span class="line"><span style="color:#F97583">		if</span><span style="color:#F97583"> !</span><span style="color:#B392F0">isPrivate</span><span style="color:#E1E4E8">(ip) {</span></span>
+<span class="line"><span style="color:#F97583">			continue</span></span>
+<span class="line"><span style="color:#E1E4E8">		}</span></span>
+<span class="line"><span style="color:#E1E4E8">		addrs </span><span style="color:#F97583">=</span><span style="color:#B392F0"> append</span><span style="color:#E1E4E8">(addrs, </span><span style="color:#F97583">&#x26;</span><span style="color:#B392F0">net</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">IPAddr</span><span style="color:#E1E4E8">{IP: ip})</span></span>
+<span class="line"><span style="color:#E1E4E8">	}</span></span>
+<span class="line"><span style="color:#F97583">	return</span><span style="color:#E1E4E8"> addrs, </span><span style="color:#79B8FF">nil</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D">// Returns addresses from interfaces that is up</span></span>
+<span class="line"><span style="color:#F97583">func</span><span style="color:#B392F0"> activeInterfaceAddresses</span><span style="color:#E1E4E8">() ([]</span><span style="color:#B392F0">net</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">Addr</span><span style="color:#E1E4E8">, </span><span style="color:#F97583">error</span><span style="color:#E1E4E8">) {</span></span>
+<span class="line"><span style="color:#F97583">	var</span><span style="color:#E1E4E8"> upAddrs []</span><span style="color:#B392F0">net</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">Addr</span></span>
+<span class="line"><span style="color:#F97583">	var</span><span style="color:#E1E4E8"> loAddrs []</span><span style="color:#B392F0">net</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">Addr</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#E1E4E8">	interfaces, err </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> net.</span><span style="color:#B392F0">Interfaces</span><span style="color:#E1E4E8">()</span></span>
+<span class="line"><span style="color:#F97583">	if</span><span style="color:#E1E4E8"> err </span><span style="color:#F97583">!=</span><span style="color:#79B8FF"> nil</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">		return</span><span style="color:#79B8FF"> nil</span><span style="color:#E1E4E8">, fmt.</span><span style="color:#B392F0">Errorf</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">"Failed to get interfaces: </span><span style="color:#79B8FF">%v</span><span style="color:#9ECBFF">"</span><span style="color:#E1E4E8">, err)</span></span>
+<span class="line"><span style="color:#E1E4E8">	}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">	for</span><span style="color:#E1E4E8"> _, iface </span><span style="color:#F97583">:=</span><span style="color:#F97583"> range</span><span style="color:#E1E4E8"> interfaces {</span></span>
+<span class="line"><span style="color:#6A737D">		// Require interface to be up</span></span>
+<span class="line"><span style="color:#F97583">		if</span><span style="color:#E1E4E8"> iface.Flags</span><span style="color:#F97583">&#x26;</span><span style="color:#E1E4E8">net.FlagUp </span><span style="color:#F97583">==</span><span style="color:#79B8FF"> 0</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">			continue</span></span>
+<span class="line"><span style="color:#E1E4E8">		}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#E1E4E8">		addresses, err </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> iface.</span><span style="color:#B392F0">Addrs</span><span style="color:#E1E4E8">()</span></span>
+<span class="line"><span style="color:#F97583">		if</span><span style="color:#E1E4E8"> err </span><span style="color:#F97583">!=</span><span style="color:#79B8FF"> nil</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">			return</span><span style="color:#79B8FF"> nil</span><span style="color:#E1E4E8">, fmt.</span><span style="color:#B392F0">Errorf</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">"Failed to get interface addresses: </span><span style="color:#79B8FF">%v</span><span style="color:#9ECBFF">"</span><span style="color:#E1E4E8">, err)</span></span>
+<span class="line"><span style="color:#E1E4E8">		}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">		if</span><span style="color:#E1E4E8"> iface.Flags</span><span style="color:#F97583">&#x26;</span><span style="color:#E1E4E8">net.FlagLoopback </span><span style="color:#F97583">!=</span><span style="color:#79B8FF"> 0</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">			loAddrs </span><span style="color:#F97583">=</span><span style="color:#B392F0"> append</span><span style="color:#E1E4E8">(loAddrs, addresses</span><span style="color:#F97583">...</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"><span style="color:#F97583">			continue</span></span>
+<span class="line"><span style="color:#E1E4E8">		}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#E1E4E8">		upAddrs </span><span style="color:#F97583">=</span><span style="color:#B392F0"> append</span><span style="color:#E1E4E8">(upAddrs, addresses</span><span style="color:#F97583">...</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"><span style="color:#E1E4E8">	}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">	if</span><span style="color:#B392F0"> len</span><span style="color:#E1E4E8">(upAddrs) </span><span style="color:#F97583">==</span><span style="color:#79B8FF"> 0</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">		return</span><span style="color:#E1E4E8"> loAddrs, </span><span style="color:#79B8FF">nil</span></span>
+<span class="line"><span style="color:#E1E4E8">	}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">	return</span><span style="color:#E1E4E8"> upAddrs, </span><span style="color:#79B8FF">nil</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>具体的拿网络接口的是调用<code>net.Interfaces()</code>函数<a href="https://github.com/golang/go/blob/master/src/net/interface.go#L102" rel="noopener noreferrer" target="_blank">go/interface.go at master · golang/go (github.com)</a></p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#6A737D">// Interfaces returns a list of the system's network interfaces.</span></span>
+<span class="line"><span style="color:#F97583">func</span><span style="color:#B392F0"> Interfaces</span><span style="color:#E1E4E8">() ([]</span><span style="color:#B392F0">Interface</span><span style="color:#E1E4E8">, </span><span style="color:#F97583">error</span><span style="color:#E1E4E8">) {</span></span>
+<span class="line"><span style="color:#E1E4E8">	ift, err </span><span style="color:#F97583">:=</span><span style="color:#B392F0"> interfaceTable</span><span style="color:#E1E4E8">(</span><span style="color:#79B8FF">0</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"><span style="color:#F97583">	if</span><span style="color:#E1E4E8"> err </span><span style="color:#F97583">!=</span><span style="color:#79B8FF"> nil</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">		return</span><span style="color:#79B8FF"> nil</span><span style="color:#E1E4E8">, </span><span style="color:#F97583">&#x26;</span><span style="color:#B392F0">OpError</span><span style="color:#E1E4E8">{Op: </span><span style="color:#9ECBFF">"route"</span><span style="color:#E1E4E8">, Net: </span><span style="color:#9ECBFF">"ip+net"</span><span style="color:#E1E4E8">, Source: </span><span style="color:#79B8FF">nil</span><span style="color:#E1E4E8">, Addr: </span><span style="color:#79B8FF">nil</span><span style="color:#E1E4E8">, Err: err}</span></span>
+<span class="line"><span style="color:#E1E4E8">	}</span></span>
+<span class="line"><span style="color:#F97583">	if</span><span style="color:#B392F0"> len</span><span style="color:#E1E4E8">(ift) </span><span style="color:#F97583">!=</span><span style="color:#79B8FF"> 0</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">		zoneCache.</span><span style="color:#B392F0">update</span><span style="color:#E1E4E8">(ift, </span><span style="color:#79B8FF">false</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"><span style="color:#E1E4E8">	}</span></span>
+<span class="line"><span style="color:#F97583">	return</span><span style="color:#E1E4E8"> ift, </span><span style="color:#79B8FF">nil</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>函数<code>interfaceTable()</code>在linux上调用的是</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#6A737D">// If the ifindex is zero, interfaceTable returns mappings of all</span></span>
+<span class="line"><span style="color:#6A737D">// network interfaces. Otherwise it returns a mapping of a specific</span></span>
+<span class="line"><span style="color:#6A737D">// interface.</span></span>
+<span class="line"><span style="color:#F97583">func</span><span style="color:#B392F0"> interfaceTable</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">ifindex</span><span style="color:#F97583"> int</span><span style="color:#E1E4E8">) ([]</span><span style="color:#B392F0">Interface</span><span style="color:#E1E4E8">, </span><span style="color:#F97583">error</span><span style="color:#E1E4E8">) {</span></span>
+<span class="line"><span style="color:#E1E4E8">	tab, err </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> syscall.</span><span style="color:#B392F0">NetlinkRIB</span><span style="color:#E1E4E8">(syscall.RTM_GETLINK, syscall.AF_UNSPEC)</span></span>
+<span class="line"><span style="color:#F97583">	if</span><span style="color:#E1E4E8"> err </span><span style="color:#F97583">!=</span><span style="color:#79B8FF"> nil</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">		return</span><span style="color:#79B8FF"> nil</span><span style="color:#E1E4E8">, os.</span><span style="color:#B392F0">NewSyscallError</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">"netlinkrib"</span><span style="color:#E1E4E8">, err)</span></span>
+<span class="line"><span style="color:#E1E4E8">	}</span></span>
+<span class="line"><span style="color:#E1E4E8">	msgs, err </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> syscall.</span><span style="color:#B392F0">ParseNetlinkMessage</span><span style="color:#E1E4E8">(tab)</span></span>
+<span class="line"><span style="color:#F97583">	if</span><span style="color:#E1E4E8"> err </span><span style="color:#F97583">!=</span><span style="color:#79B8FF"> nil</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">		return</span><span style="color:#79B8FF"> nil</span><span style="color:#E1E4E8">, os.</span><span style="color:#B392F0">NewSyscallError</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">"parsenetlinkmessage"</span><span style="color:#E1E4E8">, err)</span></span>
+<span class="line"><span style="color:#E1E4E8">	}</span></span>
+<span class="line"><span style="color:#F97583">	var</span><span style="color:#E1E4E8"> ift []</span><span style="color:#B392F0">Interface</span></span>
+<span class="line"><span style="color:#E1E4E8">loop:</span></span>
+<span class="line"><span style="color:#F97583">	for</span><span style="color:#E1E4E8"> _, m </span><span style="color:#F97583">:=</span><span style="color:#F97583"> range</span><span style="color:#E1E4E8"> msgs {</span></span>
+<span class="line"><span style="color:#F97583">		switch</span><span style="color:#E1E4E8"> m.Header.Type {</span></span>
+<span class="line"><span style="color:#F97583">		case</span><span style="color:#E1E4E8"> syscall.NLMSG_DONE:</span></span>
+<span class="line"><span style="color:#F97583">			break</span><span style="color:#E1E4E8"> loop</span></span>
+<span class="line"><span style="color:#F97583">		case</span><span style="color:#E1E4E8"> syscall.RTM_NEWLINK:</span></span>
+<span class="line"><span style="color:#E1E4E8">			ifim </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> (</span><span style="color:#F97583">*</span><span style="color:#B392F0">syscall</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">IfInfomsg</span><span style="color:#E1E4E8">)(unsafe.</span><span style="color:#B392F0">Pointer</span><span style="color:#E1E4E8">(</span><span style="color:#F97583">&#x26;</span><span style="color:#E1E4E8">m.Data[</span><span style="color:#79B8FF">0</span><span style="color:#E1E4E8">]))</span></span>
+<span class="line"><span style="color:#F97583">			if</span><span style="color:#E1E4E8"> ifindex </span><span style="color:#F97583">==</span><span style="color:#79B8FF"> 0</span><span style="color:#F97583"> ||</span><span style="color:#E1E4E8"> ifindex </span><span style="color:#F97583">==</span><span style="color:#F97583"> int</span><span style="color:#E1E4E8">(ifim.Index) {</span></span>
+<span class="line"><span style="color:#E1E4E8">				attrs, err </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> syscall.</span><span style="color:#B392F0">ParseNetlinkRouteAttr</span><span style="color:#E1E4E8">(</span><span style="color:#F97583">&#x26;</span><span style="color:#E1E4E8">m)</span></span>
+<span class="line"><span style="color:#F97583">				if</span><span style="color:#E1E4E8"> err </span><span style="color:#F97583">!=</span><span style="color:#79B8FF"> nil</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">					return</span><span style="color:#79B8FF"> nil</span><span style="color:#E1E4E8">, os.</span><span style="color:#B392F0">NewSyscallError</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">"parsenetlinkrouteattr"</span><span style="color:#E1E4E8">, err)</span></span>
+<span class="line"><span style="color:#E1E4E8">				}</span></span>
+<span class="line"><span style="color:#E1E4E8">				ift </span><span style="color:#F97583">=</span><span style="color:#B392F0"> append</span><span style="color:#E1E4E8">(ift, </span><span style="color:#F97583">*</span><span style="color:#B392F0">newLink</span><span style="color:#E1E4E8">(ifim, attrs))</span></span>
+<span class="line"><span style="color:#F97583">				if</span><span style="color:#E1E4E8"> ifindex </span><span style="color:#F97583">==</span><span style="color:#F97583"> int</span><span style="color:#E1E4E8">(ifim.Index) {</span></span>
+<span class="line"><span style="color:#F97583">					break</span><span style="color:#E1E4E8"> loop</span></span>
+<span class="line"><span style="color:#E1E4E8">				}</span></span>
+<span class="line"><span style="color:#E1E4E8">			}</span></span>
+<span class="line"><span style="color:#E1E4E8">		}</span></span>
+<span class="line"><span style="color:#E1E4E8">	}</span></span>
+<span class="line"><span style="color:#F97583">	return</span><span style="color:#E1E4E8"> ift, </span><span style="color:#79B8FF">nil</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>再往下看其实都挺正常的，就是调用系统函数获取网络接口，通过<code>inconfig</code>指令拿到的有正常的ipv4 ip，那继续看consul的处理逻辑</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#6A737D">// GetPrivateIPv4 returns the list of private network IPv4 addresses on</span></span>
+<span class="line"><span style="color:#6A737D">// all active interfaces.</span></span>
+<span class="line"><span style="color:#F97583">func</span><span style="color:#B392F0"> GetPrivateIPv4</span><span style="color:#E1E4E8">() ([]</span><span style="color:#F97583">*</span><span style="color:#B392F0">net</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">IPAddr</span><span style="color:#E1E4E8">, </span><span style="color:#F97583">error</span><span style="color:#E1E4E8">) {</span></span>
+<span class="line"><span style="color:#E1E4E8">	addresses, err </span><span style="color:#F97583">:=</span><span style="color:#B392F0"> activeInterfaceAddresses</span><span style="color:#E1E4E8">()</span></span>
+<span class="line"><span style="color:#F97583">	if</span><span style="color:#E1E4E8"> err </span><span style="color:#F97583">!=</span><span style="color:#79B8FF"> nil</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">		return</span><span style="color:#79B8FF"> nil</span><span style="color:#E1E4E8">, fmt.</span><span style="color:#B392F0">Errorf</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">"Failed to get interface addresses: </span><span style="color:#79B8FF">%v</span><span style="color:#9ECBFF">"</span><span style="color:#E1E4E8">, err)</span></span>
+<span class="line"><span style="color:#E1E4E8">	}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">	var</span><span style="color:#E1E4E8"> addrs []</span><span style="color:#F97583">*</span><span style="color:#B392F0">net</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">IPAddr</span></span>
+<span class="line"><span style="color:#F97583">	for</span><span style="color:#E1E4E8"> _, rawAddr </span><span style="color:#F97583">:=</span><span style="color:#F97583"> range</span><span style="color:#E1E4E8"> addresses {</span></span>
+<span class="line"><span style="color:#F97583">		var</span><span style="color:#E1E4E8"> ip </span><span style="color:#B392F0">net</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">IP</span></span>
+<span class="line"><span style="color:#F97583">		switch</span><span style="color:#E1E4E8"> addr </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> rawAddr.(</span><span style="color:#F97583">type</span><span style="color:#E1E4E8">) {</span></span>
+<span class="line"><span style="color:#F97583">		case</span><span style="color:#F97583"> *</span><span style="color:#B392F0">net</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">IPAddr</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#E1E4E8">			ip </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> addr.IP</span></span>
+<span class="line"><span style="color:#F97583">		case</span><span style="color:#F97583"> *</span><span style="color:#B392F0">net</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">IPNet</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#E1E4E8">			ip </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> addr.IP</span></span>
+<span class="line"><span style="color:#F97583">		default</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#F97583">			continue</span></span>
+<span class="line"><span style="color:#E1E4E8">		}</span></span>
+<span class="line"><span style="color:#F97583">		if</span><span style="color:#E1E4E8"> ip.</span><span style="color:#B392F0">To4</span><span style="color:#E1E4E8">() </span><span style="color:#F97583">==</span><span style="color:#79B8FF"> nil</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">			continue</span></span>
+<span class="line"><span style="color:#E1E4E8">		}</span></span>
+<span class="line"><span style="color:#F97583">		if</span><span style="color:#F97583"> !</span><span style="color:#B392F0">isPrivate</span><span style="color:#E1E4E8">(ip) { </span><span style="color:#6A737D">//判断是否是</span></span>
+<span class="line"><span style="color:#F97583">			continue</span></span>
+<span class="line"><span style="color:#E1E4E8">		}</span></span>
+<span class="line"><span style="color:#E1E4E8">		addrs </span><span style="color:#F97583">=</span><span style="color:#B392F0"> append</span><span style="color:#E1E4E8">(addrs, </span><span style="color:#F97583">&#x26;</span><span style="color:#B392F0">net</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">IPAddr</span><span style="color:#E1E4E8">{IP: ip})</span></span>
+<span class="line"><span style="color:#E1E4E8">	}</span></span>
+<span class="line"><span style="color:#F97583">	return</span><span style="color:#E1E4E8"> addrs, </span><span style="color:#79B8FF">nil</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>其中包含<code>isPrivate(ip)</code>函数<a href="https://github.com/hashicorp/consul/blob/main/ipaddr/detect.go#L98" rel="noopener noreferrer" target="_blank">consul/detect.go at main · hashicorp/consul (github.com)</a></p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">func</span><span style="color:#B392F0"> isPrivate</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">ip</span><span style="color:#B392F0"> net</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">IP</span><span style="color:#E1E4E8">) </span><span style="color:#F97583">bool</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">	for</span><span style="color:#E1E4E8"> _, priv </span><span style="color:#F97583">:=</span><span style="color:#F97583"> range</span><span style="color:#E1E4E8"> privateBlocks {</span></span>
+<span class="line"><span style="color:#F97583">		if</span><span style="color:#E1E4E8"> priv.</span><span style="color:#B392F0">Contains</span><span style="color:#E1E4E8">(ip) {</span></span>
+<span class="line"><span style="color:#F97583">			return</span><span style="color:#79B8FF"> true</span></span>
+<span class="line"><span style="color:#E1E4E8">		}</span></span>
+<span class="line"><span style="color:#E1E4E8">	}</span></span>
+<span class="line"><span style="color:#F97583">	return</span><span style="color:#79B8FF"> false</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>其中<code>privateBlocks</code>的定义为</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">var</span><span style="color:#E1E4E8"> privateBlocks </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> []</span><span style="color:#F97583">*</span><span style="color:#B392F0">net</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">IPNet</span><span style="color:#E1E4E8">{</span></span>
+<span class="line"><span style="color:#B392F0">	parseCIDR</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">"10.0.0.0/8"</span><span style="color:#E1E4E8">),     </span><span style="color:#6A737D">// RFC 1918 IPv4 private network address</span></span>
+<span class="line"><span style="color:#B392F0">	parseCIDR</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">"100.64.0.0/10"</span><span style="color:#E1E4E8">),  </span><span style="color:#6A737D">// RFC 6598 IPv4 shared address space</span></span>
+<span class="line"><span style="color:#B392F0">	parseCIDR</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">"127.0.0.0/8"</span><span style="color:#E1E4E8">),    </span><span style="color:#6A737D">// RFC 1122 IPv4 loopback address</span></span>
+<span class="line"><span style="color:#B392F0">	parseCIDR</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">"169.254.0.0/16"</span><span style="color:#E1E4E8">), </span><span style="color:#6A737D">// RFC 3927 IPv4 link local address</span></span>
+<span class="line"><span style="color:#B392F0">	parseCIDR</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">"172.16.0.0/12"</span><span style="color:#E1E4E8">),  </span><span style="color:#6A737D">// RFC 1918 IPv4 private network address</span></span>
+<span class="line"><span style="color:#B392F0">	parseCIDR</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">"192.0.0.0/24"</span><span style="color:#E1E4E8">),   </span><span style="color:#6A737D">// RFC 6890 IPv4 IANA address</span></span>
+<span class="line"><span style="color:#B392F0">	parseCIDR</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">"192.0.2.0/24"</span><span style="color:#E1E4E8">),   </span><span style="color:#6A737D">// RFC 5737 IPv4 documentation address</span></span>
+<span class="line"><span style="color:#B392F0">	parseCIDR</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">"192.168.0.0/16"</span><span style="color:#E1E4E8">), </span><span style="color:#6A737D">// RFC 1918 IPv4 private network address</span></span>
+<span class="line"><span style="color:#B392F0">	parseCIDR</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">"::1/128"</span><span style="color:#E1E4E8">),        </span><span style="color:#6A737D">// RFC 1884 IPv6 loopback address</span></span>
+<span class="line"><span style="color:#B392F0">	parseCIDR</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">"fe80::/10"</span><span style="color:#E1E4E8">),      </span><span style="color:#6A737D">// RFC 4291 IPv6 link local addresses</span></span>
+<span class="line"><span style="color:#B392F0">	parseCIDR</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">"fc00::/7"</span><span style="color:#E1E4E8">),       </span><span style="color:#6A737D">// RFC 4193 IPv6 unique local addresses</span></span>
+<span class="line"><span style="color:#B392F0">	parseCIDR</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">"fec0::/10"</span><span style="color:#E1E4E8">),      </span><span style="color:#6A737D">// RFC 1884 IPv6 site-local addresses</span></span>
+<span class="line"><span style="color:#B392F0">	parseCIDR</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">"2001:db8::/32"</span><span style="color:#E1E4E8">),  </span><span style="color:#6A737D">// RFC 3849 IPv6 documentation address</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>根据<a href="https://zh.wikipedia.org/wiki/IPv4#%E4%B8%93%E7%94%A8%E7%BD%91%E7%BB%9C" rel="noopener noreferrer" target="_blank">IPv4 - 维基百科，自由的百科全书 (wikipedia.org)</a>的解释，私网IP只有有限的地址段。</p>
+<p>所以Consul默认情况下只能用私有IP部署</p></main></div><div class="lightbox" id="lightbox" aria-hidden="true"><img alt=""></div><script type="module" src="/_astro/Base.astro_astro_type_script_index_0_lang.7IsV0x-z.js"></script></body></html>
