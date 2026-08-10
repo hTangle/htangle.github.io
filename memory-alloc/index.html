@@ -1,0 +1,456 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>内存分配器：Go 1.26.5 源码分析</title><script>
+      (function () {
+        var s = localStorage.getItem('theme');
+        if (s === 'light' || s === 'dark') {
+          document.documentElement.setAttribute('data-theme', s);
+        }
+      })();
+    </script><link rel="stylesheet" href="/_astro/Base.C1_PNgav.css"></head><body><header class="topbar"><a href="/" class="brand">HLDay</a><nav><a href="/">专题</a><a href="/posts/">博客</a><a href="https://github.com/hTangle" class="nav-github" aria-label="GitHub">GitHub</a></nav><button class="theme-toggle" id="themeToggle" type="button" title="切换主题（自动/浅色/深色）" aria-label="切换主题">🖥️</button></header><div class="layout"><aside class="booknav"><ul class="nav-tree"><li><p class="nav-group">Go</p><ul><li><p class="nav-subgroup">并发编程</p><ul><li class><a href="/gmp/">GMP 调度器</a></li><li class><a href="/sync-lock/">同步和锁</a></li><li class><a href="/channel/">Channel</a></li><li class><a href="/context/">Context</a></li></ul></li><li><p class="nav-subgroup">内存管理</p><ul><li class="active"><a href="/memory-alloc/">内存分配器</a></li><li class><a href="/gc/">垃圾收集器</a></li><li class><a href="/stack/">栈空间管理</a></li></ul></li></ul></li><li><p class="nav-group">Agent 开发</p><ul><li><p class="nav-subgroup">核心协议与机制</p><ul><li class><a href="/mcp/">MCP</a></li><li class><a href="/skill/">Skill</a></li><li class><a href="/tool-call/">Tool Call</a></li></ul></li></ul></li></ul></aside><main class="prose"><h1>内存分配器：Go 1.26.5 源码分析</h1><p>Go 的内存分配器不是一个独立的 <code>malloc</code> 包装器，而是编译器、每 P 缓存、全局页分配器、垃圾收集器和操作系统虚拟内存共同组成的一条路径。本文固定在 <strong>Go 1.26.5</strong>，沿着一次对象分配向下阅读：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="mermaid"><code><span class="line"><span style="color:#F97583">flowchart</span><span style="color:#B392F0"> LR</span></span>
+<span class="line"><span style="color:#FFAB70">    A</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"new / make / 逃逸变量"</span><span style="color:#F97583">]</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> B</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"编译器 lowering"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    B </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> C</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"runtime.newobject / mallocgc"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    C </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> D</span><span style="color:#F97583">{</span><span style="color:#9ECBFF">"对象大小与是否含指针"</span><span style="color:#F97583">}</span></span>
+<span class="line"><span style="color:#FFAB70">    D </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">"&#x3C; 16 B 且 noscan"</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> E</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"tiny allocator"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    D </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">"&#x3C;= 32 KiB"</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> F</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"mcache"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    F </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> G</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"mcentral"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    G </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> H</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"mheap / pageAlloc"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    D </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">"> 32 KiB"</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> H</span></span>
+<span class="line"><span style="color:#FFAB70">    H </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> I</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"sysAlloc / sysMap / OS"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    C </span><span style="color:#F97583">-.</span><span style="color:#9ECBFF">"GC 标记期分配黑色"</span><span style="color:#F97583">.-></span><span style="color:#FFAB70"> J</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"垃圾收集器"</span><span style="color:#F97583">]</span></span></code></pre>
+<p><strong>• 阅读边界</strong></p>
+<p>本文讨论的是 <strong>逃逸到 Go heap 的对象如何被 runtime 分配</strong>。变量最终放在栈还是堆上，首先由编译器逃逸分析决定，参见 <a href="/stack/">栈空间管理</a>；对象何时死亡、span 如何 sweep，参见 <a href="/gc/">垃圾收集器</a>。</p>
+<h2 id="go-1265-必须先知道的变化">Go 1.26.5 必须先知道的变化</h2>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>主题</th><th>旧笔记常见说法</th><th>Go 1.26.5 当前实现</th></tr></thead><tbody><tr><td>堆布局</td><td>启动时一次性预留连续的 <code>spans/bitmap/arena</code></td><td>使用稀疏、分层的 arena map；堆可从地址空间不同区域增长</td></tr><tr><td>堆基址</td><td>通常视为固定或可预测</td><td>64 位平台默认启用 heap base address randomization</td></tr><tr><td>GC 元数据</td><td>mark bitmap 与对象元数据完全独立</td><td>Green Tea GC 会在符合条件的小对象 span 尾部内联 <code>marks/scans</code></td></tr><tr><td>小对象中心缓存</td><td><code>nonempty/empty</code> 两个链表</td><td><code>partial/full × swept/unswept</code> 的 <code>spanSet</code> 体系</td></tr><tr><td>分配入口</td><td>所有对象笼统描述为同一 <code>mallocgc</code> 路径</td><td><code>mallocgc</code> 会按 noscan/scan、header/no-header、tiny/small/large 细分路径</td></tr></tbody></table>
+<p>Go 1.26 的官方发布说明明确指出：64 位平台默认随机化堆基址，Green Tea GC 默认启用。两项都会影响理解 allocator 的地址空间与 span 元数据布局：<a href="https://go.dev/doc/go1.26" rel="noopener noreferrer" target="_blank">Go 1.26 Release Notes</a>。</p>
+<h2 id="源码地图">源码地图</h2>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>层次</th><th>核心源码</th><th>作用</th></tr></thead><tbody><tr><td>总入口</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/malloc.go#L1067-L1200" rel="noopener noreferrer" target="_blank"><code>runtime/malloc.go#L1067-L1200</code></a></td><td><code>mallocgc</code> 分类、GC assist、采样</td></tr><tr><td>微对象</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/malloc.go#L1202-L1356" rel="noopener noreferrer" target="_blank"><code>runtime/malloc.go#L1202-L1356</code></a></td><td>16 B tiny block 合并分配</td></tr><tr><td>小对象</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/malloc.go#L1358-L1685" rel="noopener noreferrer" target="_blank"><code>runtime/malloc.go#L1358-L1685</code></a></td><td>noscan、scan、malloc header 路径</td></tr><tr><td>大对象</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/malloc.go#L1687-L1785" rel="noopener noreferrer" target="_blank"><code>runtime/malloc.go#L1687-L1785</code></a></td><td>直接按页从 heap 分配</td></tr><tr><td>每 P 缓存</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mcache.go#L14-L66" rel="noopener noreferrer" target="_blank"><code>runtime/mcache.go#L14-L66</code></a></td><td>无锁快速分配、tiny、span cache</td></tr><tr><td>中心缓存</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mcentral.go#L21-L46" rel="noopener noreferrer" target="_blank"><code>runtime/mcentral.go#L21-L46</code></a></td><td>每个 span class 的 swept/unswept span 集合</td></tr><tr><td>span</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mheap.go#L422-L516" rel="noopener noreferrer" target="_blank"><code>runtime/mheap.go#L422-L516</code></a></td><td>一组连续 page 与对象位图</td></tr><tr><td>全局堆</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mheap.go#L58-L147" rel="noopener noreferrer" target="_blank"><code>runtime/mheap.go#L58-L147</code></a></td><td>pageAlloc、arena、central、sweep 状态</td></tr><tr><td>size class</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/internal/runtime/gc/sizeclasses.go#L6-L102" rel="noopener noreferrer" target="_blank"><code>internal/runtime/gc/sizeclasses.go#L6-L102</code></a></td><td>68 个 size class 与页数映射</td></tr><tr><td>sweep</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mgcsweep.go#L359-L457" rel="noopener noreferrer" target="_blank"><code>runtime/mgcsweep.go#L359-L457</code></a></td><td>回收对象与空 span</td></tr><tr><td>scavenger</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mgcscavenge.go#L5-L89" rel="noopener noreferrer" target="_blank"><code>runtime/mgcscavenge.go#L5-L89</code></a></td><td>将空闲物理页归还 OS</td></tr></tbody></table>
+<h2 id="一分配前变量为什么来到堆上">一、分配前：变量为什么来到堆上</h2>
+<p>编译器逃逸分析保证两个不变量：指向栈对象的指针不能被存入堆；栈对象不能被可能活得更久的引用持有。分析入口和解释写在 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/cmd/compile/internal/escape/escape.go#L21-L47" rel="noopener noreferrer" target="_blank"><code>cmd/compile/internal/escape/escape.go#L21-L47</code></a>。</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">func</span><span style="color:#B392F0"> stackValue</span><span style="color:#E1E4E8">() </span><span style="color:#F97583">int</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">    x </span><span style="color:#F97583">:=</span><span style="color:#79B8FF"> 1</span></span>
+<span class="line"><span style="color:#F97583">    return</span><span style="color:#E1E4E8"> x</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">func</span><span style="color:#B392F0"> heapValue</span><span style="color:#E1E4E8">() </span><span style="color:#F97583">*int</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">    x </span><span style="color:#F97583">:=</span><span style="color:#79B8FF"> 1</span></span>
+<span class="line"><span style="color:#F97583">    return</span><span style="color:#F97583"> &#x26;</span><span style="color:#E1E4E8">x</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>第二个 <code>x</code> 通常需要在 heap 上拥有足够长的生命周期。查看编译器判断：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="bash"><code><span class="line"><span style="color:#B392F0">go</span><span style="color:#9ECBFF"> build</span><span style="color:#79B8FF"> -gcflags=</span><span style="color:#9ECBFF">'all=-m=2'</span><span style="color:#9ECBFF"> ./...</span></span></code></pre>
+<p><strong>⚠️ “用了 <code>new</code> 就在堆上”是错的</strong></p>
+<p><code>new(T)</code>、<code>make([]T, n)</code>、闭包捕获都只是分析输入。只要编译器能证明生命周期和大小安全，它们仍可能完全在栈上；反之，一个普通局部变量也可能逃逸。
+逃逸对象经过 SSA lowering 后调用 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/malloc.go#L2156-L2159" rel="noopener noreferrer" target="_blank"><code>runtime.newobject</code></a>，最终进入 <code>mallocgc</code>。零大小对象直接返回共享的 <code>zerobase</code>，见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/malloc.go#L1074-L1077" rel="noopener noreferrer" target="_blank"><code>mallocgc#L1074-L1077</code></a>。</p>
+<h2 id="二分配器的物理层次">二、分配器的物理层次</h2>
+<h2 id="1-pagespansize-class">1. Page、span、size class</h2>
+<p>Go runtime 的逻辑页大小是 <strong>8 KiB</strong>，常量来自 <code>PageShift = 13</code>；小对象上限是 <strong>32 KiB</strong>；共有 68 个 size class（含 0 号），见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/internal/runtime/gc/sizeclasses.go#L84-L100" rel="noopener noreferrer" target="_blank"><code>sizeclasses.go#L84-L100</code></a>。</p>
+<p><code>mspan</code> 管理一段连续 page。同一 small-object span 中的对象大小相同：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="mermaid"><code><span class="line"><span style="color:#F97583">flowchart</span><span style="color:#B392F0"> TB</span></span>
+<span class="line"><span style="color:#FFAB70">    H</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"mheap：管理 page 空闲区间"</span><span style="color:#F97583">]</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> S1</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"mspan：1~N 个连续 page"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    S1 </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> O1</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"slot 0：固定大小对象"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    S1 </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> O2</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"slot 1：固定大小对象"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    S1 </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> O3</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"..."</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    S1 </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> M</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"allocBits / mark bits / 类型元数据"</span><span style="color:#F97583">]</span></span></code></pre>
+<p>常见 class 示例：</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th align="right">请求大小</th><th align="right">对齐后的 slot</th><th align="right">每 span 页数</th><th align="right">每 span 对象数</th></tr></thead><tbody><tr><td align="right">1～8 B</td><td align="right">8 B</td><td align="right">1</td><td align="right">1024</td></tr><tr><td align="right">9～16 B</td><td align="right">16 B</td><td align="right">1</td><td align="right">512</td></tr><tr><td align="right">257～288 B</td><td align="right">288 B</td><td align="right">1</td><td align="right">28</td></tr><tr><td align="right">1025～1152 B</td><td align="right">1152 B</td><td align="right">1</td><td align="right">7</td></tr><tr><td align="right">28673～32768 B</td><td align="right">32768 B</td><td align="right">4</td><td align="right">1</td></tr></tbody></table>
+<p>请求大小会向上舍入，因此 <code>24 B</code> 对象落入 <code>24 B</code> class，而 <code>25 B</code> 会落入 <code>32 B</code> class。差额就是内部碎片。完整表格直接看 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/internal/runtime/gc/sizeclasses.go#L6-L73" rel="noopener noreferrer" target="_blank"><code>sizeclasses.go#L6-L73</code></a>。</p>
+<h2 id="2-spanclass大小与扫描属性的乘积">2. spanClass：大小与扫描属性的乘积</h2>
+<p>一个 size class 又分成 <code>scan</code> 和 <code>noscan</code> 两类，所以 <code>mcache.alloc</code> 按 <code>spanClass</code> 索引。没有指针的对象无需 GC 扫描，可以减少 scan work：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="text"><code><span class="line"><span>spanClass = sizeClass * 2 + noscanBit</span></span></code></pre>
+<p>这就是为什么同样大小的 <code>[]byte</code> backing array 与 <code>[]*T</code> backing array可能进入不同 span。</p>
+<h2 id="3-mcache绑定-p不是绑定线程">3. mcache：绑定 P，不是绑定线程</h2>
+<p><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mcache.go#L14-L66" rel="noopener noreferrer" target="_blank"><code>mcache</code></a> 是 <strong>per-P</strong> cache。热字段包括：</p>
+<ul>
+<li><code>alloc[spanClass]</code>：当前用于小对象分配的 span；</li>
+<li><code>tiny/tinyoffset</code>：当前 16 B tiny block；</li>
+<li><code>nextSample</code>：下一次 heap profile 采样阈值；</li>
+<li><code>scanAlloc</code>：本 P 新增的可扫描字节；</li>
+<li><code>stackcache</code>：小 goroutine stack 的缓存，供 <a href="/stack/">栈空间管理</a> 使用。</li>
+</ul>
+<p>执行分配时 runtime 暂时禁止抢占，保证当前 M 持有的 P 与 <code>mcache</code> 不会在中途变化。因此 fast path 不需要锁。</p>
+<h2 id="4-mcentralspan-的中转站">4. mcentral：span 的中转站</h2>
+<p>每个 span class 有一个 <code>mcentral</code>。Go 1.26.5 已不是简单的 <code>nonempty/empty</code> 链表，而是：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="mermaid"><code><span class="line"><span style="color:#F97583">flowchart</span><span style="color:#B392F0"> LR</span></span>
+<span class="line"><span style="color:#FFAB70">    C</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"mcentral(spanClass)"</span><span style="color:#F97583">]</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> PS</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"partial swept"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    C </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> PU</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"partial unswept"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    C </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> FS</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"full swept"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    C </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> FU</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"full unswept"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    PU </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">"按需 sweep"</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> PS</span></span>
+<span class="line"><span style="color:#FFAB70">    FU </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">"sweep 后有空 slot"</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> PS</span></span>
+<span class="line"><span style="color:#FFAB70">    FU </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">"仍然满"</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> FS</span></span></code></pre>
+<p>具体结构见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mcentral.go#L21-L46" rel="noopener noreferrer" target="_blank"><code>mcentral#L21-L46</code></a>。<code>cacheSpan</code> 优先取 partial swept，然后尝试 sweep unswept span；最多尝试一定预算，最后才调用 <code>grow</code> 从 <code>mheap</code> 获取新 span，见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mcentral.go#L81-L198" rel="noopener noreferrer" target="_blank"><code>cacheSpan#L81-L198</code></a>。</p>
+<h2 id="5-mheap-与-pagealloc">5. mheap 与 pageAlloc</h2>
+<p><code>mheap</code> 是全局堆状态容器，内部真正负责空闲 page 区间的是 <code>pageAlloc</code>。分配 span 时优先尝试当前 P 的 page cache；失败再加 <code>mheap.lock</code> 访问全局页分配器，见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mheap.go#L1224-L1314" rel="noopener noreferrer" target="_blank"><code>allocSpan#L1224-L1314</code></a>。</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="mermaid"><code><span class="line"><span style="color:#F97583">flowchart</span><span style="color:#B392F0"> TD</span></span>
+<span class="line"><span style="color:#FFAB70">    A</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"mheap.allocSpan(npages)"</span><span style="color:#F97583">]</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> B</span><span style="color:#F97583">{</span><span style="color:#9ECBFF">"P.pageCache 可满足?"</span><span style="color:#F97583">}</span></span>
+<span class="line"><span style="color:#FFAB70">    B </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">"是"</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> C</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"无全局 heap lock 取得 page"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    B </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">"否"</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> D</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"获取 mheap.lock"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    D </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> E</span><span style="color:#F97583">{</span><span style="color:#9ECBFF">"pageAlloc 有连续区间?"</span><span style="color:#F97583">}</span></span>
+<span class="line"><span style="color:#FFAB70">    E </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">"是"</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> F</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"pages.alloc"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    E </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">"否"</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> G</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"mheap.grow"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    G </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> H</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"sysAlloc + sysMap"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    H </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> F</span></span>
+<span class="line"><span style="color:#FFAB70">    C </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> I</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"初始化 mspan 与 arena 元数据"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    F </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> I</span></span></code></pre>
+<h2 id="三mallocgc-分流">三、<code>mallocgc</code> 分流</h2>
+<h2 id="总入口做了什么">总入口做了什么</h2>
+<p><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/malloc.go#L1067-L1200" rel="noopener noreferrer" target="_blank"><code>mallocgc</code></a> 的职责可以压缩为：</p>
+<ol>
+<li>处理零大小对象；</li>
+<li>GC 标记阶段扣除 assist credit；</li>
+<li>根据大小、是否包含指针、是否需要 malloc header 选择路径；</li>
+<li>初始化对象、类型/bitmap 元数据；</li>
+<li>用 publication barrier 保证 GC 不会看见半初始化对象；</li>
+<li>标记期把新对象直接分配为黑色；</li>
+<li>更新 profile 与 GC 触发统计。</li>
+</ol>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="mermaid"><code><span class="line"><span style="color:#F97583">flowchart</span><span style="color:#B392F0"> TD</span></span>
+<span class="line"><span style="color:#FFAB70">    A</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"mallocgc(size, typ, needzero)"</span><span style="color:#F97583">]</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> B</span><span style="color:#F97583">{</span><span style="color:#9ECBFF">"size == 0?"</span><span style="color:#F97583">}</span></span>
+<span class="line"><span style="color:#FFAB70">    B </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">"是"</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> Z</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"&#x26;zerobase"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    B </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">"否"</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> C</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"deductAssistCredit"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    C </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> D</span><span style="color:#F97583">{</span><span style="color:#9ECBFF">"size &#x3C;= 32 KiB - header?"</span><span style="color:#F97583">}</span></span>
+<span class="line"><span style="color:#FFAB70">    D </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">"否"</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> L</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"mallocgcLarge"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    D </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">"是"</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> E</span><span style="color:#F97583">{</span><span style="color:#9ECBFF">"typ 无指针?"</span><span style="color:#F97583">}</span></span>
+<span class="line"><span style="color:#FFAB70">    E </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">"是，size &#x3C; 16 B"</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> T</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"mallocgcTiny"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    E </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">"是"</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> N</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"mallocgcSmallNoscan"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    E </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">"否，heap bits 可放 span"</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> S1</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"SmallScanNoHeader"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    E </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">"否"</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> S2</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"SmallScanHeader"</span><span style="color:#F97583">]</span></span></code></pre>
+<h2 id="1-tiny小于-16-b-且-noscan">1. Tiny：小于 16 B 且 noscan</h2>
+<p>Tiny allocator 把多个无指针小对象塞进一个 16 B block；只有当 block 内所有子对象都不可达时，整块才会被回收。源码限制与设计解释见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/malloc.go#L1218-L1246" rel="noopener noreferrer" target="_blank"><code>mallocgcTiny#L1218-L1246</code></a>。</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="mermaid"><code><span class="line"><span style="color:#F97583">flowchart</span><span style="color:#B392F0"> LR</span></span>
+<span class="line"><span style="color:#FFAB70">    B</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"16 B tiny block"</span><span style="color:#F97583">]</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> A</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"对象 A: 3 B"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    B </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> P1</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"padding"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    B </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> C</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"对象 B: 4 B"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    B </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> D</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"对象 C: 6 B"</span><span style="color:#F97583">]</span></span></code></pre>
+<p>关键约束：</p>
+<ul>
+<li>必须 <code>noscan</code>，因为内部子对象没有各自独立的 GC 元数据；</li>
+<li>分配时按 2/4/8 字节对齐；</li>
+<li>最坏情况下一个仍存活的子对象会让整块 16 B 保持存活；</li>
+<li>race detector 下会关闭一部分合并行为以便准确追踪。</li>
+</ul>
+<h2 id="2-small不超过-32-kib">2. Small：不超过 32 KiB</h2>
+<p>小对象热路径是：根据 size class 找到 <code>mcache.alloc[spc]</code>，从 <code>allocCache</code> 找一个空 bit，计算 slot 地址并返回。<code>mspan.allocCache</code> 保存 <code>allocBits</code> 的反码，使 CPU 可以用 trailing-zero 指令快速找第一个空位，字段解释见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mheap.go#L433-L466" rel="noopener noreferrer" target="_blank"><code>mspan#L433-L466</code></a>。</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="text"><code><span class="line"><span>objectAddress = span.base + freeIndex * span.elemsize</span></span></code></pre>
+<p>若 span 已满，<code>mcache.refill</code> 把旧 span 归还 central，再调用 <code>mcentral.cacheSpan</code>，完整代码见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mcache.go#L155-L221" rel="noopener noreferrer" target="_blank"><code>mcache.refill#L155-L221</code></a>。</p>
+<h3 id="scan-与-noscan-为什么分开">scan 与 noscan 为什么分开</h3>
+<p>无指针对象不需要写类型位图；含指针对象必须先清零并建立扫描元数据，避免 GC 把未初始化字节误认为指针。当前代码甚至继续区分：</p>
+<ul>
+<li><code>mallocgcSmallNoscan</code>；</li>
+<li><code>mallocgcSmallScanNoHeader</code>：小到可以把 heap bits 放在 span 尾部；</li>
+<li><code>mallocgcSmallScanHeader</code>：slot 前放 <code>mallocHeaderSize</code> 类型头。</li>
+</ul>
+<p><code>SmallScanNoHeader</code> 初始化类型位图、执行 publication barrier、标记期 allocate-black 的顺序可见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/malloc.go#L1503-L1568" rel="noopener noreferrer" target="_blank"><code>malloc.go#L1503-L1568</code></a>。</p>
+<h2 id="3-large大于-32-kib">3. Large：大于 32 KiB</h2>
+<p>大对象不经过 <code>mcache.alloc</code> 与 <code>mcentral</code>，而是按 page 数直接从 <code>mheap</code> 分配独占 span。见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/malloc.go#L1687-L1724" rel="noopener noreferrer" target="_blank"><code>mallocgcLarge#L1687-L1724</code></a>。</p>
+<p>这意味着一个 <code>32769 B</code> 请求至少需要 5 个 8 KiB page，并承担 page 粒度的内部碎片。大 buffer 对 RSS、GC 扫描与 scavenger 都可能有明显影响。</p>
+<h2 id="四虚拟内存与-arena">四、虚拟内存与 arena</h2>
+<h2 id="稀疏-arena-map">稀疏 arena map</h2>
+<p>Go 1.26.5 的 heap 由多个 arena 组成：典型 64 位平台每个 arena 为 64 MiB。arena 起始地址对齐，<code>mheap_.arenas</code> 使用 L1/L2 两级映射从地址快速定位 <code>heapArena</code>。源码总览在 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/malloc.go#L77-L99" rel="noopener noreferrer" target="_blank"><code>malloc.go#L77-L99</code></a>。</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="mermaid"><code><span class="line"><span style="color:#F97583">flowchart</span><span style="color:#B392F0"> TB</span></span>
+<span class="line"><span style="color:#FFAB70">    VA</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"进程虚拟地址空间"</span><span style="color:#F97583">]</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> F0</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"arena frame 0"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    VA </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> F1</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"arena frame 1"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    VA </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> FN</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"arena frame N"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    MAP</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"mheap_.arenas: L1 -> L2"</span><span style="color:#F97583">]</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> H0</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"*heapArena 或 nil"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    H0 </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> SP</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"每 page 对应的 mspan"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    H0 </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> BM</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"pageInUse / pageMarks / specials 等元数据"</span><span style="color:#F97583">]</span></span></code></pre>
+<p><code>heapArena</code> 的 page map、page mark 与 Green Tea inline-mark 标志位见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mheap.go#L268-L321" rel="noopener noreferrer" target="_blank"><code>mheap.go#L268-L321</code></a>。它不是“实际对象都连续存放”的承诺，而是一个从地址到元数据的索引框架。</p>
+<h2 id="go-126堆基址随机化">Go 1.26：堆基址随机化</h2>
+<p>64 位平台第一次 grow heap 时会随机化一部分地址位，相关逻辑见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mheap.go#L1607-L1615" rel="noopener noreferrer" target="_blank"><code>mheap.grow#L1607-L1615</code></a>。这是安全加固，不改变 Go 的语言语义，但说明：</p>
+<ul>
+<li>不要依赖多次运行中的 heap 地址稳定性；</li>
+<li><code>uintptr</code> 不是可持久化对象标识；</li>
+<li>调试笔记中的固定地址只代表一次进程实例。</li>
+</ul>
+<h2 id="reservedpreparedreadyreleased">Reserved、Prepared、Ready、Released</h2>
+<p>runtime 把虚拟地址保留、映射可用、实际物理页以及归还 OS 分成不同状态。对应用开发者最重要的结论是：</p>
+<blockquote>
+<p>VSS 很大不等于实际占用了同样多的物理内存；观察容器内存时应结合 RSS、runtime metrics 与 heap profile。</p>
+</blockquote>
+<h2 id="五分配gc-与回收如何闭环">五、分配、GC 与回收如何闭环</h2>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="mermaid"><code><span class="line"><span style="color:#F97583">flowchart</span><span style="color:#B392F0"> LR</span></span>
+<span class="line"><span style="color:#FFAB70">    A</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"mallocgc 分配 slot"</span><span style="color:#F97583">]</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> B</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"对象成为 live"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    B </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> C</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"GC mark 标记可达对象"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    C </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> D</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"sweep 比较 allocBits/mark bits"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    D </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> E</span><span style="color:#F97583">{</span><span style="color:#9ECBFF">"span 还有存活对象?"</span><span style="color:#F97583">}</span></span>
+<span class="line"><span style="color:#FFAB70">    E </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">"有"</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> F</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"回到 mcentral partial/full"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    E </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">"没有"</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> G</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"page 归还 mheap"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    G </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> H</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"scavenger 可将物理页归还 OS"</span><span style="color:#F97583">]</span></span>
+<span class="line"><span style="color:#FFAB70">    F </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> A</span></span></code></pre>
+<p>这里有三个常被混淆的“释放”：</p>
+<ol>
+<li><strong>对象不可达</strong>：只是 GC 可以回收的条件；</li>
+<li><strong>sweep 释放 slot/span</strong>：runtime 可再次分配；</li>
+<li><strong>scavenge 归还物理页给 OS</strong>：才会直接推动 RSS 下降。</li>
+</ol>
+<p>scavenger 同时有后台异步和分配期同步两条路径，目标是控制估算 heap RSS，见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mgcscavenge.go#L5-L71" rel="noopener noreferrer" target="_blank"><code>mgcscavenge.go#L5-L71</code></a>。所以“GC 完成后 RSS 必须立刻等比例下降”不是正确预期。</p>
+<h2 id="green-tea-对-allocator-元数据的影响">Green Tea 对 allocator 元数据的影响</h2>
+<p>Green Tea 对符合条件的小对象 span，把 <code>marks</code> 与 <code>scans</code> 放在 span 尾部。初始化入口在 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mbitmap.go#L507-L520" rel="noopener noreferrer" target="_blank"><code>mspan.initHeapBits</code></a>，布局调整在 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mbitmap.go#L569-L575" rel="noopener noreferrer" target="_blank"><code>spanHeapBitsRange#L569-L575</code></a>。</p>
+<p>这会轻微减少某些 span 可放对象/位图的空间，但换来按 span 批量扫描的局部性。详细算法见 <a href="/gc/">垃圾收集器</a>。</p>
+<h2 id="六生产诊断与优化">六、生产诊断与优化</h2>
+<h2 id="先区分四类问题">先区分四类问题</h2>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>现象</th><th>优先证据</th><th>常见原因</th></tr></thead><tbody><tr><td><code>allocs/op</code> 高</td><td>benchmark <code>-benchmem</code>、alloc profile</td><td>逃逸、字符串/切片临时对象、接口装箱</td></tr><tr><td><code>inuse_space</code> 持续涨</td><td>heap profile 对比、对象保留路径</td><td>cache 无界、goroutine/closure 引用、队列积压</td></tr><tr><td>HeapAlloc 降但 RSS 高</td><td>runtime metrics、RSS、scavenger trace</td><td>page 仍保留、碎片、非 Go 内存</td></tr><tr><td>GC CPU 高</td><td>CPU profile、<code>gctrace</code>、trace</td><td>分配速率高、scan heap 大、指针密集对象</td></tr></tbody></table>
+<h2 id="可复制的诊断命令">可复制的诊断命令</h2>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="bash"><code><span class="line"><span style="color:#6A737D">## 逃逸与内联信息go build -gcflags='all=-m=2' ./...</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D">## 基准：分配次数和字节go test -run='^$' -bench=. -benchmem ./...</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D">## 生成 heap profilego test -run='^$' -bench=BenchmarkX -memprofile=mem.out ./path/to/pkg</span></span>
+<span class="line"><span style="color:#B392F0">go</span><span style="color:#9ECBFF"> tool</span><span style="color:#9ECBFF"> pprof</span><span style="color:#79B8FF"> -http=:0</span><span style="color:#9ECBFF"> mem.out</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D">## GC 与 scavenger 摘要GODEBUG=gctrace=1,scavtrace=1 ./app</span></span></code></pre>
+<p>heap profile 的两个视角：</p>
+<ul>
+<li><code>inuse_space/inuse_objects</code>：采样时仍存活，适合看 retention；</li>
+<li><code>alloc_space/alloc_objects</code>：累计分配，适合看 churn。</li>
+</ul>
+<p>Go 官方诊断总览也强调 profile、trace 与 runtime statistics 用途不同，参见 <a href="https://go.dev/doc/diagnostics" rel="noopener noreferrer" target="_blank">Diagnostics</a>。</p>
+<h2 id="优化顺序">优化顺序</h2>
+<ol>
+<li>用 profile 证明热点，不从“感觉会逃逸”开始；</li>
+<li>减少分配次数，通常比只减少单对象几字节更有效；</li>
+<li>减少长期存活指针图，降低下一轮 GC scan work；</li>
+<li>复用大 buffer 时设置上限，避免小请求长期持有峰值容量；</li>
+<li>重新 benchmark，并比较 CPU、alloc、heap、延迟，而不是只看一个指标。</li>
+</ol>
+<p><strong>⚠️ <code>sync.Pool</code> 不是稳定缓存</strong></p>
+<p><code>sync.Pool</code> 中对象可在 GC 时被清理。它适合降低临时对象 churn，不适合保存业务状态；放入超大 buffer 还可能提高短期 RSS。参见 <a href="/sync-lock/">同步和锁</a>。</p>
+<h2 id="七常见误区">七、常见误区</h2>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>误区</th><th>正确理解</th></tr></thead><tbody><tr><td>所有 <code>new</code> 都走 heap</td><td>是否上 heap 由逃逸分析决定</td></tr><tr><td><code>mcache</code> 是 per-M/per-thread</td><td>Go 当前实现是 per-P</td></tr><tr><td>small object 每次都要全局锁</td><td>热路径只访问当前 P 的 mcache 与 mspan bitmap</td></tr><tr><td>GC 释放对象后 RSS 立即下降</td><td>slot 可复用与物理页归还 OS 是两个阶段</td></tr><tr><td>内存高一定是 Go heap 泄漏</td><td>还可能是 goroutine stack、mmap、cgo、碎片、profile 自身开销</td></tr><tr><td>32 KiB 对象正好占 4 页所以没有代价</td><td>还要考虑 size class、元数据、存活时间与扫描属性</td></tr></tbody></table>
+<h2 id="八源码阅读主线与验收">八、源码阅读主线与验收</h2>
+<p>建议按以下顺序单步阅读：</p>
+<ol>
+<li><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/malloc.go#L1067-L1200" rel="noopener noreferrer" target="_blank"><code>mallocgc</code></a>：先画出分类树；</li>
+<li><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/malloc.go#L1358-L1454" rel="noopener noreferrer" target="_blank"><code>mallocgcSmallNoscan</code></a>：追 fast path；</li>
+<li><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mcache.go#L155-L221" rel="noopener noreferrer" target="_blank"><code>mcache.refill</code></a>：理解 span 更换；</li>
+<li><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mcentral.go#L81-L198" rel="noopener noreferrer" target="_blank"><code>mcentral.cacheSpan</code></a>：理解按需 sweep；</li>
+<li><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mheap.go#L1224-L1355" rel="noopener noreferrer" target="_blank"><code>mheap.allocSpan</code></a>：理解 page cache 与 heap lock；</li>
+<li><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mheap.go#L1553-L1635" rel="noopener noreferrer" target="_blank"><code>mheap.grow</code></a>：理解向 OS 扩容。</li>
+</ol>
+<p>完成本文后应能回答：</p>
+<ul class="contains-task-list">
+<li class="task-list-item"><input type="checkbox" disabled> 为什么 tiny allocator 只接收 noscan 对象？</li>
+<li class="task-list-item"><input type="checkbox" disabled> 为什么 mcache 热路径不需要锁？</li>
+<li class="task-list-item"><input type="checkbox" disabled> 25 B 请求实际落入哪个 size class？浪费在哪里？</li>
+<li class="task-list-item"><input type="checkbox" disabled> <code>mcentral</code> 为什么同时维护 swept 与 unswept 集合？</li>
+<li class="task-list-item"><input type="checkbox" disabled> 大对象为什么绕过 mcache/mcentral？</li>
+<li class="task-list-item"><input type="checkbox" disabled> 对象不可达、span 可复用、RSS 下降分别发生在哪一步？</li>
+<li class="task-list-item"><input type="checkbox" disabled> Green Tea 为什么会改变小对象 span 尾部布局？</li>
+</ul>
+<h2 id="总结">总结</h2>
+<p>Go 1.26.5 分配器的关键不是记住结构体名字，而是理解两条闭环：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="text"><code><span class="line"><span>分配：编译器 -> mallocgc -> mcache -> mcentral -> mheap -> OS</span></span>
+<span class="line"><span>回收：可达性标记 -> sweep slot/span -> pageAlloc -> scavenger -> OS</span></span></code></pre>
+<p>它通过 size class 控制碎片，通过 per-P cache 消除热路径锁竞争，通过 span/page 分层摊销全局管理成本，再与 GC pacing、sweep 和 scavenger 协同控制吞吐与 RSS。下一篇应继续阅读 <a href="/gc/">垃圾收集器</a>，把“谁仍然存活”与“空 slot 如何重新出现”接起来。</p>
+<h2 id="参考资料">参考资料</h2>
+<ul>
+<li><a href="https://go.dev/doc/go1.26" rel="noopener noreferrer" target="_blank">Go 1.26 Release Notes</a></li>
+<li><a href="https://go.dev/doc/gc-guide" rel="noopener noreferrer" target="_blank">A Guide to the Go Garbage Collector</a></li>
+<li><a href="https://go.dev/doc/diagnostics" rel="noopener noreferrer" target="_blank">Go Diagnostics</a></li>
+<li><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/malloc.go" rel="noopener noreferrer" target="_blank">Go 1.26.5 runtime/malloc.go</a></li>
+<li><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mheap.go" rel="noopener noreferrer" target="_blank">Go 1.26.5 runtime/mheap.go</a></li>
+<li><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/internal/runtime/gc/sizeclasses.go" rel="noopener noreferrer" target="_blank">Go 1.26.5 sizeclasses.go</a></li>
+</ul></main><aside class="toc"><p class="toc-title">本页目录</p><ul><li class="toc-d2"><a href="#go-1265-必须先知道的变化">Go 1.26.5 必须先知道的变化</a></li><li class="toc-d2"><a href="#源码地图">源码地图</a></li><li class="toc-d2"><a href="#一分配前变量为什么来到堆上">一、分配前：变量为什么来到堆上</a></li><li class="toc-d2"><a href="#二分配器的物理层次">二、分配器的物理层次</a></li><li class="toc-d2"><a href="#1-pagespansize-class">1. Page、span、size class</a></li><li class="toc-d2"><a href="#2-spanclass大小与扫描属性的乘积">2. spanClass：大小与扫描属性的乘积</a></li><li class="toc-d2"><a href="#3-mcache绑定-p不是绑定线程">3. mcache：绑定 P，不是绑定线程</a></li><li class="toc-d2"><a href="#4-mcentralspan-的中转站">4. mcentral：span 的中转站</a></li><li class="toc-d2"><a href="#5-mheap-与-pagealloc">5. mheap 与 pageAlloc</a></li><li class="toc-d2"><a href="#三mallocgc-分流">三、mallocgc 分流</a></li><li class="toc-d2"><a href="#总入口做了什么">总入口做了什么</a></li><li class="toc-d2"><a href="#1-tiny小于-16-b-且-noscan">1. Tiny：小于 16 B 且 noscan</a></li><li class="toc-d2"><a href="#2-small不超过-32-kib">2. Small：不超过 32 KiB</a></li><li class="toc-d3"><a href="#scan-与-noscan-为什么分开">scan 与 noscan 为什么分开</a></li><li class="toc-d2"><a href="#3-large大于-32-kib">3. Large：大于 32 KiB</a></li><li class="toc-d2"><a href="#四虚拟内存与-arena">四、虚拟内存与 arena</a></li><li class="toc-d2"><a href="#稀疏-arena-map">稀疏 arena map</a></li><li class="toc-d2"><a href="#go-126堆基址随机化">Go 1.26：堆基址随机化</a></li><li class="toc-d2"><a href="#reservedpreparedreadyreleased">Reserved、Prepared、Ready、Released</a></li><li class="toc-d2"><a href="#五分配gc-与回收如何闭环">五、分配、GC 与回收如何闭环</a></li><li class="toc-d2"><a href="#green-tea-对-allocator-元数据的影响">Green Tea 对 allocator 元数据的影响</a></li><li class="toc-d2"><a href="#六生产诊断与优化">六、生产诊断与优化</a></li><li class="toc-d2"><a href="#先区分四类问题">先区分四类问题</a></li><li class="toc-d2"><a href="#可复制的诊断命令">可复制的诊断命令</a></li><li class="toc-d2"><a href="#优化顺序">优化顺序</a></li><li class="toc-d2"><a href="#七常见误区">七、常见误区</a></li><li class="toc-d2"><a href="#八源码阅读主线与验收">八、源码阅读主线与验收</a></li><li class="toc-d2"><a href="#总结">总结</a></li><li class="toc-d2"><a href="#参考资料">参考资料</a></li></ul></aside></div><div class="lightbox" id="lightbox" aria-hidden="true"><img alt=""></div><script type="module" src="/_astro/Base.astro_astro_type_script_index_0_lang.DKvZf7If.js"></script></body></html>
