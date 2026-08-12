@@ -42,18 +42,7 @@
 <h3 id="快速理解把-runtime-想成一个车间">快速理解：把 runtime 想成一个车间</h3>
 <p>第一次读源码容易被 G、M、P、g0、runnext、netpoll、sysmon 这堆名词淹没。先用一段话建立心智模型：</p>
 <p>把 Go runtime 想成工厂车间。<strong>G 是任务卡</strong>，写 <code>go f()</code> 就是往筐里扔一张卡，卡很轻（栈初始 2KB），能同时有几十万张。<strong>M 是工人</strong>，即 OS 线程，一个工人同一时刻只干一张卡。<strong>P 是工牌加工具台</strong>，没有工牌的工人不能执行普通 Go 代码；工具台上挂着本地任务筐（256 槽的本地队列）、内存分配缓存、timer 等。<code>GOMAXPROCS=N</code> 就是发 N 个工牌，工人数量按需增减——所以工牌可以比工人多（活少，工人睡觉了），工人也可以比工牌多（多个 M 堵在 syscall 上）。</p>
-<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="mermaid"><code><span class="line"><span style="color:#F97583">flowchart</span><span style="color:#B392F0"> LR</span></span>
-<span class="line"><span style="color:#FFAB70">  M</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"M = 工人&#x3C;br/>(OS 线程)"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">  P</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"P = 工牌+工具台&#x3C;br/>(执行许可 + 本地资源)"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">  LQ</span><span style="color:#F97583">[(</span><span style="color:#9ECBFF">"P 本地队列&#x3C;br/>256 槽"</span><span style="color:#F97583">)]</span></span>
-<span class="line"><span style="color:#FFAB70">  GQ</span><span style="color:#F97583">[(</span><span style="color:#9ECBFF">"全局队列"</span><span style="color:#F97583">)]</span></span>
-<span class="line"><span style="color:#FFAB70">  G1</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"G 新任务卡"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">  G2</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"G"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">  M </span><span style="color:#F97583">---</span><span style="color:#9ECBFF"> P </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> LQ</span></span>
-<span class="line"><span style="color:#FFAB70">  LQ </span><span style="color:#F97583">-..-></span><span style="color:#FFAB70"> G2</span></span>
-<span class="line"><span style="color:#FFAB70">  GQ </span><span style="color:#F97583">-.</span><span style="color:#9ECBFF">没活时偷一半</span><span style="color:#F97583">.-></span><span style="color:#FFAB70"> LQ</span></span>
-<span class="line"><span style="color:#FFAB70">  G1 </span><span style="color:#F97583">-</span><span style="color:#E1E4E8">. </span><span style="color:#FFAB70">go f</span><span style="color:#F97583">()</span><span style="color:#F97583"> .-></span><span style="color:#FFAB70"> LQ</span></span>
-<span class="line"><span style="color:#FFAB70">  M </span><span style="color:#F97583">==</span><span style="color:#9ECBFF">执行</span><span style="color:#F97583">==></span><span style="color:#FFAB70"> G2</span></span></code></pre>
+<img src="/images/go/00-通俗解释-gmp-车间.png" alt="" loading="lazy" width="800" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
 <p>新卡优先放当前 P 的 <code>runnext</code>，筐满了进本地 256 槽队列，再满就把约一半倒去全局大筐。工人找活顺序是：本地筐 → 全局大筐 → GC worker → timer → 网络就绪 → <strong>去别的 P 筐里偷一半</strong>（work stealing）→ 还没活就睡，但留一两个工人”装睡”（spinning）等新卡，省掉线程唤醒开销。</p>
 <p>G 阻塞不等于工人卡住，这是最容易懵的地方，分三种：</p>
 <ol>
