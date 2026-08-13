@@ -6,14 +6,8 @@
         }
       })();
     </script><link rel="stylesheet" href="/_astro/Base.C1_PNgav.css"></head><body><header class="topbar"><a href="/" class="brand">HLDay</a><nav><a href="/">专题</a><a href="/posts/">博客</a><a href="https://github.com/hTangle" class="nav-github" aria-label="GitHub">GitHub</a></nav><button class="theme-toggle" id="themeToggle" type="button" title="切换主题（自动/浅色/深色）" aria-label="切换主题">🖥️</button></header><div class="layout"><aside class="booknav"><ul class="nav-tree"><li><p class="nav-group">Go</p><ul><li><p class="nav-subgroup">并发编程</p><ul><li class><a href="/gmp/">GMP 调度器</a></li><li class><a href="/sync-lock/">同步和锁</a></li><li class="active"><a href="/channel/">Channel</a></li><li class><a href="/context/">Context</a></li></ul></li><li><p class="nav-subgroup">内存管理</p><ul><li class><a href="/memory-alloc/">内存分配器</a></li><li class><a href="/gc/">垃圾收集器</a></li><li class><a href="/stack/">栈空间管理</a></li></ul></li></ul></li><li><p class="nav-group">Agent 开发</p><ul><li><p class="nav-subgroup">核心协议与机制</p><ul><li class><a href="/mcp/">MCP</a></li><li class><a href="/skill/">Skill</a></li><li class><a href="/tool-call/">Tool Call</a></li></ul></li></ul></li></ul></aside><main class="prose"><h1>Channel：Go 1.26.5 源码分析</h1><p>Channel 不只是一个并发安全队列。它把三件事组合在一起：<strong>数据传递、goroutine 同步、调度器阻塞与唤醒</strong>。一次看似普通的 <code>ch &#x3C;- x</code>，可能只是写入环形缓冲区，也可能把数据直接复制到另一个 goroutine 的栈上，最后还可能通过 <code>gopark</code> 把当前 G 交回调度器。</p>
-<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="mermaid"><code><span class="line"><span style="color:#F97583">flowchart</span><span style="color:#B392F0"> LR</span></span>
-<span class="line"><span style="color:#FFAB70">    A</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"语言操作&#x3C;br/>ch &#x3C;- x / &#x3C;-ch / close / select"</span><span style="color:#F97583">]</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> B</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"编译器 lowering"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    B </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> C</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"runtime.chan.go"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    C </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> D</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"hchan + 环形缓冲区"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    C </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> E</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"sendq / recvq + sudog"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    E </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> F</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"gopark / goready"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    F </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> G</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"GMP 调度器"</span><span style="color:#F97583">]</span></span></code></pre>
-<h2 id="当前版本需要注意的变化">当前版本需要注意的变化</h2>
+<img src="/images/go/01-channel-go-1-26-5-源码分析.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
+<h3 id="当前版本需要注意的变化">当前版本需要注意的变化</h3>
 
 
 
@@ -48,7 +42,7 @@
 
 
 <table><thead><tr><th>版本</th><th>与 Channel 相关的变化</th></tr></thead><tbody><tr><td>Go 1.14</td><td>异步抢占落地，长时间运行的 goroutine 不再只能依赖函数调用协作让出 CPU</td></tr><tr><td>Go 1.18</td><td><code>TryLock</code> 等同步 API 增加，但 Channel 的核心 <code>hchan</code> 模型未改变</td></tr><tr><td>Go 1.23</td><td>timer/ticker channel 改成对用户呈现无缓冲语义；未引用的 timer/ticker 可被 GC 回收</td></tr><tr><td>Go 1.24</td><td><code>testing/synctest</code> 以实验形式出现，runtime 开始具备 bubble 相关通道支持</td></tr><tr><td>Go 1.25</td><td><code>testing/synctest</code> 正式可用；当前 <code>hchan</code>、发送、接收、<code>select</code> 都包含 bubble 校验</td></tr><tr><td>Go 1.26</td><td>本文基线；Channel 主体仍是 <code>hchan + mutex + waitq + sudog</code>，并与 timer、synctest 和泄漏检测协作</td></tr></tbody></table>
-<h2 id="源码地图">源码地图</h2>
+<h3 id="源码地图">源码地图</h3>
 
 
 
@@ -99,8 +93,8 @@
 
 
 <table><thead><tr><th>内容</th><th>Go 1.26.5 源码</th></tr></thead><tbody><tr><td><code>hchan</code>、<code>waitq</code></td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/chan.go#L34-L60" rel="noopener noreferrer" target="_blank"><code>runtime/chan.go#L34-L60</code></a></td></tr><tr><td>创建 Channel</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/chan.go#L67-L125" rel="noopener noreferrer" target="_blank"><code>makechan</code></a></td></tr><tr><td>发送</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/chan.go#L176-L310" rel="noopener noreferrer" target="_blank"><code>chansend</code></a></td></tr><tr><td>发送方直接交付</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/chan.go#L312-L390" rel="noopener noreferrer" target="_blank"><code>send</code></a></td></tr><tr><td>关闭</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/chan.go#L414-L486" rel="noopener noreferrer" target="_blank"><code>closechan</code></a></td></tr><tr><td>接收</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/chan.go#L518-L700" rel="noopener noreferrer" target="_blank"><code>chanrecv</code></a></td></tr><tr><td>满缓冲区下的发送接收交换</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/chan.go#L702-L746" rel="noopener noreferrer" target="_blank"><code>recv</code></a></td></tr><tr><td>阻塞提交与等待队列</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/chan.go#L748-L913" rel="noopener noreferrer" target="_blank"><code>chanparkcommit</code>、<code>waitq</code></a></td></tr><tr><td><code>select</code></td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/select.go#L122-L625" rel="noopener noreferrer" target="_blank"><code>selectgo</code></a></td></tr><tr><td>等待节点 <code>sudog</code></td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/runtime2.go#L406-L471" rel="noopener noreferrer" target="_blank"><code>runtime2.go#L406-L471</code></a></td></tr></tbody></table>
-<h1 id="先把语义边界说清楚">先把语义边界说清楚</h1>
-<h2 id="nil打开关闭三种状态">nil、打开、关闭三种状态</h2>
+<h2 id="先把语义边界说清楚">先把语义边界说清楚</h2>
+<h3 id="nil打开关闭三种状态">nil、打开、关闭三种状态</h3>
 
 
 
@@ -151,22 +145,15 @@
 <table><thead><tr><th>操作</th><th>nil Channel</th><th>打开且可操作</th><th>打开但暂不可操作</th><th>已关闭</th></tr></thead><tbody><tr><td><code>ch &#x3C;- v</code></td><td>永久阻塞</td><td>发送成功</td><td>阻塞</td><td>panic</td></tr><tr><td><code>&#x3C;-ch</code></td><td>永久阻塞</td><td>收到值</td><td>阻塞</td><td>缓冲区未空则继续取；空后立即返回零值</td></tr><tr><td><code>v, ok := &#x3C;-ch</code></td><td>永久阻塞</td><td><code>ok=true</code></td><td>阻塞</td><td>缓冲耗尽后 <code>ok=false</code></td></tr><tr><td><code>close(ch)</code></td><td>panic</td><td>关闭成功</td><td>同左</td><td>panic</td></tr><tr><td><code>len(ch)</code> / <code>cap(ch)</code></td><td>0 / 0</td><td>返回瞬时值</td><td>返回瞬时值</td><td>仍可查询</td></tr></tbody></table>
 <p><strong>⚠️ <code>len(ch)</code> 不能用于同步决策</strong></p>
 <p>它只是某一瞬间的观察。检查完成后，其他 goroutine 可以立即发送或接收；正确同步应使用实际的 Channel 操作或 <code>select</code>。</p>
-<h2 id="channel-建立的-happens-before">Channel 建立的 happens-before</h2>
-<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="mermaid"><code><span class="line"><span style="color:#F97583">sequenceDiagram</span></span>
-<span class="line"><span style="color:#F97583">    participant</span><span style="color:#FFAB70"> S</span><span style="color:#F97583"> as</span><span style="color:#9ECBFF"> Sender</span></span>
-<span class="line"><span style="color:#F97583">    participant</span><span style="color:#FFAB70"> C</span><span style="color:#F97583"> as</span><span style="color:#9ECBFF"> Channel</span></span>
-<span class="line"><span style="color:#F97583">    participant</span><span style="color:#FFAB70"> R</span><span style="color:#F97583"> as</span><span style="color:#9ECBFF"> Receiver</span></span>
-<span class="line"><span style="color:#FFAB70">    S</span><span style="color:#F97583">->></span><span style="color:#FFAB70">S</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> 写入与构造 value</span></span>
-<span class="line"><span style="color:#FFAB70">    S</span><span style="color:#F97583">->></span><span style="color:#FFAB70">C</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> ch &#x3C;- value</span></span>
-<span class="line"><span style="color:#FFAB70">    C</span><span style="color:#F97583">->></span><span style="color:#FFAB70">R</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> value := &#x3C;-ch</span></span>
-<span class="line"><span style="color:#F97583">    Note</span><span style="color:#B392F0"> over</span><span style="color:#FFAB70"> S</span><span style="color:#F97583">,</span><span style="color:#FFAB70">R</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> 发送完成 synchronizes before 对应接收完成</span></span></code></pre>
+<h3 id="channel-建立的-happens-before">Channel 建立的 happens-before</h3>
+<img src="/images/go/02-channel-建立的-happens-before.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
 <ul>
 <li>对无缓冲 Channel，接收发生在发送完成之前。</li>
 <li>对容量为 <code>C</code> 的缓冲 Channel，第 <code>k</code> 次接收 synchronizes before 第 <code>k+C</code> 次发送完成。这正是容量为 <code>C</code> 的 Channel 可模拟计数信号量的依据。</li>
 <li><code>close(ch)</code> synchronizes before 因关闭而返回零值的接收。</li>
 </ul>
 <p>Channel 只发布与该次通信存在同步关系的写入；它不会自动保护所有共享变量。</p>
-<h1 id="hchanchannel-的真实对象"><code>hchan</code>：Channel 的真实对象</h1>
+<h2 id="hchanchannel-的真实对象"><code>hchan</code>：Channel 的真实对象</h2>
 <p>语言里的 <code>chan T</code> 在 runtime 中最终指向 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/chan.go#L34-L55" rel="noopener noreferrer" target="_blank"><code>hchan</code></a>：</p>
 <pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">type</span><span style="color:#B392F0"> hchan</span><span style="color:#F97583"> struct</span><span style="color:#E1E4E8"> {</span></span>
 <span class="line"><span style="color:#E1E4E8">    qcount   </span><span style="color:#F97583">uint</span></span>
@@ -183,16 +170,7 @@
 <span class="line"><span style="color:#E1E4E8">    bubble   </span><span style="color:#F97583">*</span><span style="color:#B392F0">synctestBubble</span></span>
 <span class="line"><span style="color:#E1E4E8">    lock     </span><span style="color:#B392F0">mutex</span></span>
 <span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
-<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="mermaid"><code><span class="line"><span style="color:#F97583">flowchart</span><span style="color:#B392F0"> TB</span></span>
-<span class="line"><span style="color:#FFAB70">    H</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"hchan"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    H </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> M</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"元数据&#x3C;br/>elemsize / elemtype / closed"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    H </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> B</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"环形缓冲区&#x3C;br/>buf / dataqsiz / qcount"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    B </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> I</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"sendx：下次写入"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    B </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> O</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"recvx：下次读取"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    H </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> SQ</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"sendq：阻塞发送者"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    H </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> RQ</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"recvq：阻塞接收者"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    H </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> L</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"lock：保护字段和相关 sudog"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    H </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> X</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"timer / synctest bubble"</span><span style="color:#F97583">]</span></span></code></pre>
+<img src="/images/go/03-hchan-channel-的真实对象.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
 <p>源码维护几个重要不变量：</p>
 <ul>
 <li>一般情况下 <code>sendq</code> 和 <code>recvq</code> 至少一个为空；同一 goroutine 在无缓冲 Channel 的 <code>select</code> 中同时等待发送与接收是例外。</li>
@@ -200,63 +178,29 @@
 <li>对缓冲 Channel，<code>qcount &#x3C; dataqsiz</code> 意味着没有发送者在 <code>sendq</code> 等待。</li>
 </ul>
 <p>这些不变量写在 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/chan.go#L9-L18" rel="noopener noreferrer" target="_blank"><code>chan.go#L9-L18</code></a>，理解它们比背分支更重要。</p>
-<h2 id="环形缓冲区">环形缓冲区</h2>
-<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="mermaid"><code><span class="line"><span style="color:#F97583">flowchart</span><span style="color:#B392F0"> LR</span></span>
-<span class="line"><span style="color:#FFAB70">    S0</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"slot 0"</span><span style="color:#F97583">]</span><span style="color:#F97583"> --</span><span style="color:#9ECBFF">> S1["slot 1"] </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> S2</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"slot 2"</span><span style="color:#F97583">]</span><span style="color:#F97583"> --</span><span style="color:#9ECBFF">> S3["slot 3"] </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> S0</span></span>
-<span class="line"><span style="color:#FFAB70">    W</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"sendx"</span><span style="color:#F97583">]</span><span style="color:#F97583"> -.</span><span style="color:#9ECBFF">写入</span><span style="color:#F97583">.-></span><span style="color:#FFAB70"> S3</span></span>
-<span class="line"><span style="color:#FFAB70">    R</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"recvx"</span><span style="color:#F97583">]</span><span style="color:#F97583"> -.</span><span style="color:#9ECBFF">读取</span><span style="color:#F97583">.-></span><span style="color:#FFAB70"> S1</span></span></code></pre>
+<h3 id="环形缓冲区">环形缓冲区</h3>
+<img src="/images/go/04-环形缓冲区.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
 <ul>
 <li><code>qcount</code> 是当前元素数量。</li>
 <li><code>sendx</code>、<code>recvx</code> 到达 <code>dataqsiz</code> 后回到 0。</li>
 <li>写入使用 <code>typedmemmove</code>，取出后使用 <code>typedmemclr</code> 清理槽位，让 GC 不再保留其中的指针。</li>
 </ul>
-<h1 id="创建makechan-t-n">创建：<code>make(chan T, n)</code></h1>
+<h2 id="创建makechan-t-n">创建：<code>make(chan T, n)</code></h2>
 <p><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/chan.go#L75-L125" rel="noopener noreferrer" target="_blank"><code>makechan</code></a> 先检查元素大小、对齐、容量乘法溢出，再按元素是否含指针选择分配方式：</p>
-<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="mermaid"><code><span class="line"><span style="color:#F97583">flowchart</span><span style="color:#B392F0"> TD</span></span>
-<span class="line"><span style="color:#FFAB70">    A</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"make(chan T, n)"</span><span style="color:#F97583">]</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> B</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"计算 sizeof(T) × n"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    B </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> C</span><span style="color:#F97583">{</span><span style="color:#9ECBFF">"缓冲字节数为 0?"</span><span style="color:#F97583">}</span></span>
-<span class="line"><span style="color:#FFAB70">    C </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">是</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> D</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"只分配 hchan"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    C </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">否</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> E</span><span style="color:#F97583">{</span><span style="color:#9ECBFF">"T 含 GC 指针?"</span><span style="color:#F97583">}</span></span>
-<span class="line"><span style="color:#FFAB70">    E </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">否</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> F</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"hchan 与 buf 一次连续分配"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    E </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">是</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> G</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"分别分配 hchan 与带类型的 buf"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    D </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> H</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"初始化 elemsize / elemtype / dataqsiz / lock"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    F </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> H</span></span>
-<span class="line"><span style="color:#FFAB70">    G </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> H</span></span></code></pre>
+<img src="/images/go/05-创建-make-chan-t-n.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
 <p>无指针元素可把控制块和缓冲区合并分配，减少一次分配，也让 GC 无需扫描缓冲区；含指针元素必须保留精确类型信息供 GC 扫描。</p>
-<h1 id="发送ch---value">发送：<code>ch &#x3C;- value</code></h1>
-<h2 id="总体路径">总体路径</h2>
-<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="mermaid"><code><span class="line"><span style="color:#F97583">flowchart</span><span style="color:#B392F0"> TD</span></span>
-<span class="line"><span style="color:#FFAB70">    A</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"chansend"</span><span style="color:#F97583">]</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> N</span><span style="color:#F97583">{</span><span style="color:#9ECBFF">"ch == nil?"</span><span style="color:#F97583">}</span></span>
-<span class="line"><span style="color:#FFAB70">    N </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">是</span><span style="color:#E1E4E8">，</span><span style="color:#9ECBFF">阻塞操作</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> NP</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"gopark：永久等待"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    N </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">否</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> F</span><span style="color:#F97583">{</span><span style="color:#9ECBFF">"非阻塞且当前不可发送?"</span><span style="color:#F97583">}</span></span>
-<span class="line"><span style="color:#FFAB70">    F </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">是</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> FR</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"返回 false"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    F </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">否</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> L</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"锁住 hchan"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    L </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> C</span><span style="color:#F97583">{</span><span style="color:#9ECBFF">"closed != 0?"</span><span style="color:#F97583">}</span></span>
-<span class="line"><span style="color:#FFAB70">    C </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">是</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> P</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"panic: send on closed channel"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    C </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">否</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> R</span><span style="color:#F97583">{</span><span style="color:#9ECBFF">"recvq 有等待者?"</span><span style="color:#F97583">}</span></span>
-<span class="line"><span style="color:#FFAB70">    R </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">是</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> D</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"直接复制到接收者并唤醒"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    R </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">否</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> B</span><span style="color:#F97583">{</span><span style="color:#9ECBFF">"缓冲区有空位?"</span><span style="color:#F97583">}</span></span>
-<span class="line"><span style="color:#FFAB70">    B </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">是</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> Q</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"写 buf[sendx]，推进 sendx/qcount"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    B </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">否</span><span style="color:#E1E4E8">，</span><span style="color:#9ECBFF">非阻塞</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> FR</span></span>
-<span class="line"><span style="color:#FFAB70">    B </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">否</span><span style="color:#E1E4E8">，</span><span style="color:#9ECBFF">阻塞</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> W</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"构造 sudog，加入 sendq"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    W </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> G</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"gopark，等待接收者或 close 唤醒"</span><span style="color:#F97583">]</span></span></code></pre>
+<h2 id="发送ch---value">发送：<code>ch &#x3C;- value</code></h2>
+<h3 id="总体路径">总体路径</h3>
+<img src="/images/go/06-总体路径.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
 <p>这四条有效路径分别位于：等待接收者 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/chan.go#L229-L233" rel="noopener noreferrer" target="_blank"><code>L229-L233</code></a>、缓冲写入 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/chan.go#L236-L249" rel="noopener noreferrer" target="_blank"><code>L236-L249</code></a>、非阻塞失败 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/chan.go#L252-L255" rel="noopener noreferrer" target="_blank"><code>L252-L255</code></a>、阻塞排队 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/chan.go#L257-L309" rel="noopener noreferrer" target="_blank"><code>L257-L309</code></a>。</p>
-<h2 id="为什么非阻塞快路径可以不加锁">为什么非阻塞快路径可以不加锁</h2>
+<h3 id="为什么非阻塞快路径可以不加锁">为什么非阻塞快路径可以不加锁</h3>
 <p><code>select { case ch &#x3C;- v: default: }</code> 会以 <code>block=false</code> 调用 <code>chansend</code>。源码先读取 <code>closed</code>，再用 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/chan.go#L142-L155" rel="noopener noreferrer" target="_blank"><code>full</code></a> 判断当前不可发送。</p>
 <p>这里并不承诺返回之后状态仍不变；它只需要证明在两次观察之间存在过一个“未关闭且不可发送”的时刻。真正会修改状态的路径都在同一把 <code>hchan.lock</code> 下，锁释放也负责刷新观察。</p>
-<h2 id="无缓冲-channel直接从发送者栈复制到接收者栈">无缓冲 Channel：直接从发送者栈复制到接收者栈</h2>
+<h3 id="无缓冲-channel直接从发送者栈复制到接收者栈">无缓冲 Channel：直接从发送者栈复制到接收者栈</h3>
 <p>如果 <code>recvq</code> 已有等待者，数据不经过 <code>hchan.buf</code>：</p>
-<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="mermaid"><code><span class="line"><span style="color:#F97583">sequenceDiagram</span></span>
-<span class="line"><span style="color:#F97583">    participant</span><span style="color:#FFAB70"> S</span><span style="color:#F97583"> as</span><span style="color:#9ECBFF"> 发送 G</span></span>
-<span class="line"><span style="color:#F97583">    participant</span><span style="color:#FFAB70"> C</span><span style="color:#F97583"> as</span><span style="color:#9ECBFF"> hchan</span></span>
-<span class="line"><span style="color:#F97583">    participant</span><span style="color:#FFAB70"> R</span><span style="color:#F97583"> as</span><span style="color:#9ECBFF"> 接收 G</span><span style="color:#E1E4E8">（已 parked）</span></span>
-<span class="line"><span style="color:#FFAB70">    S</span><span style="color:#F97583">->></span><span style="color:#FFAB70">C</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> lock，recvq.dequeue</span></span>
-<span class="line"><span style="color:#FFAB70">    C</span><span style="color:#F97583">->></span><span style="color:#FFAB70">R</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> 找到 sudog.elem</span></span>
-<span class="line"><span style="color:#FFAB70">    S</span><span style="color:#F97583">->></span><span style="color:#FFAB70">R</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> sendDirect 复制 value 到接收者栈</span></span>
-<span class="line"><span style="color:#FFAB70">    C</span><span style="color:#F97583">->></span><span style="color:#FFAB70">C</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> unlock</span></span>
-<span class="line"><span style="color:#FFAB70">    C</span><span style="color:#F97583">->></span><span style="color:#FFAB70">R</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> goready</span></span></code></pre>
+<img src="/images/go/07-无缓冲-channel-直接从发送者栈复制到接收者栈.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
 <p>跨 goroutine 栈写入通常不允许普通代码直接进行。runtime 的 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/chan.go#L392-L403" rel="noopener noreferrer" target="_blank"><code>sendDirect</code></a> 使用专门的写屏障路径；<code>hchan.lock</code> 还与栈收缩协议协作，不能在持锁时直接改变另一个 G 的状态。</p>
-<h2 id="阻塞发送sudog--gopark">阻塞发送：<code>sudog + gopark</code></h2>
+<h3 id="阻塞发送sudog--gopark">阻塞发送：<code>sudog + gopark</code></h3>
 <p>当没有接收者且缓冲区已满：</p>
 <ol>
 <li>从缓存取得 <code>sudog</code>。</li>
@@ -268,86 +212,35 @@
 </ol>
 <p><strong>📝 阻塞的是 G，不一定是 M</strong></p>
 <p><code>gopark</code> 把当前 goroutine 置为 waiting，M 返回调度循环，P 可以继续运行其他 G。这正是 Channel 能与 GMP 高效结合的原因，参见 <a href="/gmp/">GMP（Go 1.26.5 源码分析）</a>。</p>
-<h1 id="接收value-ok---ch">接收：<code>value, ok := &#x3C;-ch</code></h1>
-<h2 id="总体路径-1">总体路径</h2>
-<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="mermaid"><code><span class="line"><span style="color:#F97583">flowchart</span><span style="color:#B392F0"> TD</span></span>
-<span class="line"><span style="color:#FFAB70">    A</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"chanrecv"</span><span style="color:#F97583">]</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> N</span><span style="color:#F97583">{</span><span style="color:#9ECBFF">"ch == nil?"</span><span style="color:#F97583">}</span></span>
-<span class="line"><span style="color:#FFAB70">    N </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">是</span><span style="color:#E1E4E8">，</span><span style="color:#9ECBFF">阻塞操作</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> NP</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"永久 park"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    N </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">否</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> F</span><span style="color:#F97583">{</span><span style="color:#9ECBFF">"非阻塞且 empty?"</span><span style="color:#F97583">}</span></span>
-<span class="line"><span style="color:#FFAB70">    F </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">是且未关闭</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> FR</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"返回 selected=false"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    F </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">关闭且仍为空</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> Z</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"清零目标，返回 true,false"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    F </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">否则</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> L</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"锁住 hchan"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    L </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> C</span><span style="color:#F97583">{</span><span style="color:#9ECBFF">"closed 且 qcount==0?"</span><span style="color:#F97583">}</span></span>
-<span class="line"><span style="color:#FFAB70">    C </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">是</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> Z</span></span>
-<span class="line"><span style="color:#FFAB70">    C </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">否</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> S</span><span style="color:#F97583">{</span><span style="color:#9ECBFF">"sendq 有等待发送者?"</span><span style="color:#F97583">}</span></span>
-<span class="line"><span style="color:#FFAB70">    S </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">是</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> D</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"直接接收或满缓冲区交换"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    S </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">否</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> B</span><span style="color:#F97583">{</span><span style="color:#9ECBFF">"qcount > 0?"</span><span style="color:#F97583">}</span></span>
-<span class="line"><span style="color:#FFAB70">    B </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">是</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> Q</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"读取 buf[recvx] 并清槽"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    B </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">否</span><span style="color:#E1E4E8">，</span><span style="color:#9ECBFF">非阻塞</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> FR</span></span>
-<span class="line"><span style="color:#FFAB70">    B </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">否</span><span style="color:#E1E4E8">，</span><span style="color:#9ECBFF">阻塞</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> W</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"sudog 加入 recvq，gopark"</span><span style="color:#F97583">]</span></span></code></pre>
+<h2 id="接收value-ok---ch">接收：<code>value, ok := &#x3C;-ch</code></h2>
+<h3 id="总体路径-1">总体路径</h3>
+<img src="/images/go/08-总体路径.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
 <p>关键源码是 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/chan.go#L524-L700" rel="noopener noreferrer" target="_blank"><code>chanrecv#L524-L700</code></a>。非阻塞接收的 <code>empty → closed → empty</code> 检查使用原子读取，避免与并发关闭、清空缓冲区发生重排序后误判。</p>
-<h2 id="关闭但缓冲区未空">关闭但缓冲区未空</h2>
+<h3 id="关闭但缓冲区未空">关闭但缓冲区未空</h3>
 <p>关闭只禁止后续发送，并不会丢掉已有数据：</p>
-<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="mermaid"><code><span class="line"><span style="color:#F97583">sequenceDiagram</span></span>
-<span class="line"><span style="color:#F97583">    participant</span><span style="color:#FFAB70"> R</span><span style="color:#F97583"> as</span><span style="color:#9ECBFF"> Receiver</span></span>
-<span class="line"><span style="color:#F97583">    participant</span><span style="color:#FFAB70"> C</span><span style="color:#F97583"> as</span><span style="color:#9ECBFF"> closed buffered channel</span></span>
-<span class="line"><span style="color:#FFAB70">    R</span><span style="color:#F97583">->></span><span style="color:#FFAB70">C</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> receive</span></span>
-<span class="line"><span style="color:#FFAB70">    C</span><span style="color:#F97583">-->></span><span style="color:#FFAB70">R</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> buffer[0], ok=true</span></span>
-<span class="line"><span style="color:#FFAB70">    R</span><span style="color:#F97583">->></span><span style="color:#FFAB70">C</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> receive</span></span>
-<span class="line"><span style="color:#FFAB70">    C</span><span style="color:#F97583">-->></span><span style="color:#FFAB70">R</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> buffer[1], ok=true</span></span>
-<span class="line"><span style="color:#FFAB70">    R</span><span style="color:#F97583">->></span><span style="color:#FFAB70">C</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> receive（缓冲耗尽）</span></span>
-<span class="line"><span style="color:#FFAB70">    C</span><span style="color:#F97583">-->></span><span style="color:#FFAB70">R</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> zero(T), ok=false</span></span></code></pre>
+<img src="/images/go/09-关闭但缓冲区未空.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
 <p>因此 <code>for v := range ch</code> 会先耗尽缓冲区，再在 <code>ok=false</code> 时退出。</p>
-<h2 id="满缓冲区与等待发送者的交换">满缓冲区与等待发送者的交换</h2>
+<h3 id="满缓冲区与等待发送者的交换">满缓冲区与等待发送者的交换</h3>
 <p>当缓冲区已满且 <code>sendq</code> 有发送者，接收不能只取走头部后结束，否则还要再唤醒发送者完成一次独立入队。当前 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/chan.go#L702-L746" rel="noopener noreferrer" target="_blank"><code>recv</code></a> 在同一临界区完成交换：</p>
-<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="mermaid"><code><span class="line"><span style="color:#F97583">flowchart</span><span style="color:#B392F0"> LR</span></span>
-<span class="line"><span style="color:#FFAB70">    H</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"buf[recvx]：最旧值"</span><span style="color:#F97583">]</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> R</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"复制给接收者"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    S</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"等待发送者的值"</span><span style="color:#F97583">]</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> H</span></span>
-<span class="line"><span style="color:#FFAB70">    H </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> T</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"recvx++，sendx 与 recvx 在满队列时指向同一槽"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    T </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> W</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"唤醒发送者"</span><span style="color:#F97583">]</span></span></code></pre>
+<img src="/images/go/10-满缓冲区与等待发送者的交换.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
 <p>缓冲区元素数量保持满容量，但最旧值被取走，等待发送者的新值进入队尾。</p>
-<h1 id="等待队列与-sudog">等待队列与 <code>sudog</code></h1>
+<h2 id="等待队列与-sudog">等待队列与 <code>sudog</code></h2>
 <p><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/chan.go#L57-L60" rel="noopener noreferrer" target="_blank"><code>waitq</code></a> 是双端信息的 FIFO 链表，节点不是 G 本身，而是 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/runtime2.go#L406-L471" rel="noopener noreferrer" target="_blank"><code>sudog</code></a>：</p>
-<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="mermaid"><code><span class="line"><span style="color:#F97583">flowchart</span><span style="color:#B392F0"> LR</span></span>
-<span class="line"><span style="color:#FFAB70">    Q</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"sendq / recvq"</span><span style="color:#F97583">]</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> S1</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"sudog&#x3C;br/>g / elem / c / success"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    S1 </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> S2</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"sudog"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    S2 </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> S3</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"sudog"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    S1 </span><span style="color:#F97583">-.</span><span style="color:#9ECBFF">指向</span><span style="color:#F97583">.-></span><span style="color:#FFAB70"> G1</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"goroutine G"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    S1 </span><span style="color:#F97583">-.</span><span style="color:#9ECBFF">可能指向</span><span style="color:#F97583">.-></span><span style="color:#FFAB70"> E1</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"G 栈上的发送/接收槽"</span><span style="color:#F97583">]</span></span></code></pre>
+<img src="/images/go/11-等待队列与-sudog.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
 <p>之所以不把 G 直接放进等待队列，是因为一个 G 可能在 <code>select</code> 中同时等待多个 Channel，需要一组独立的等待记录。</p>
 <p><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/chan.go#L886-L913" rel="noopener noreferrer" target="_blank"><code>waitq.dequeue</code></a> 对普通等待者直接取队头；对 <code>select</code> 等待者还要 CAS <code>selectDone</code>，跳过已经被另一个 case 赢走的 <code>sudog</code>。</p>
-<h1 id="关闭closech">关闭：<code>close(ch)</code></h1>
-<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="mermaid"><code><span class="line"><span style="color:#F97583">flowchart</span><span style="color:#B392F0"> TD</span></span>
-<span class="line"><span style="color:#FFAB70">    A</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"closechan"</span><span style="color:#F97583">]</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> N</span><span style="color:#F97583">{</span><span style="color:#9ECBFF">"ch == nil?"</span><span style="color:#F97583">}</span></span>
-<span class="line"><span style="color:#FFAB70">    N </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">是</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> NP</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"panic"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    N </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">否</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> L</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"lock hchan"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    L </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> C</span><span style="color:#F97583">{</span><span style="color:#9ECBFF">"已经关闭?"</span><span style="color:#F97583">}</span></span>
-<span class="line"><span style="color:#FFAB70">    C </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">是</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> CP</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"panic"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    C </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">否</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> M</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"closed = 1"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    M </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> R</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"取出全部 recvq：清零 elem，success=false"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    R </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> S</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"取出全部 sendq：success=false"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    S </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> U</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"unlock"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    U </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> G</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"逐个 goready"</span><span style="color:#F97583">]</span></span></code></pre>
+<h2 id="关闭closech">关闭：<code>close(ch)</code></h2>
+<img src="/images/go/12-关闭-close-ch.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
 <p>源码先在锁内构造待唤醒 G 列表，解锁后才调用 <code>goready</code>，见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/chan.go#L434-L485" rel="noopener noreferrer" target="_blank"><code>closechan#L434-L485</code></a>。这样避免在持有 Channel 锁时改变其他 G 状态，引发与栈收缩的锁顺序死锁。</p>
 <ul>
 <li>被唤醒的接收者获得零值和 <code>ok=false</code>。</li>
 <li>被唤醒的发送者回到 <code>chansend</code> 后发现 <code>success=false</code>，触发 <code>send on closed channel</code>。</li>
 <li>Channel 没有“安全探测是否关闭再发送”的原子 API；通常应由唯一发送方负责关闭。</li>
 </ul>
-<h1 id="select随机轮询有序加锁一次提交"><code>select</code>：随机轮询、有序加锁、一次提交</h1>
+<h2 id="select随机轮询有序加锁一次提交"><code>select</code>：随机轮询、有序加锁、一次提交</h2>
 <p>编译器会把静态的零/单 case <code>select</code> 优化成简单操作；通用多 case 进入 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/select.go#L122-L625" rel="noopener noreferrer" target="_blank"><code>selectgo</code></a>。</p>
-<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="mermaid"><code><span class="line"><span style="color:#F97583">flowchart</span><span style="color:#B392F0"> TD</span></span>
-<span class="line"><span style="color:#FFAB70">    A</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"构造 scase 数组"</span><span style="color:#F97583">]</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> P</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"随机生成 pollorder"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    P </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> O</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"按 hchan 地址生成 lockorder"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    O </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> L</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"一次锁住全部相关 Channel"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    L </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> P1</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"Pass 1：按随机顺序寻找立即可执行 case"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    P1 </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">找到</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> X</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"执行 case，解锁并返回"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    P1 </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">未找到且有 default</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> D</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"解锁，返回 default"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    P1 </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">必须阻塞</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> P2</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"Pass 2：为每个 case 建 sudog 并入队"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    P2 </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> G</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"gopark"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    G </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> P3</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"Pass 3：被某个 case 唤醒后清理其余 sudog"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    P3 </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> X</span></span></code></pre>
-<h2 id="为什么需要两种顺序">为什么需要两种顺序</h2>
+<img src="/images/go/13-select-随机轮询-有序加锁-一次提交.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
+<h3 id="为什么需要两种顺序">为什么需要两种顺序</h3>
 <ul>
 <li><code>pollorder</code> 使用 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/select.go#L167-L197" rel="noopener noreferrer" target="_blank"><code>cheaprandn</code></a> 随机打乱，避免永远偏向源码靠前的已就绪 case。随机不等于严格公平。</li>
 <li><code>lockorder</code> 按 <code>hchan</code> 地址排序，所有 goroutine 以一致顺序加多把 Channel 锁，避免 AB-BA 死锁，见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/select.go#L206-L252" rel="noopener noreferrer" target="_blank"><code>L206-L252</code></a>。</li>
@@ -355,7 +248,7 @@
 </ul>
 <p><strong>💡 nil Channel 在 <code>select</code> 中很有用</strong></p>
 <p><code>selectgo</code> 会跳过 Channel 为 nil 的 case。把某个 Channel 变量设成 nil，可以动态禁用对应 case，而不会产生额外条件分支。</p>
-<h1 id="timer-channel-的当前语义">Timer Channel 的当前语义</h1>
+<h2 id="timer-channel-的当前语义">Timer Channel 的当前语义</h2>
 <p>Go 1.23 起，<code>time.Timer</code> 和 <code>time.Ticker</code> 的 Channel 对用户呈现同步、无缓冲语义。runtime 内部仍保留 timer 与 Channel 的特殊协作：</p>
 <ul>
 <li><code>hchan.timer</code> 指向向该 Channel 投递事件的 runtime timer。</li>
@@ -363,18 +256,11 @@
 <li><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/chan.go#L818-L850" rel="noopener noreferrer" target="_blank"><code>chanlen</code> / <code>chancap</code></a> 会隐藏内部实现细节，对同步 timer channel 返回 0。</li>
 </ul>
 <p>不要依赖 <code>Timer.C</code> 的底层容量。业务代码只应依赖 <code>time</code> 包承诺的 API 语义。</p>
-<h1 id="设计与使用建议">设计与使用建议</h1>
-<h2 id="channel-还是锁">Channel 还是锁</h2>
-<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="mermaid"><code><span class="line"><span style="color:#F97583">flowchart</span><span style="color:#B392F0"> TD</span></span>
-<span class="line"><span style="color:#FFAB70">    A</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"需要并发协调"</span><span style="color:#F97583">]</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> B</span><span style="color:#F97583">{</span><span style="color:#9ECBFF">"核心是所有权/事件/流式数据传递?"</span><span style="color:#F97583">}</span></span>
-<span class="line"><span style="color:#FFAB70">    B </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">是</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> C</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"优先 Channel"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    B </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">否</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> D</span><span style="color:#F97583">{</span><span style="color:#9ECBFF">"核心是短临界区内维护共享状态不变式?"</span><span style="color:#F97583">}</span></span>
-<span class="line"><span style="color:#FFAB70">    D </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">是</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> E</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"优先 Mutex/RWMutex"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    D </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">否</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> F</span><span style="color:#F97583">{</span><span style="color:#9ECBFF">"只等待任务完成?"</span><span style="color:#F97583">}</span></span>
-<span class="line"><span style="color:#FFAB70">    F </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">是</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> G</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"WaitGroup"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    F </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">否</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> H</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"Context/Cond/atomic 等"</span><span style="color:#F97583">]</span></span></code></pre>
+<h2 id="设计与使用建议">设计与使用建议</h2>
+<h3 id="channel-还是锁">Channel 还是锁</h3>
+<img src="/images/go/14-channel-还是锁.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
 <p>Channel 不天然优于锁。队列、流水线、fan-in/fan-out、所有权转移适合 Channel；缓存、计数器、复合状态不变式通常更适合锁，参见 <a href="/sync-lock/">同步和锁（Go 1.26.5 源码分析）</a>。</p>
-<h2 id="常见陷阱">常见陷阱</h2>
+<h3 id="常见陷阱">常见陷阱</h3>
 <ol>
 <li><strong>多个发送方竞争关闭</strong>：指定唯一 closer，或先汇聚发送方再关闭。</li>
 <li><strong>接收方关闭 Channel</strong>：接收方通常不知道是否仍有发送者，容易触发发送 panic。</li>
@@ -384,7 +270,7 @@
 <li><strong>假定 <code>select</code> 严格公平</strong>：它随机化轮询，但不提供轮次公平或优先级保证。</li>
 <li><strong>复制数据的成本</strong>：Channel 传递大对象会复制值；可传指针，但要重新审视所有权与数据竞争。</li>
 </ol>
-<h2 id="可取消的发送与接收">可取消的发送与接收</h2>
+<h3 id="可取消的发送与接收">可取消的发送与接收</h3>
 <pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">select</span><span style="color:#E1E4E8"> {</span></span>
 <span class="line"><span style="color:#F97583">case</span><span style="color:#E1E4E8"> out </span><span style="color:#F97583">&#x3C;-</span><span style="color:#E1E4E8"> result:</span></span>
 <span class="line"><span style="color:#F97583">    return</span><span style="color:#79B8FF"> nil</span></span>
@@ -392,23 +278,19 @@
 <span class="line"><span style="color:#F97583">    return</span><span style="color:#E1E4E8"> context.</span><span style="color:#B392F0">Cause</span><span style="color:#E1E4E8">(ctx)</span></span>
 <span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
 <p>Channel 负责数据/事件，Context 负责跨调用链取消。二者组合比通过关闭业务 Channel 广播所有错误原因更清晰，参见 <a href="/context/">Context（Go 1.26.5 源码分析）</a>。</p>
-<h1 id="测试与诊断">测试与诊断</h1>
-<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="bash"><code><span class="line"><span style="color:#6A737D"># 数据竞争</span></span>
-<span class="line"><span style="color:#B392F0">go</span><span style="color:#9ECBFF"> test</span><span style="color:#79B8FF"> -race</span><span style="color:#9ECBFF"> ./...</span></span>
+<h2 id="测试与诊断">测试与诊断</h2>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="bash"><code><span class="line"><span style="color:#6A737D">## 数据竞争go test -race ./...</span></span>
 <span class="line"></span>
-<span class="line"><span style="color:#6A737D"># 阻塞剖析：查看 Channel、锁等阻塞位置</span></span>
-<span class="line"><span style="color:#B392F0">go</span><span style="color:#9ECBFF"> test</span><span style="color:#79B8FF"> -blockprofile=block.out</span><span style="color:#9ECBFF"> ./...</span></span>
+<span class="line"><span style="color:#6A737D">## 阻塞剖析：查看 Channel、锁等阻塞位置go test -blockprofile=block.out ./...</span></span>
 <span class="line"><span style="color:#B392F0">go</span><span style="color:#9ECBFF"> tool</span><span style="color:#9ECBFF"> pprof</span><span style="color:#9ECBFF"> block.out</span></span>
 <span class="line"></span>
-<span class="line"><span style="color:#6A737D"># 调度与 Channel 阻塞时间线</span></span>
-<span class="line"><span style="color:#B392F0">go</span><span style="color:#9ECBFF"> test</span><span style="color:#79B8FF"> -trace=trace.out</span><span style="color:#9ECBFF"> ./...</span></span>
+<span class="line"><span style="color:#6A737D">## 调度与 Channel 阻塞时间线go test -trace=trace.out ./...</span></span>
 <span class="line"><span style="color:#B392F0">go</span><span style="color:#9ECBFF"> tool</span><span style="color:#9ECBFF"> trace</span><span style="color:#9ECBFF"> trace.out</span></span>
 <span class="line"></span>
-<span class="line"><span style="color:#6A737D"># Go 1.26 实验性 goroutine 泄漏剖析</span></span>
-<span class="line"><span style="color:#E1E4E8">GOEXPERIMENT</span><span style="color:#F97583">=</span><span style="color:#9ECBFF">goroutineleakprofile</span><span style="color:#B392F0"> go</span><span style="color:#9ECBFF"> test</span><span style="color:#9ECBFF"> ./...</span></span></code></pre>
+<span class="line"><span style="color:#6A737D">## Go 1.26 实验性 goroutine 泄漏剖析GOEXPERIMENT=goroutineleakprofile go test ./...</span></span></code></pre>
 <p><strong>📝 泄漏剖析的边界</strong></p>
 <p>Go 1.26 的 <code>goroutineleak</code> 是实验性 profile，依赖可达性判断，能识别大量永远无法解除的 Channel/锁等待，但不是所有逻辑泄漏都能被证明。</p>
-<h1 id="总结">总结</h1>
+<h2 id="总结">总结</h2>
 <ol>
 <li>Channel 的核心是 <code>hchan</code>：环形缓冲区、发送/接收等待队列和一把 runtime mutex。</li>
 <li>发送与接收优先直接匹配等待者，其次操作缓冲区，最后用 <code>sudog + gopark</code> 阻塞 G。</li>
@@ -417,7 +299,7 @@
 <li><code>selectgo</code> 用随机轮询缓解偏置，用统一锁顺序防死锁，用多 <code>sudog + CAS</code> 保证只有一个 case 获胜。</li>
 <li>Channel 适合通信与所有权转移；共享状态不变式仍应选择锁。</li>
 </ol>
-<h1 id="参考资料">参考资料</h1>
+<h2 id="参考资料">参考资料</h2>
 <ul>
 <li><a href="https://github.com/golang/go/tree/c19862e5f8415b4f24b189d065ed739517c548ba/src" rel="noopener noreferrer" target="_blank">Go 1.26.5 源码树</a></li>
 <li><a href="https://go.dev/doc/devel/release" rel="noopener noreferrer" target="_blank">Go 发布历史</a></li>
@@ -425,4 +307,4 @@
 <li><a href="https://go.dev/doc/go1.23#timer-changes" rel="noopener noreferrer" target="_blank">Go 1.23 Timer Channel 变化</a></li>
 <li><a href="https://go.dev/ref/mem#tmp_7" rel="noopener noreferrer" target="_blank">Go 内存模型：Channel communication</a></li>
 <li><a href="https://go.dev/doc/diagnostics" rel="noopener noreferrer" target="_blank">Go diagnostics</a></li>
-</ul></main><aside class="toc"><p class="toc-title">本页目录</p><ul><li class="toc-d2"><a href="#当前版本需要注意的变化">当前版本需要注意的变化</a></li><li class="toc-d2"><a href="#源码地图">源码地图</a></li><li class="toc-d2"><a href="#nil打开关闭三种状态">nil、打开、关闭三种状态</a></li><li class="toc-d2"><a href="#channel-建立的-happens-before">Channel 建立的 happens-before</a></li><li class="toc-d2"><a href="#环形缓冲区">环形缓冲区</a></li><li class="toc-d2"><a href="#总体路径">总体路径</a></li><li class="toc-d2"><a href="#为什么非阻塞快路径可以不加锁">为什么非阻塞快路径可以不加锁</a></li><li class="toc-d2"><a href="#无缓冲-channel直接从发送者栈复制到接收者栈">无缓冲 Channel：直接从发送者栈复制到接收者栈</a></li><li class="toc-d2"><a href="#阻塞发送sudog--gopark">阻塞发送：sudog + gopark</a></li><li class="toc-d2"><a href="#总体路径-1">总体路径</a></li><li class="toc-d2"><a href="#关闭但缓冲区未空">关闭但缓冲区未空</a></li><li class="toc-d2"><a href="#满缓冲区与等待发送者的交换">满缓冲区与等待发送者的交换</a></li><li class="toc-d2"><a href="#为什么需要两种顺序">为什么需要两种顺序</a></li><li class="toc-d2"><a href="#channel-还是锁">Channel 还是锁</a></li><li class="toc-d2"><a href="#常见陷阱">常见陷阱</a></li><li class="toc-d2"><a href="#可取消的发送与接收">可取消的发送与接收</a></li></ul></aside></div><div class="lightbox" id="lightbox" aria-hidden="true"><img alt=""></div><script type="module" src="/_astro/Base.astro_astro_type_script_index_0_lang.DKvZf7If.js"></script></body></html>
+</ul></main><aside class="toc"><p class="toc-title">本页目录</p><ul><li class="toc-d3"><a href="#当前版本需要注意的变化">当前版本需要注意的变化</a></li><li class="toc-d3"><a href="#源码地图">源码地图</a></li><li class="toc-d2"><a href="#先把语义边界说清楚">先把语义边界说清楚</a></li><li class="toc-d3"><a href="#nil打开关闭三种状态">nil、打开、关闭三种状态</a></li><li class="toc-d3"><a href="#channel-建立的-happens-before">Channel 建立的 happens-before</a></li><li class="toc-d2"><a href="#hchanchannel-的真实对象">hchan：Channel 的真实对象</a></li><li class="toc-d3"><a href="#环形缓冲区">环形缓冲区</a></li><li class="toc-d2"><a href="#创建makechan-t-n">创建：make(chan T, n)</a></li><li class="toc-d2"><a href="#发送ch---value">发送：ch &lt;- value</a></li><li class="toc-d3"><a href="#总体路径">总体路径</a></li><li class="toc-d3"><a href="#为什么非阻塞快路径可以不加锁">为什么非阻塞快路径可以不加锁</a></li><li class="toc-d3"><a href="#无缓冲-channel直接从发送者栈复制到接收者栈">无缓冲 Channel：直接从发送者栈复制到接收者栈</a></li><li class="toc-d3"><a href="#阻塞发送sudog--gopark">阻塞发送：sudog + gopark</a></li><li class="toc-d2"><a href="#接收value-ok---ch">接收：value, ok := &lt;-ch</a></li><li class="toc-d3"><a href="#总体路径-1">总体路径</a></li><li class="toc-d3"><a href="#关闭但缓冲区未空">关闭但缓冲区未空</a></li><li class="toc-d3"><a href="#满缓冲区与等待发送者的交换">满缓冲区与等待发送者的交换</a></li><li class="toc-d2"><a href="#等待队列与-sudog">等待队列与 sudog</a></li><li class="toc-d2"><a href="#关闭closech">关闭：close(ch)</a></li><li class="toc-d2"><a href="#select随机轮询有序加锁一次提交">select：随机轮询、有序加锁、一次提交</a></li><li class="toc-d3"><a href="#为什么需要两种顺序">为什么需要两种顺序</a></li><li class="toc-d2"><a href="#timer-channel-的当前语义">Timer Channel 的当前语义</a></li><li class="toc-d2"><a href="#设计与使用建议">设计与使用建议</a></li><li class="toc-d3"><a href="#channel-还是锁">Channel 还是锁</a></li><li class="toc-d3"><a href="#常见陷阱">常见陷阱</a></li><li class="toc-d3"><a href="#可取消的发送与接收">可取消的发送与接收</a></li><li class="toc-d2"><a href="#测试与诊断">测试与诊断</a></li><li class="toc-d2"><a href="#总结">总结</a></li><li class="toc-d2"><a href="#参考资料">参考资料</a></li></ul></aside></div><div class="lightbox" id="lightbox" aria-hidden="true"><img alt=""></div><script type="module" src="/_astro/Base.astro_astro_type_script_index_0_lang.DKvZf7If.js"></script></body></html>

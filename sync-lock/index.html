@@ -5,15 +5,8 @@
           document.documentElement.setAttribute('data-theme', s);
         }
       })();
-    </script><link rel="stylesheet" href="/_astro/Base.C1_PNgav.css"></head><body><header class="topbar"><a href="/" class="brand">HLDay</a><nav><a href="/">专题</a><a href="/posts/">博客</a><a href="https://github.com/hTangle" class="nav-github" aria-label="GitHub">GitHub</a></nav><button class="theme-toggle" id="themeToggle" type="button" title="切换主题（自动/浅色/深色）" aria-label="切换主题">🖥️</button></header><div class="layout"><aside class="booknav"><ul class="nav-tree"><li><p class="nav-group">Go</p><ul><li><p class="nav-subgroup">并发编程</p><ul><li class><a href="/gmp/">GMP 调度器</a></li><li class="active"><a href="/sync-lock/">同步和锁</a></li><li class><a href="/channel/">Channel</a></li><li class><a href="/context/">Context</a></li></ul></li><li><p class="nav-subgroup">内存管理</p><ul><li class><a href="/memory-alloc/">内存分配器</a></li><li class><a href="/gc/">垃圾收集器</a></li><li class><a href="/stack/">栈空间管理</a></li></ul></li></ul></li><li><p class="nav-group">Agent 开发</p><ul><li><p class="nav-subgroup">核心协议与机制</p><ul><li class><a href="/mcp/">MCP</a></li><li class><a href="/skill/">Skill</a></li><li class><a href="/tool-call/">Tool Call</a></li></ul></li></ul></li></ul></aside><main class="prose"><h1>同步和锁：Go 1.26.5 源码分析</h1><p>Go 通过 goroutine 和 channel 提供了高层并发抽象，但只要多个 goroutine 共享可变内存，就仍然需要同步原语来建立互斥与可见性边界。本文不只介绍 API，而是沿着以下路径阅读 Go 1.26.5 源码：</p>
-<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="mermaid"><code><span class="line"><span style="color:#F97583">flowchart</span><span style="color:#B392F0"> LR</span></span>
-<span class="line"><span style="color:#FFAB70">    A</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"sync 公开 API"</span><span style="color:#F97583">]</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> B</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"internal/sync 核心实现"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    B </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> C</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"runtime 信号量与调度器"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    C </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> D</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"sudog 等待队列"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    D </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> E</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"gopark 休眠 / goready 唤醒"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    A </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> F</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"sync/atomic 原子操作"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    F </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> B</span></span></code></pre>
-<h2 id="最新版需要先知道的变化">最新版需要先知道的变化</h2>
+    </script><link rel="stylesheet" href="/_astro/Base.C1_PNgav.css"></head><body><header class="topbar"><a href="/" class="brand">HLDay</a><nav><a href="/">专题</a><a href="/posts/">博客</a><a href="https://github.com/hTangle" class="nav-github" aria-label="GitHub">GitHub</a></nav><button class="theme-toggle" id="themeToggle" type="button" title="切换主题（自动/浅色/深色）" aria-label="切换主题">🖥️</button></header><div class="layout"><aside class="booknav"><ul class="nav-tree"><li><p class="nav-group">Go</p><ul><li><p class="nav-subgroup">并发编程</p><ul><li class><a href="/gmp/">GMP 调度器</a></li><li class="active"><a href="/sync-lock/">同步和锁</a></li><li class><a href="/channel/">Channel</a></li><li class><a href="/context/">Context</a></li></ul></li><li><p class="nav-subgroup">内存管理</p><ul><li class><a href="/memory-alloc/">内存分配器</a></li><li class><a href="/gc/">垃圾收集器</a></li><li class><a href="/stack/">栈空间管理</a></li></ul></li></ul></li><li><p class="nav-group">Agent 开发</p><ul><li><p class="nav-subgroup">核心协议与机制</p><ul><li class><a href="/mcp/">MCP</a></li><li class><a href="/skill/">Skill</a></li><li class><a href="/tool-call/">Tool Call</a></li></ul></li></ul></li></ul></aside><main class="prose"><h1>同步和锁：Go 1.26.5 源码分析</h1><p>Go 通过 goroutine 和 channel 提供了高层并发抽象，但只要多个 goroutine 共享可变内存，就仍然需要同步原语来建立互斥与可见性边界。本文不只介绍 API，而是沿着源码路径阅读 Go 1.26.5 中 <code>sync</code> 包的实现。</p>
+<img src="/images/go/01-同步和锁-go-1-26-5-源码分析.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
 
 
 
@@ -52,7 +45,113 @@
 
 
 <table><thead><tr><th>版本</th><th>与同步原语相关的重要变化</th></tr></thead><tbody><tr><td>Go 1.18</td><td><code>Mutex.TryLock</code>、<code>RWMutex.TryLock</code>、<code>RWMutex.TryRLock</code></td></tr><tr><td>Go 1.19</td><td><code>sync/atomic</code> 加入 <code>Bool</code>、<code>Int32</code>、<code>Int64</code>、<code>Pointer[T]</code> 等类型化原子值</td></tr><tr><td>Go 1.21</td><td><code>OnceFunc</code>、<code>OnceValue</code>、<code>OnceValues</code></td></tr><tr><td>Go 1.23</td><td><code>sync.Map.Clear</code></td></tr><tr><td>Go 1.24</td><td><code>sync.Map</code> 改用 16 路并发 Hash-Trie；旧版 <code>read/dirty/misses</code> 模型不再是当前实现</td></tr><tr><td>Go 1.25</td><td><code>WaitGroup.Go</code>；<code>go vet</code> 新增 WaitGroup 误用检查</td></tr><tr><td>Go 1.26</td><td>本文基线；<code>sync.Mutex</code> 公开层已是对 <code>internal/sync.Mutex</code> 的轻量包装</td></tr></tbody></table>
-<h2 id="源码地图">源码地图</h2>
+<h3 id="快速理解">快速理解</h3>
+<p>所有 <code>sync</code> 原语表面上是不同 API，底层共享一套机制：<strong>原子指令（CAS）走快路径，竞争失败就靠 runtime 信号量把 goroutine park 掉，被唤醒后重新竞争</strong>。理解这一条，剩下的都是数据结构设计问题。</p>
+<p>可以把它们按用途分四类：</p>
+<ol>
+<li><strong>互斥</strong>：<code>Mutex</code>（互斥锁）、<code>RWMutex</code>（读写锁）。前者是地基，其他所有阻塞原语几乎都在内部用它。</li>
+<li><strong>协同等待</strong>：<code>WaitGroup</code>（等 N 个任务完成）、<code>Once</code>（一次性初始化）、<code>Cond</code>（条件变化广播）。它们不在锁竞争路径上，解决的是”什么时候可以继续”。</li>
+<li><strong>并发容器与复用</strong>：<code>sync.Map</code>（1.24 起换成 16 路 Hash-Trie）、<code>sync.Pool</code>（per-P 临时对象缓存，GC 会清）。</li>
+<li><strong>原子操作</strong>：<code>sync/atomic</code> 的 typed atomic，单变量无锁；但<strong>原子性不等于业务不变式</strong>，多字段一致性仍然要锁。</li>
+</ol>
+<p>记忆 <code>Mutex</code> 时抓住三件事：快路径一条 CAS；慢路径短暂自旋后走 runtime 信号量休眠；等待超过 1ms 进入饥饿模式直接 handoff。其他原语大多在这三件事上叠加自己的状态编码。</p>
+<p>阅读顺序建议：内存模型 → <strong>Mutex（重点）</strong> → RWMutex → WaitGroup/Once/Cond → Map/Pool → atomic → 选型实践。源码地图见<a href="#%E9%99%84%E5%BD%95">附录</a>。</p>
+<h3 id="一基础内存模型与原语地图">一、基础：内存模型与原语地图</h3>
+<h4 id="同步的根基happens-before">同步的根基：happens-before</h4>
+<p>锁不只用于”同一时刻只允许一个 goroutine 进入”，它还要建立 <strong>happens-before</strong>（Go 文档中称 <em>synchronizes before</em>）关系，保证一个 goroutine 在临界区内的写入对后续获锁者可见。</p>
+<p><strong>happens-before 不是时间上的先后，是内存可见性的承诺。</strong> 编译器和 CPU 会重排内存操作，多核各自有缓存。语句 A 在源码里写在 B 前面，不代表 B 执行时一定能看到 A 写入的值。happens-before 是语言规范定义的偏序关系：<strong>如果 A happens-before B，A 及 A 之前的所有写入对 B 都可见，且 B 看到的内存顺序与程序顺序一致。</strong></p>
+<p>没有同步时的反例：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">var</span><span style="color:#E1E4E8"> done </span><span style="color:#F97583">bool</span></span>
+<span class="line"><span style="color:#F97583">var</span><span style="color:#E1E4E8"> msg </span><span style="color:#F97583">string</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D">// goroutine A</span></span>
+<span class="line"><span style="color:#F97583">go</span><span style="color:#F97583"> func</span><span style="color:#E1E4E8">() {</span></span>
+<span class="line"><span style="color:#E1E4E8">    msg </span><span style="color:#F97583">=</span><span style="color:#9ECBFF"> "hello"</span><span style="color:#6A737D">   // (1)</span></span>
+<span class="line"><span style="color:#E1E4E8">    done </span><span style="color:#F97583">=</span><span style="color:#79B8FF"> true</span><span style="color:#6A737D">     // (2)</span></span>
+<span class="line"><span style="color:#E1E4E8">}()</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D">// goroutine B</span></span>
+<span class="line"><span style="color:#F97583">for</span><span style="color:#F97583"> !</span><span style="color:#E1E4E8">done {}        </span><span style="color:#6A737D">// (3)</span></span>
+<span class="line"><span style="color:#B392F0">println</span><span style="color:#E1E4E8">(msg)        </span><span style="color:#6A737D">// (4) 可能打印空字符串，甚至 B 永远看不到 done=true</span></span></code></pre>
+<p>源码顺序 (1)→(2)，但没有同步边：编译器/CPU 可能把 (2) 重排到 (1) 前面；(1) 的写可能还停在 A 的 store buffer 没刷到共享缓存；B 的 (3) 可能一直读自己缓存里的旧值。所以 (4) 即使看到 <code>done=true</code>，也不保证看到 <code>msg="hello"</code>。这就是数据竞争，<code>go test -race</code> 会直接报。</p>
+<p>Go 内存模型定义的常用 happens-before 规则（也即各原语提供的同步保证）：</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>操作</th><th>建立的边</th></tr></thead><tbody><tr><td><code>Mutex.Unlock</code></td><td>happens-before 后续任何 <code>Lock</code> 返回（第 n 次 Unlock synchronizes before 第 m 次 Lock，n &#x3C; m）；<code>TryLock</code> 成功等价于 <code>Lock</code>，失败不建立任何边</td></tr><tr><td><code>ch &#x3C;- x</code></td><td>happens-before 对应的 <code>&#x3C;-ch</code> 完成</td></tr><tr><td><code>close(ch)</code></td><td>happens-before 收到零值的接收</td></tr><tr><td><code>WaitGroup.Done</code> / <code>WaitGroup.Go</code> 中 f 返回</td><td>happens-before 被解除阻塞的 <code>Wait</code> 返回</td></tr><tr><td><code>Once.Do(f)</code> 里 f 返回</td><td>happens-before 任何 <code>Do</code> 返回</td></tr><tr><td><code>Cond.Signal/Broadcast</code></td><td>happens-before 被唤醒的 <code>Wait</code> 返回</td></tr><tr><td><code>sync.Map</code> 写</td><td>happens-before 观察到该写入的读</td></tr><tr><td><code>sync.Pool.Put(x)</code></td><td>happens-before 返回同一个 <code>x</code> 的 <code>Get</code></td></tr><tr><td><code>atomic.Store</code></td><td>对观察到该值的 <code>atomic.Load</code> 可见（Go 原子操作顺序一致）</td></tr><tr><td><code>go f()</code> 语句</td><td>happens-before f 开始执行（反向不成立：f 退出不 happens-before 任何事件，要等它完成必须用 WaitGroup/channel）</td></tr></tbody></table>
+<p>修上面的例子，用锁建立同步边：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">var</span><span style="color:#E1E4E8"> mu </span><span style="color:#B392F0">sync</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">Mutex</span></span>
+<span class="line"><span style="color:#F97583">go</span><span style="color:#F97583"> func</span><span style="color:#E1E4E8">() {</span></span>
+<span class="line"><span style="color:#E1E4E8">    mu.</span><span style="color:#B392F0">Lock</span><span style="color:#E1E4E8">()</span></span>
+<span class="line"><span style="color:#E1E4E8">    msg </span><span style="color:#F97583">=</span><span style="color:#9ECBFF"> "hello"</span></span>
+<span class="line"><span style="color:#E1E4E8">    done </span><span style="color:#F97583">=</span><span style="color:#79B8FF"> true</span></span>
+<span class="line"><span style="color:#E1E4E8">    mu.</span><span style="color:#B392F0">Unlock</span><span style="color:#E1E4E8">()       </span><span style="color:#6A737D">// (1)(2) happens-before 下次 Lock 返回</span></span>
+<span class="line"><span style="color:#E1E4E8">}()</span></span>
+<span class="line"><span style="color:#E1E4E8">mu.</span><span style="color:#B392F0">Lock</span><span style="color:#E1E4E8">()</span></span>
+<span class="line"><span style="color:#F97583">for</span><span style="color:#F97583"> !</span><span style="color:#E1E4E8">done {</span></span>
+<span class="line"><span style="color:#E1E4E8">    mu.</span><span style="color:#B392F0">Unlock</span><span style="color:#E1E4E8">()</span></span>
+<span class="line"><span style="color:#E1E4E8">    time.</span><span style="color:#B392F0">Sleep</span><span style="color:#E1E4E8">(time.Millisecond) </span><span style="color:#6A737D">// 实际用 sync.Cond 或 channel</span></span>
+<span class="line"><span style="color:#E1E4E8">    mu.</span><span style="color:#B392F0">Lock</span><span style="color:#E1E4E8">()</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span>
+<span class="line"><span style="color:#E1E4E8">mu.</span><span style="color:#B392F0">Unlock</span><span style="color:#E1E4E8">()</span></span>
+<span class="line"><span style="color:#B392F0">println</span><span style="color:#E1E4E8">(msg)        </span><span style="color:#6A737D">// 一定看到 "hello"</span></span></code></pre>
+<p>三个易混点：</p>
+<ol>
+<li><strong>happens-before 是偏序，不是全局时钟</strong>。没有同步关系的两个事件之间顺序未定义，不要假设。</li>
+<li><strong>“看见一个写”不等于”看见所有写”</strong>。B 看到 A 的某个写，不保证看到 A 其他没有 happens-before 关系的写——必须边覆盖到。</li>
+<li><strong>atomic 单操作可见 ≠ 多字段一致</strong>。一个 <code>atomic.Bool</code> 做 ready flag，另一个普通字段写数据，ready 被 Load 看到并不自动让数据写可见；要么数据写也走原子发布（比如 <code>atomic.Pointer[T]</code> 发布整个结构体），要么用 Mutex 保护。</li>
+</ol>
+<p>所以锁干两件事：<strong>互斥</strong>（同一时刻只有一个 goroutine 进临界区）加<strong>可见性</strong>（Unlock 与下一次 Lock 之间建立 happens-before，把前一个持有者的写发布给下一个持有者）。第二点常被忽略，但它才是不能用 <code>if flag {}</code> 瞎等的根本原因。</p>
+<img src="/images/go/02-同步的根基-go-内存模型.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
+<p><strong>⚠️ 不要拷贝已使用的同步原语</strong></p>
+<p><code>Mutex</code>、<code>RWMutex</code>、<code>WaitGroup</code>、<code>Once</code>、<code>Cond</code>、<code>Map</code>、<code>Pool</code> 以及 typed atomic 都不应在首次使用后被拷贝。优先使用指针接收者，并运行 <code>go vet</code> 的 <code>copylocks</code> 检查。</p>
+<h4 id="源码地图">源码地图</h4>
 
 
 
@@ -109,81 +208,25 @@
 
 
 <table><thead><tr><th>原语</th><th>公开层</th><th>真实核心/运行时</th></tr></thead><tbody><tr><td><code>Mutex</code></td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/sync/mutex.go#L30-L66" rel="noopener noreferrer" target="_blank"><code>src/sync/mutex.go#L30-L66</code></a></td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/internal/sync/mutex.go#L20-L234" rel="noopener noreferrer" target="_blank"><code>src/internal/sync/mutex.go#L20-L234</code></a></td></tr><tr><td>信号量</td><td><code>sync</code> 中的 linkname 声明</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/sema.go#L28-L301" rel="noopener noreferrer" target="_blank"><code>src/runtime/sema.go#L28-L301</code></a></td></tr><tr><td><code>RWMutex</code></td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/sync/rwmutex.go#L39-L247" rel="noopener noreferrer" target="_blank"><code>src/sync/rwmutex.go#L39-L247</code></a></td><td><code>Mutex</code> + <code>readerSem</code>/<code>writerSem</code></td></tr><tr><td><code>WaitGroup</code></td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/sync/waitgroup.go#L48-L260" rel="noopener noreferrer" target="_blank"><code>src/sync/waitgroup.go#L48-L260</code></a></td><td><code>runtime_SemacquireWaitGroup</code></td></tr><tr><td><code>Once</code></td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/sync/once.go#L20-L80" rel="noopener noreferrer" target="_blank"><code>src/sync/once.go#L20-L80</code></a></td><td><code>atomic.Bool</code> + <code>Mutex</code></td></tr><tr><td><code>Cond</code></td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/sync/cond.go#L37-L108" rel="noopener noreferrer" target="_blank"><code>src/sync/cond.go#L37-L108</code></a></td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/sema.go#L544-L729" rel="noopener noreferrer" target="_blank"><code>runtime.notifyList</code></a></td></tr><tr><td><code>Map</code></td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/sync/map.go#L38-L115" rel="noopener noreferrer" target="_blank"><code>src/sync/map.go#L38-L115</code></a></td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/internal/sync/hashtriemap.go#L21-L724" rel="noopener noreferrer" target="_blank"><code>internal/sync.HashTrieMap</code></a></td></tr><tr><td><code>Pool</code></td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/sync/pool.go#L51-L318" rel="noopener noreferrer" target="_blank"><code>src/sync/pool.go#L51-L318</code></a></td><td>per-P local + victim cache</td></tr><tr><td><code>atomic</code></td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/sync/atomic/type.go#L9-L254" rel="noopener noreferrer" target="_blank"><code>src/sync/atomic/type.go</code></a></td><td>编译器 intrinsic / 架构汇编</td></tr></tbody></table>
-<h1 id="同步的根基go-内存模型">同步的根基：Go 内存模型</h1>
-<p>锁不只用于“同一时刻只允许一个 goroutine 进入”，它还要建立 <strong>happens-before</strong>（Go 文档中称 <em>synchronizes before</em>）关系，保证一个 goroutine 在临界区内的写入对后续获锁者可见。</p>
-<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="mermaid"><code><span class="line"><span style="color:#F97583">sequenceDiagram</span></span>
-<span class="line"><span style="color:#F97583">    participant</span><span style="color:#FFAB70"> G1</span><span style="color:#F97583"> as</span><span style="color:#9ECBFF"> Goroutine 1</span></span>
-<span class="line"><span style="color:#F97583">    participant</span><span style="color:#FFAB70"> M</span><span style="color:#F97583"> as</span><span style="color:#9ECBFF"> Mutex</span></span>
-<span class="line"><span style="color:#F97583">    participant</span><span style="color:#FFAB70"> G2</span><span style="color:#F97583"> as</span><span style="color:#9ECBFF"> Goroutine 2</span></span>
-<span class="line"><span style="color:#FFAB70">    G1</span><span style="color:#F97583">->></span><span style="color:#FFAB70">M</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> Lock</span></span>
-<span class="line"><span style="color:#FFAB70">    G1</span><span style="color:#F97583">->></span><span style="color:#FFAB70">G1</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> 写共享数据 x = 1</span></span>
-<span class="line"><span style="color:#FFAB70">    G1</span><span style="color:#F97583">->></span><span style="color:#FFAB70">M</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> Unlock</span></span>
-<span class="line"><span style="color:#F97583">    Note</span><span style="color:#B392F0"> over</span><span style="color:#FFAB70"> M</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> Unlock synchronizes before 后续 Lock</span></span>
-<span class="line"><span style="color:#FFAB70">    G2</span><span style="color:#F97583">->></span><span style="color:#FFAB70">M</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> Lock</span></span>
-<span class="line"><span style="color:#FFAB70">    G2</span><span style="color:#F97583">->></span><span style="color:#FFAB70">G2</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> 必须观察到 x = 1</span></span></code></pre>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-<table><thead><tr><th>原语</th><th>同步保证</th></tr></thead><tbody><tr><td><code>Mutex</code></td><td>第 n 次 <code>Unlock</code> synchronizes before 后续第 m 次 <code>Lock</code>（n &#x3C; m）</td></tr><tr><td><code>TryLock</code></td><td>成功等价于 <code>Lock</code>；失败不建立任何同步关系</td></tr><tr><td><code>Once</code></td><td><code>f</code> 返回 synchronizes before 任意 <code>Do(f)</code> 返回</td></tr><tr><td><code>WaitGroup</code></td><td><code>Done</code>/<code>Go</code> 中 <code>f</code> 返回 synchronizes before 被它解除阻塞的 <code>Wait</code> 返回</td></tr><tr><td><code>Cond</code></td><td><code>Signal</code>/<code>Broadcast</code> synchronizes before 被唤醒的 <code>Wait</code></td></tr><tr><td><code>Map</code></td><td>写操作 synchronizes before 观察到该写入的读操作</td></tr><tr><td><code>Pool</code></td><td><code>Put(x)</code> synchronizes before 返回同一个 <code>x</code> 的 <code>Get</code></td></tr><tr><td><code>atomic</code></td><td>若 B 观察到 A，则 A synchronizes before B；Go 原子操作表现为顺序一致</td></tr></tbody></table>
-<p><strong>⚠️ 不要拷贝已使用的同步原语</strong></p>
-<p><code>Mutex</code>、<code>RWMutex</code>、<code>WaitGroup</code>、<code>Once</code>、<code>Cond</code>、<code>Map</code>、<code>Pool</code> 以及 typed atomic 都不应在首次使用后被拷贝。优先使用指针接收者，并运行 <code>go vet</code> 的 <code>copylocks</code> 检查。</p>
-<h1 id="syncmutex互斥锁"><code>sync.Mutex</code>：互斥锁</h1>
-<h2 id="公开结构已经变成包装层">公开结构已经变成包装层</h2>
+<h3 id="二互斥mutex-与-rwmutex">二、互斥：Mutex 与 RWMutex</h3>
+<p><strong>⭐ 这一章是整个 sync 包的地基</strong></p>
+<p><code>RWMutex</code>、<code>WaitGroup</code>、<code>Once</code>、<code>Cond</code>、<code>sync.Map</code> 的内部都依赖 Mutex 或它底层的 runtime 信号量。把 Mutex 的状态位、快慢路径、正常/饥饿模式看明白，后面所有原语只是在它上面叠加各自的状态编码。</p>
+<h4 id="syncmutex互斥锁"><code>sync.Mutex</code>：互斥锁</h4>
+<h5 id="公开结构已经变成包装层">公开结构已经变成包装层</h5>
 <p>Go 1.26.5 的 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/sync/mutex.go#L30-L34" rel="noopener noreferrer" target="_blank"><code>sync.Mutex</code></a> 不再直接声明 <code>state</code> 和 <code>sema</code>：</p>
 <pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">type</span><span style="color:#B392F0"> Mutex</span><span style="color:#F97583"> struct</span><span style="color:#E1E4E8"> {</span></span>
 <span class="line"><span style="color:#E1E4E8">	_  </span><span style="color:#B392F0">noCopy</span></span>
 <span class="line"><span style="color:#E1E4E8">	mu </span><span style="color:#B392F0">isync</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">Mutex</span></span>
 <span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
 <p>公开的 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/sync/mutex.go#L42-L47" rel="noopener noreferrer" target="_blank"><code>Lock</code></a>、<a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/sync/mutex.go#L49-L56" rel="noopener noreferrer" target="_blank"><code>TryLock</code></a> 和 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/sync/mutex.go#L58-L66" rel="noopener noreferrer" target="_blank"><code>Unlock</code></a> 都委托给 <code>internal/sync.Mutex</code>。这样 Go 内部包即使不能依赖公开 <code>sync</code> 包，也能复用同一套互斥锁实现。</p>
-<h2 id="真实数据结构">真实数据结构</h2>
+<h5 id="真实数据结构">真实数据结构</h5>
 <p>真正实现位于 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/internal/sync/mutex.go#L20-L55" rel="noopener noreferrer" target="_blank"><code>src/internal/sync/mutex.go#L20-L55</code></a>：</p>
 <pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">type</span><span style="color:#B392F0"> Mutex</span><span style="color:#F97583"> struct</span><span style="color:#E1E4E8"> {</span></span>
 <span class="line"><span style="color:#E1E4E8">	state </span><span style="color:#F97583">int32</span></span>
 <span class="line"><span style="color:#E1E4E8">	sema  </span><span style="color:#F97583">uint32</span></span>
 <span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
 <p><code>state</code> 将锁标志、唤醒标志、饥饿标志和等待者数量压缩在一个 32 位整数中：</p>
-<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="mermaid"><code><span class="line"><span style="color:#F97583">flowchart</span><span style="color:#B392F0"> LR</span></span>
-<span class="line"><span style="color:#FFAB70">    A</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"bit 31 ... bit 3&#x3C;br/>等待者数量"</span><span style="color:#F97583">]</span><span style="color:#F97583"> ---</span><span style="color:#FFAB70"> B</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"bit 2&#x3C;br/>mutexStarving"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    B </span><span style="color:#F97583">---</span><span style="color:#FFAB70"> C</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"bit 1&#x3C;br/>mutexWoken"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    C </span><span style="color:#F97583">---</span><span style="color:#FFAB70"> D</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"bit 0&#x3C;br/>mutexLocked"</span><span style="color:#F97583">]</span></span></code></pre>
+<img src="/images/go/03-真实数据结构.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
 
 
 
@@ -214,81 +257,38 @@
 
 
 <table><thead><tr><th>字段/状态</th><th>含义</th></tr></thead><tbody><tr><td><code>mutexLocked</code></td><td>逻辑上已加锁</td></tr><tr><td><code>mutexWoken</code></td><td>已有一个等待者被唤醒，解锁者不要重复唤醒</td></tr><tr><td><code>mutexStarving</code></td><td>饥饿模式，所有权直接交给队首等待者</td></tr><tr><td><code>state >> mutexWaiterShift</code></td><td>已进入等待队列的 goroutine 数</td></tr><tr><td><code>sema</code></td><td>runtime 休眠/唤醒原语使用的 32 位信号量地址</td></tr></tbody></table>
-<h2 id="lock快路径与慢路径"><code>Lock</code>：快路径与慢路径</h2>
+<h5 id="lock快路径与慢路径"><code>Lock</code>：快路径与慢路径</h5>
 <p><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/internal/sync/mutex.go#L61-L71" rel="noopener noreferrer" target="_blank"><code>internal/sync.Mutex.Lock</code></a> 先尝试一次 CAS：只有 <code>state == 0</code> 时才能在快路径直接取得锁。</p>
 <pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">if</span><span style="color:#E1E4E8"> atomic.</span><span style="color:#B392F0">CompareAndSwapInt32</span><span style="color:#E1E4E8">(</span><span style="color:#F97583">&#x26;</span><span style="color:#E1E4E8">m.state, </span><span style="color:#79B8FF">0</span><span style="color:#E1E4E8">, mutexLocked) {</span></span>
 <span class="line"><span style="color:#F97583">	return</span></span>
 <span class="line"><span style="color:#E1E4E8">}</span></span>
 <span class="line"><span style="color:#E1E4E8">m.</span><span style="color:#B392F0">lockSlow</span><span style="color:#E1E4E8">()</span></span></code></pre>
-<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="mermaid"><code><span class="line"><span style="color:#F97583">flowchart</span><span style="color:#B392F0"> TD</span></span>
-<span class="line"><span style="color:#FFAB70">    A</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"Lock"</span><span style="color:#F97583">]</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> B</span><span style="color:#F97583">{</span><span style="color:#9ECBFF">"CAS: state 0 -> locked?"</span><span style="color:#F97583">}</span></span>
-<span class="line"><span style="color:#FFAB70">    B </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">"成功"</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> C</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"获得锁，返回"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    B </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">"失败"</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> D</span><span style="color:#F97583">{</span><span style="color:#9ECBFF">"normal 且允许自旋?"</span><span style="color:#F97583">}</span></span>
-<span class="line"><span style="color:#FFAB70">    D </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">"是"</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> E</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"自旋；必要时设 mutexWoken"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    E </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> F</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"重读 state 并重试"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    F </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> D</span></span>
-<span class="line"><span style="color:#FFAB70">    D </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">"否"</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> G</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"增加 waiter 数，CAS 更新 state"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    G </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> H</span><span style="color:#F97583">{</span><span style="color:#9ECBFF">"CAS 后已获锁?"</span><span style="color:#F97583">}</span></span>
-<span class="line"><span style="color:#FFAB70">    H </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">"是"</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> C</span></span>
-<span class="line"><span style="color:#FFAB70">    H </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">"否"</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> I</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"runtime_SemacquireMutex&#x3C;br/>gopark 休眠"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    I </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> J</span><span style="color:#F97583">{</span><span style="color:#9ECBFF">"starving 直接交接?"</span><span style="color:#F97583">}</span></span>
-<span class="line"><span style="color:#FFAB70">    J </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">"是"</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> C</span></span>
-<span class="line"><span style="color:#FFAB70">    J </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">"否"</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> F</span></span></code></pre>
-<h3 id="为什么只短暂自旋">为什么只短暂自旋</h3>
-<p><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/proc.go#L7934-L7957" rel="noopener noreferrer" target="_blank"><code>runtime_canSpin</code></a> 非常保守，需要同时满足：</p>
-<ul>
-<li>自旋次数小于 <code>active_spin</code>；</li>
-<li>启动时 CPU 数大于 1，<code>GOMAXPROCS > 1</code>；</li>
-<li>除当前 P 外还有正在运行的 P；</li>
-<li>当前 P 的本地运行队列为空。</li>
-</ul>
-<p>实际自旋由 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/proc.go#L7953-L7957" rel="noopener noreferrer" target="_blank"><code>runtime_doSpin</code></a> 调用 <code>procyield(active_spin_cnt)</code>。目标是在临界区极短时避免 goroutine 停放/唤醒的成本，而不是无上限忙等。</p>
-<h2 id="正常模式与饥饿模式">正常模式与饥饿模式</h2>
+<img src="/images/go/04-lock-快路径与慢路径.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
+<p>慢路径里会<strong>短暂自旋</strong>。<a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/proc.go#L7934-L7957" rel="noopener noreferrer" target="_blank"><code>runtime_canSpin</code></a> 非常保守，需要同时满足：自旋次数小于 <code>active_spin</code>；启动时 CPU 数大于 1，<code>GOMAXPROCS > 1</code>；除当前 P 外还有正在运行的 P；当前 P 的本地运行队列为空。实际自旋由 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/proc.go#L7953-L7957" rel="noopener noreferrer" target="_blank"><code>runtime_doSpin</code></a> 调用 <code>procyield(active_spin_cnt)</code>（PAUSE 指令空转）。目标是在临界区极短时避免 goroutine 停放/唤醒的成本，而不是无上限忙等。</p>
+<h5 id="正常模式与饥饿模式">正常模式与饥饿模式</h5>
 <p>源码在 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/internal/sync/mutex.go#L31-L55" rel="noopener noreferrer" target="_blank"><code>mutex.go#L31-L55</code></a> 定义了两种模式：</p>
-<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="mermaid"><code><span class="line"><span style="color:#F97583">stateDiagram-v2</span></span>
-<span class="line"><span style="color:#F97583">    [*]</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> Normal</span></span>
-<span class="line"><span style="color:#FFAB70">    Normal</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> 正常模式</span></span>
-<span class="line"><span style="color:#FFAB70">    Normal</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> 唤醒者与新到 goroutine 竞争</span></span>
-<span class="line"><span style="color:#FFAB70">    Normal</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> 允许短暂自旋，吞吐更高</span></span>
-<span class="line"><span style="color:#FFAB70">    Normal</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> Starving</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> 等待超过 1ms</span></span>
-<span class="line"><span style="color:#FFAB70">    Starving</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> 饥饿模式</span></span>
-<span class="line"><span style="color:#FFAB70">    Starving</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> Unlock 直接 handoff 给队首</span></span>
-<span class="line"><span style="color:#FFAB70">    Starving</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> 新到 goroutine 不自旋、不抢锁</span></span>
-<span class="line"><span style="color:#FFAB70">    Starving</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> Normal</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> 当前者等待少于 1ms</span></span>
-<span class="line"><span style="color:#FFAB70">    Starving</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> Normal</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> 当前者是最后一个 waiter</span></span></code></pre>
+<img src="/images/go/05-正常模式与饥饿模式.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
 <ul>
 <li><strong>正常模式</strong>偏向吞吐。被唤醒者并不直接拥有锁，需要与已在 CPU 上运行的新 goroutine 竞争。</li>
 <li><strong>饥饿模式</strong>偏向尾延迟。等待超过 <code>1ms</code> 后，Unlock 使用 handoff 直接把信号量交给队首。</li>
-<li>慢路径的完整循环位于 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/internal/sync/mutex.go#L95-L182" rel="noopener noreferrer" target="_blank"><code>lockSlow#L95-L182</code></a>。</li>
+<li>慢路径完整循环位于 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/internal/sync/mutex.go#L95-L182" rel="noopener noreferrer" target="_blank"><code>lockSlow#L95-L182</code></a>。</li>
 </ul>
-<h2 id="unlock先清位再决定是否唤醒"><code>Unlock</code>：先清位，再决定是否唤醒</h2>
+<h5 id="unlock先清位再决定是否唤醒"><code>Unlock</code>：先清位，再决定是否唤醒</h5>
 <p><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/internal/sync/mutex.go#L187-L200" rel="noopener noreferrer" target="_blank"><code>Unlock</code></a> 先用原子减法清除 <code>mutexLocked</code>。若新状态不为 0，进入 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/internal/sync/mutex.go#L202-L233" rel="noopener noreferrer" target="_blank"><code>unlockSlow</code></a>：</p>
 <ul>
 <li>解锁未加锁的 Mutex 会触发 <code>fatal("sync: unlock of unlocked mutex")</code>；</li>
-<li>正常模式仅在“有 waiter，且没有其他 goroutine 已被唤醒/抢到锁”时唤醒一个等待者；</li>
+<li>正常模式仅在”有 waiter，且没有其他 goroutine 已被唤醒/抢到锁”时唤醒一个等待者；</li>
 <li>饥饿模式调用 <code>runtime_Semrelease(..., handoff=true, ...)</code>，直接交接所有权和当前 P 的时间片。</li>
 </ul>
 <p><strong>⚠️ Mutex 没有 goroutine 所有权</strong></p>
 <p>Go 允许 goroutine A <code>Lock</code>，由 goroutine B <code>Unlock</code>。但这不意味着这种设计容易维护；如果所有权转移没有明确的协议，优先用 channel 表达。</p>
-<h2 id="runtime-信号量不是业务计数信号量">runtime 信号量：不是业务计数信号量</h2>
+<h5 id="runtime-信号量不是业务计数信号量">runtime 信号量：不是业务计数信号量</h5>
 <p><code>Mutex.sema</code> 使用 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/sema.go#L5-L18" rel="noopener noreferrer" target="_blank"><code>runtime/sema.go</code></a> 的休眠/唤醒机制。它的目标类似 futex：保证每次 sleep 都能与一次 wakeup 配对，即使 wakeup 因竞争而先发生也不丢失。</p>
-<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="mermaid"><code><span class="line"><span style="color:#F97583">flowchart</span><span style="color:#B392F0"> TD</span></span>
-<span class="line"><span style="color:#FFAB70">    A</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"Semacquire"</span><span style="color:#F97583">]</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> B</span><span style="color:#F97583">{</span><span style="color:#9ECBFF">"sema > 0 并 CAS -1 成功?"</span><span style="color:#F97583">}</span></span>
-<span class="line"><span style="color:#FFAB70">    B </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">"是"</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> C</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"直接返回"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    B </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">"否"</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> D</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"获取 sudog"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    D </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> E</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"按 sema 地址哈希到 251 个 semaRoot"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    E </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> F</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"再检查一次，避免丢失唤醒"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    F </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> G</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"按地址放入 treap + 内层 waiter 队列"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    G </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> H</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"goparkunlock 停放 goroutine"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    I</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"Semrelease"</span><span style="color:#F97583">]</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> J</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"sema +1"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    J </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> K</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"从 semaRoot dequeue 一个 sudog"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    K </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> L</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"goready 唤醒"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    L </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> M</span><span style="color:#F97583">{</span><span style="color:#9ECBFF">"handoff?"</span><span style="color:#F97583">}</span></span>
-<span class="line"><span style="color:#FFAB70">    M </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">"是"</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> N</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"goyield，让 waiter 立即运行"</span><span style="color:#F97583">]</span></span></code></pre>
+<img src="/images/go/06-runtime-信号量-不是业务计数信号量.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
 <p><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/sema.go#L30-L58" rel="noopener noreferrer" target="_blank"><code>semaRoot</code></a> 是两级结构：外层 treap 按信号量地址组织，同一地址的等待者在内层链表中排队。<a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/sema.go#L146-L201" rel="noopener noreferrer" target="_blank"><code>semacquire1</code></a> 负责停放，<a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/sema.go#L207-L289" rel="noopener noreferrer" target="_blank"><code>semrelease1</code></a> 负责唤醒与饥饿模式的直接 handoff。</p>
-<h1 id="syncrwmutex读写锁"><code>sync.RWMutex</code>：读写锁</h1>
-<p><code>RWMutex</code> 允许多个读者并发，但写者与任何读/写者互斥。它不是“更快的 Mutex”；当临界区很短、读写比不高或竞争很低时，普通 <code>Mutex</code> 可能更快。</p>
-<h2 id="数据结构">数据结构</h2>
+<h4 id="syncrwmutex读写锁"><code>sync.RWMutex</code>：读写锁</h4>
+<p><code>RWMutex</code> 允许多个读者并发，但写者与任何读/写者互斥。它不是”更快的 Mutex”；当临界区很短、读写比不高或竞争很低时，普通 <code>Mutex</code> 可能更快。</p>
+<h5 id="数据结构">数据结构</h5>
 <p><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/sync/rwmutex.go#L39-L47" rel="noopener noreferrer" target="_blank"><code>RWMutex</code></a> 包含一个用来串行化写者的 <code>Mutex</code>、两个 runtime 信号量和两个原子计数器：</p>
 <pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">type</span><span style="color:#B392F0"> RWMutex</span><span style="color:#F97583"> struct</span><span style="color:#E1E4E8"> {</span></span>
 <span class="line"><span style="color:#E1E4E8">	w           </span><span style="color:#B392F0">Mutex</span></span>
@@ -299,74 +299,34 @@
 <span class="line"><span style="color:#E1E4E8">}</span></span>
 <span class="line"></span>
 <span class="line"><span style="color:#F97583">const</span><span style="color:#79B8FF"> rwmutexMaxReaders</span><span style="color:#F97583"> =</span><span style="color:#79B8FF"> 1</span><span style="color:#F97583"> &#x3C;&#x3C;</span><span style="color:#79B8FF"> 30</span></span></code></pre>
-<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="mermaid"><code><span class="line"><span style="color:#F97583">flowchart</span><span style="color:#B392F0"> LR</span></span>
-<span class="line"><span style="color:#FFAB70">    A</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"w: 写者之间互斥"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    B</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"readerCount >= 0&#x3C;br/>当前/即将读者数"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    C</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"readerCount &#x3C; 0&#x3C;br/>已有 pending writer"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    D</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"readerWait&#x3C;br/>写者仍需等待退出的读者"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    E</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"readerSem&#x3C;br/>阻塞新读者"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    F</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"writerSem&#x3C;br/>最后一个旧读者唤醒写者"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    A </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> C</span></span>
-<span class="line"><span style="color:#FFAB70">    C </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> E</span></span>
-<span class="line"><span style="color:#FFAB70">    B </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> D</span></span>
-<span class="line"><span style="color:#FFAB70">    D </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> F</span></span></code></pre>
-<h2 id="读锁路径">读锁路径</h2>
+<img src="/images/go/07-数据结构.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
+<h5 id="读锁路径">读锁路径</h5>
 <p><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/sync/rwmutex.go#L62-L80" rel="noopener noreferrer" target="_blank"><code>RLock</code></a> 只需将 <code>readerCount</code> 加 1。如果结果为负，说明有 pending writer，当前读者在 <code>readerSem</code> 上休眠。</p>
 <p><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/sync/rwmutex.go#L110-L139" rel="noopener noreferrer" target="_blank"><code>RUnlock</code></a> 将 <code>readerCount</code> 减 1。负数表示写者正在等待；最后一个离开的旧读者把 <code>readerWait</code> 减到 0，随即释放 <code>writerSem</code>。</p>
-<h2 id="写锁路径与写者优先">写锁路径与写者优先</h2>
+<h5 id="写锁路径与写者优先">写锁路径与写者优先</h5>
 <p><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/sync/rwmutex.go#L141-L162" rel="noopener noreferrer" target="_blank"><code>Lock</code></a> 分两步：</p>
 <ol>
 <li><code>rw.w.Lock()</code> 先与其他写者串行；</li>
-<li><code>readerCount -= rwmutexMaxReaders</code> 宣布“有写者等待”，让后续读者看到负数并在 <code>readerSem</code> 上休眠；</li>
+<li><code>readerCount -= rwmutexMaxReaders</code> 宣布”有写者等待”，让后续读者看到负数并在 <code>readerSem</code> 上休眠；</li>
 <li>把原有读者数记入 <code>readerWait</code>，若不为 0，写者等待 <code>writerSem</code>。</li>
 </ol>
-<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="mermaid"><code><span class="line"><span style="color:#F97583">sequenceDiagram</span></span>
-<span class="line"><span style="color:#F97583">    participant</span><span style="color:#FFAB70"> R1</span><span style="color:#F97583"> as</span><span style="color:#9ECBFF"> 已有 Reader 1</span></span>
-<span class="line"><span style="color:#F97583">    participant</span><span style="color:#FFAB70"> R2</span><span style="color:#F97583"> as</span><span style="color:#9ECBFF"> 已有 Reader 2</span></span>
-<span class="line"><span style="color:#F97583">    participant</span><span style="color:#FFAB70"> W</span><span style="color:#F97583"> as</span><span style="color:#9ECBFF"> Writer</span></span>
-<span class="line"><span style="color:#F97583">    participant</span><span style="color:#FFAB70"> RN</span><span style="color:#F97583"> as</span><span style="color:#9ECBFF"> 新 Reader</span></span>
-<span class="line"><span style="color:#FFAB70">    W</span><span style="color:#F97583">->></span><span style="color:#FFAB70">W</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> w.Lock()</span></span>
-<span class="line"><span style="color:#FFAB70">    W</span><span style="color:#F97583">->></span><span style="color:#FFAB70">W</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> readerCount -= 1&#x3C;&#x3C;30</span></span>
-<span class="line"><span style="color:#FFAB70">    RN</span><span style="color:#F97583">->></span><span style="color:#FFAB70">RN</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> RLock 后 readerCount &#x3C; 0</span></span>
-<span class="line"><span style="color:#FFAB70">    RN</span><span style="color:#F97583">-->></span><span style="color:#FFAB70">RN</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> 在 readerSem 休眠</span></span>
-<span class="line"><span style="color:#FFAB70">    R1</span><span style="color:#F97583">->></span><span style="color:#FFAB70">W</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> RUnlock / readerWait--</span></span>
-<span class="line"><span style="color:#FFAB70">    R2</span><span style="color:#F97583">->></span><span style="color:#FFAB70">W</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> RUnlock / readerWait == 0</span></span>
-<span class="line"><span style="color:#FFAB70">    R2</span><span style="color:#F97583">->></span><span style="color:#FFAB70">W</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> 释放 writerSem</span></span>
-<span class="line"><span style="color:#FFAB70">    W</span><span style="color:#F97583">->></span><span style="color:#FFAB70">W</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> 进入写临界区</span></span>
-<span class="line"><span style="color:#FFAB70">    W</span><span style="color:#F97583">->></span><span style="color:#FFAB70">RN</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> Unlock 释放 readerSem</span></span></code></pre>
-<p><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/sync/rwmutex.go#L195-L223" rel="noopener noreferrer" target="_blank"><code>Unlock</code></a> 恢复 <code>readerCount</code>，唤醒被写者拦住的新读者，最后释放 <code>w</code>让下一个写者竞争。</p>
+<img src="/images/go/08-写锁路径与写者优先.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
+<p><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/sync/rwmutex.go#L195-L223" rel="noopener noreferrer" target="_blank"><code>Unlock</code></a> 恢复 <code>readerCount</code>，唤醒被写者拦住的新读者，最后释放 <code>w</code> 让下一个写者竞争。</p>
 <p><strong>‼️ RWMutex 不支持升级、降级和递归读锁</strong></p>
-<p><code>RLock -> Lock</code> 会死锁；<code>Lock -> RLock</code> 也不是受支持的降级协议。当写者 pending 时，新的 <code>RLock</code> 会阻塞，因此同一 goroutine 递归 <code>RLock</code> 也可能把自己卡住。</p>
-<p><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/sync/rwmutex.go#L82-L108" rel="noopener noreferrer" target="_blank"><code>TryRLock</code></a> 和 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/sync/rwmutex.go#L164-L193" rel="noopener noreferrer" target="_blank"><code>TryLock</code></a> 只适合少数有明确退路的算法；失败后不得假设自己观察到了任何最新状态。</p>
-<h1 id="syncwaitgroup任务计数与等待者"><code>sync.WaitGroup</code>：任务计数与等待者</h1>
-<h2 id="64-位状态压缩">64 位状态压缩</h2>
+<p><code>RLock -> Lock</code> 会死锁；<code>Lock -> RLock</code> 也不是受支持的降级协议。当写者 pending 时，新的 <code>RLock</code> 会阻塞，因此同一 goroutine 递归 <code>RLock</code> 也可能把自己卡住。
+<a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/sync/rwmutex.go#L82-L108" rel="noopener noreferrer" target="_blank"><code>TryRLock</code></a> 和 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/sync/rwmutex.go#L164-L193" rel="noopener noreferrer" target="_blank"><code>TryLock</code></a> 只适合少数有明确退路的算法；失败后不得假设自己观察到了任何最新状态。</p>
+<h3 id="三协同等待waitgroup--once--cond">三、协同等待：WaitGroup / Once / Cond</h3>
+<p>这三个原语不直接保护临界区，而是解决”什么时候可以继续”。它们内部都依赖上面讲过的 Mutex 或 runtime 信号量。</p>
+<h4 id="syncwaitgroup任务计数与等待者"><code>sync.WaitGroup</code>：任务计数与等待者</h4>
+<h5 id="64-位状态压缩">64 位状态压缩</h5>
 <p><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/sync/waitgroup.go#L48-L60" rel="noopener noreferrer" target="_blank"><code>WaitGroup</code></a> 只有一个 <code>atomic.Uint64</code> 状态和一个 runtime 信号量：</p>
-<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="mermaid"><code><span class="line"><span style="color:#F97583">flowchart</span><span style="color:#B392F0"> LR</span></span>
-<span class="line"><span style="color:#FFAB70">    A</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"bit 63 ... 32&#x3C;br/>counter: 未完成任务数"</span><span style="color:#F97583">]</span><span style="color:#F97583"> ---</span><span style="color:#FFAB70"> B</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"bit 31&#x3C;br/>synctest bubble flag"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    B </span><span style="color:#F97583">---</span><span style="color:#FFAB70"> C</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"bit 30 ... 0&#x3C;br/>waiters: Wait 阻塞者数"</span><span style="color:#F97583">]</span></span></code></pre>
+<img src="/images/go/09-位状态压缩.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
 <p><code>Add(delta)</code> 通过 <code>state.Add(uint64(delta) &#x3C;&#x3C; 32)</code> 只改变高 32 位；<code>Wait</code> 通过低位 CAS 增加 waiter 数。bit 31 是 Go 1.25 <code>testing/synctest</code> 使用的气泡归属标志。</p>
-<h2 id="add--done"><code>Add</code> / <code>Done</code></h2>
-<p><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/sync/waitgroup.go#L62-L144" rel="noopener noreferrer" target="_blank"><code>Add</code></a> 执行以下校验：</p>
-<ul>
-<li>counter 变成负数：<code>panic("sync: negative WaitGroup counter")</code>；</li>
-<li>counter 从 0 变正与已开始的 <code>Wait</code> 并发：误用 panic；</li>
-<li>counter 归 0 且存在 waiter：清空 state，对每个 waiter 调用 <code>runtime_Semrelease</code>。</li>
-</ul>
-<p><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/sync/waitgroup.go#L146-L157" rel="noopener noreferrer" target="_blank"><code>Done</code></a> 仅是 <code>Add(-1)</code>。</p>
-<h2 id="wait"><code>Wait</code></h2>
+<h5 id="add--done--wait"><code>Add</code> / <code>Done</code> / <code>Wait</code></h5>
+<p><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/sync/waitgroup.go#L62-L144" rel="noopener noreferrer" target="_blank"><code>Add</code></a> 执行以下校验：counter 变成负数 panic；counter 从 0 变正与已开始的 <code>Wait</code> 并发 panic；counter 归 0 且存在 waiter 时清空 state，对每个 waiter 调用 <code>runtime_Semrelease</code>。<a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/sync/waitgroup.go#L146-L157" rel="noopener noreferrer" target="_blank"><code>Done</code></a> 仅是 <code>Add(-1)</code>。</p>
 <p><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/sync/waitgroup.go#L159-L218" rel="noopener noreferrer" target="_blank"><code>Wait</code></a> 反复读取 state：</p>
-<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="mermaid"><code><span class="line"><span style="color:#F97583">flowchart</span><span style="color:#B392F0"> TD</span></span>
-<span class="line"><span style="color:#FFAB70">    A</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"Wait"</span><span style="color:#F97583">]</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> B</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"读取 counter / waiters"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    B </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> C</span><span style="color:#F97583">{</span><span style="color:#9ECBFF">"counter == 0?"</span><span style="color:#F97583">}</span></span>
-<span class="line"><span style="color:#FFAB70">    C </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">"是"</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> D</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"直接返回"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    C </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">"否"</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> E</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"CAS: waiters + 1"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    E </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">"失败"</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> B</span></span>
-<span class="line"><span style="color:#FFAB70">    E </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">"成功"</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> F</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"runtime_SemacquireWaitGroup"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    F </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> G</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"被 counter 归 0 的 Add 唤醒"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    G </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> H</span><span style="color:#F97583">{</span><span style="color:#9ECBFF">"state 已被新一轮重置?"</span><span style="color:#F97583">}</span></span>
-<span class="line"><span style="color:#FFAB70">    H </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">"是"</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> I</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"panic: reused before previous Wait returned"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    H </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">"否"</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> D</span></span></code></pre>
-<h2 id="go-125-新增-waitgroupgo">Go 1.25 新增 <code>WaitGroup.Go</code></h2>
+<img src="/images/go/10-wait.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
+<h5 id="go-125-新增-waitgroupgo">Go 1.25 新增 <code>WaitGroup.Go</code></h5>
 <p><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/sync/waitgroup.go#L220-L260" rel="noopener noreferrer" target="_blank"><code>WaitGroup.Go</code></a> 把最常见的 <code>Add(1) + go + Done()</code> 组合成一个 API：</p>
 <pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">var</span><span style="color:#E1E4E8"> wg </span><span style="color:#B392F0">sync</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">WaitGroup</span></span>
 <span class="line"><span style="color:#F97583">for</span><span style="color:#E1E4E8"> _, task </span><span style="color:#F97583">:=</span><span style="color:#F97583"> range</span><span style="color:#E1E4E8"> tasks {</span></span>
@@ -377,37 +337,19 @@
 <span class="line"><span style="color:#E1E4E8">}</span></span>
 <span class="line"><span style="color:#E1E4E8">wg.</span><span style="color:#B392F0">Wait</span><span style="color:#E1E4E8">()</span></span></code></pre>
 <p><strong>‼️ <code>WaitGroup.Go</code> 的 f 不能 panic</strong></p>
-<p>Go 1.26.5 的实现会 recover 后立即重新 panic，且故意不调用 <code>Done</code>，防止主 goroutine 的 <code>Wait</code> 抢先返回甚至退出进程。如果任务可能 panic，应在 <code>f</code> 内明确 recover 并转换为错误协议。</p>
-<h3 id="常见误用">常见误用</h3>
-<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#6A737D">// 错误：Add 在新 goroutine 内，Wait 可能先看到 counter == 0</span></span>
-<span class="line"><span style="color:#F97583">go</span><span style="color:#F97583"> func</span><span style="color:#E1E4E8">() {</span></span>
-<span class="line"><span style="color:#E1E4E8">	wg.</span><span style="color:#B392F0">Add</span><span style="color:#E1E4E8">(</span><span style="color:#79B8FF">1</span><span style="color:#E1E4E8">)</span></span>
-<span class="line"><span style="color:#F97583">	defer</span><span style="color:#E1E4E8"> wg.</span><span style="color:#B392F0">Done</span><span style="color:#E1E4E8">()</span></span>
-<span class="line"><span style="color:#B392F0">	work</span><span style="color:#E1E4E8">()</span></span>
-<span class="line"><span style="color:#E1E4E8">}()</span></span>
-<span class="line"><span style="color:#E1E4E8">wg.</span><span style="color:#B392F0">Wait</span><span style="color:#E1E4E8">()</span></span></code></pre>
-<p>修复方式是把 <code>Add(1)</code> 移到启动 goroutine 之前，或直接使用 <code>wg.Go(work)</code>。WaitGroup 可复用，但新一轮 <code>Add/Go</code> 必须在上一轮所有 <code>Wait</code> 返回后开始。</p>
-<h1 id="synconce完成之后才发布"><code>sync.Once</code>：完成之后才发布</h1>
+<p>Go 1.26.5 的实现会 recover 后立即重新 panic，且故意不调用 <code>Done</code>，防止主 goroutine 的 <code>Wait</code> 抢先返回甚至退出进程。如果任务可能 panic，应在 <code>f</code> 内明确 recover 并转换为错误协议。
+常见误用是把 <code>Add(1)</code> 写在新 goroutine 内部，<code>Wait</code> 可能先看到 counter == 0 直接返回。修复方式是把 <code>Add(1)</code> 移到启动 goroutine 之前，或直接用 <code>wg.Go(work)</code>。WaitGroup 可复用，但新一轮 <code>Add/Go</code> 必须在上一轮所有 <code>Wait</code> 返回后开始。</p>
+<h4 id="synconce完成之后才发布"><code>sync.Once</code>：完成之后才发布</h4>
 <p><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/sync/once.go#L20-L30" rel="noopener noreferrer" target="_blank"><code>Once</code></a> 由一个热路径优先的 <code>atomic.Bool</code> 和一个 <code>Mutex</code> 组成。<code>done</code> 放在结构体第一个字段，可让某些架构生成更紧凑的指令。</p>
-<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="mermaid"><code><span class="line"><span style="color:#F97583">flowchart</span><span style="color:#B392F0"> TD</span></span>
-<span class="line"><span style="color:#FFAB70">    A</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"Once.Do(f)"</span><span style="color:#F97583">]</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> B</span><span style="color:#F97583">{</span><span style="color:#9ECBFF">"done.Load() == true?"</span><span style="color:#F97583">}</span></span>
-<span class="line"><span style="color:#FFAB70">    B </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">"是"</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> C</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"直接返回"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    B </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">"否"</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> D</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"m.Lock()"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    D </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> E</span><span style="color:#F97583">{</span><span style="color:#9ECBFF">"double-check done?"</span><span style="color:#F97583">}</span></span>
-<span class="line"><span style="color:#FFAB70">    E </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">"是"</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> F</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"m.Unlock"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    F </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> C</span></span>
-<span class="line"><span style="color:#FFAB70">    E </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">"否"</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> G</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"执行 f"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    G </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> H</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"defer done.Store(true)"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    H </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> F</span></span></code></pre>
-<p><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/sync/once.go#L52-L80" rel="noopener noreferrer" target="_blank"><code>Do</code></a> 不能只用 <code>CompareAndSwap(false, true)</code>，因为输家会在赢家的 <code>f</code> 完成前返回，破坏“所有 <code>Do</code> 返回时 <code>f</code> 都已完成”的保证。所以慢路径需要 Mutex，而 <code>done.Store(true)</code> 必须在 <code>f</code> 返回之后发生。</p>
+<img src="/images/go/11-sync-once-完成之后才发布.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
+<p><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/sync/once.go#L52-L80" rel="noopener noreferrer" target="_blank"><code>Do</code></a> 不能只用 <code>CompareAndSwap(false, true)</code>，因为输家会在赢家的 <code>f</code> 完成前返回，破坏”所有 <code>Do</code> 返回时 <code>f</code> 都已完成”的保证。所以慢路径需要 Mutex，而 <code>done.Store(true)</code> 必须在 <code>f</code> 返回之后发生。</p>
 <ul>
 <li><code>f</code> panic 时，<code>Once.Do</code> 仍视为已执行，以后的 <code>Do</code> 不会再调用 <code>f</code>；</li>
 <li><code>f</code> 中递归调用同一个 <code>Once.Do</code> 会死锁；</li>
 <li>Go 1.21 提供 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/sync/oncefunc.go#L7-L40" rel="noopener noreferrer" target="_blank"><code>OnceFunc</code></a>、<a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/sync/oncefunc.go#L42-L74" rel="noopener noreferrer" target="_blank"><code>OnceValue</code></a> 和 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/sync/oncefunc.go#L76-L109" rel="noopener noreferrer" target="_blank"><code>OnceValues</code></a>，可缓存返回值，并让 panic 值在每次调用时都重现。</li>
 </ul>
-<h1 id="synccond条件变量"><code>sync.Cond</code>：条件变量</h1>
-<p><code>Cond</code> 用于“条件目前不成立，暂时休眠；状态变化后再重新检查”。对于单次通知，channel 通常更简单；<code>Broadcast</code> 类似关闭 channel，<code>Signal</code> 类似发送一个值。</p>
-<h2 id="结构与-wait-协议">结构与 Wait 协议</h2>
+<h4 id="synccond条件变量"><code>sync.Cond</code>：条件变量</h4>
+<p><code>Cond</code> 用于”条件目前不成立，暂时休眠；状态变化后再重新检查”。对于单次通知，channel 通常更简单；<code>Broadcast</code> 类似关闭 channel，<code>Signal</code> 类似发送一个值。</p>
 <p><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/sync/cond.go#L37-L49" rel="noopener noreferrer" target="_blank"><code>Cond</code></a> 持有用户提供的 <code>Locker</code>、runtime <code>notifyList</code> 和拷贝检测器。</p>
 <pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#E1E4E8">c.L.</span><span style="color:#B392F0">Lock</span><span style="color:#E1E4E8">()</span></span>
 <span class="line"><span style="color:#F97583">for</span><span style="color:#F97583"> !</span><span style="color:#B392F0">condition</span><span style="color:#E1E4E8">() {</span></span>
@@ -416,73 +358,33 @@
 <span class="line"><span style="color:#B392F0">useCondition</span><span style="color:#E1E4E8">()</span></span>
 <span class="line"><span style="color:#E1E4E8">c.L.</span><span style="color:#B392F0">Unlock</span><span style="color:#E1E4E8">()</span></span></code></pre>
 <p><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/sync/cond.go#L52-L73" rel="noopener noreferrer" target="_blank"><code>Cond.Wait</code></a> 的次序是协议的核心：</p>
-<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="mermaid"><code><span class="line"><span style="color:#F97583">sequenceDiagram</span></span>
-<span class="line"><span style="color:#F97583">    participant</span><span style="color:#FFAB70"> G</span><span style="color:#F97583"> as</span><span style="color:#9ECBFF"> Waiter</span></span>
-<span class="line"><span style="color:#F97583">    participant</span><span style="color:#FFAB70"> C</span><span style="color:#F97583"> as</span><span style="color:#9ECBFF"> Cond.notifyList</span></span>
-<span class="line"><span style="color:#F97583">    participant</span><span style="color:#FFAB70"> L</span><span style="color:#F97583"> as</span><span style="color:#9ECBFF"> Locker</span></span>
-<span class="line"><span style="color:#F97583">    participant</span><span style="color:#FFAB70"> S</span><span style="color:#F97583"> as</span><span style="color:#9ECBFF"> Signaler</span></span>
-<span class="line"><span style="color:#FFAB70">    G</span><span style="color:#F97583">->></span><span style="color:#FFAB70">C</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> 领取 ticket</span></span>
-<span class="line"><span style="color:#FFAB70">    G</span><span style="color:#F97583">->></span><span style="color:#FFAB70">L</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> Unlock</span></span>
-<span class="line"><span style="color:#FFAB70">    G</span><span style="color:#F97583">->></span><span style="color:#FFAB70">C</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> notifyListWait(ticket)</span></span>
-<span class="line"><span style="color:#FFAB70">    C</span><span style="color:#F97583">-->></span><span style="color:#FFAB70">G</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> gopark</span></span>
-<span class="line"><span style="color:#FFAB70">    S</span><span style="color:#F97583">->></span><span style="color:#FFAB70">C</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> Signal / Broadcast</span></span>
-<span class="line"><span style="color:#FFAB70">    C</span><span style="color:#F97583">-->></span><span style="color:#FFAB70">G</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> goready</span></span>
-<span class="line"><span style="color:#FFAB70">    G</span><span style="color:#F97583">->></span><span style="color:#FFAB70">L</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> Lock</span></span>
-<span class="line"><span style="color:#FFAB70">    G</span><span style="color:#F97583">->></span><span style="color:#FFAB70">G</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> 重新检查 condition</span></span></code></pre>
+<img src="/images/go/12-结构与-wait-协议.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
 <p>Go 的 <code>Wait</code> 不会无缘无故返回，但被唤醒者重新取得 <code>L</code> 之前，条件可能已被其他 goroutine 消耗或改变，所以仍然必须用 <code>for</code> 而不是 <code>if</code>。</p>
-<h2 id="runtimenotifylist">runtime.notifyList</h2>
-<p><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/sema.go#L544-L565" rel="noopener noreferrer" target="_blank"><code>notifyList</code></a> 使用两个可回绕的 32 位 ticket：</p>
-<ul>
-<li><code>wait</code>：下一个 waiter 领取的号码；</li>
-<li><code>notify</code>：下一个需要通知的号码；</li>
-<li><code>head/tail</code>：已经停放的 sudog 链表。</li>
-</ul>
-<p><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/sema.go#L584-L626" rel="noopener noreferrer" target="_blank"><code>notifyListWait</code></a> 先检查 ticket 是否已被通知，从而处理“Signal 发生在 waiter 真正 park 之前”的竞争。<a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/sema.go#L628-L663" rel="noopener noreferrer" target="_blank"><code>NotifyAll</code></a> 一次摘下全部链表再在锁外唤醒；<a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/sema.go#L665-L722" rel="noopener noreferrer" target="_blank"><code>NotifyOne</code></a> 查找对应 ticket 并唤醒一个 waiter。</p>
+<p><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/sema.go#L544-L565" rel="noopener noreferrer" target="_blank"><code>notifyList</code></a> 使用两个可回绕的 32 位 ticket：<code>wait</code> 是下一个 waiter 领取的号码，<code>notify</code> 是下一个需要通知的号码，<code>head/tail</code> 是已经停放的 sudog 链表。<a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/sema.go#L584-L626" rel="noopener noreferrer" target="_blank"><code>notifyListWait</code></a> 先检查 ticket 是否已被通知，从而处理”Signal 发生在 waiter 真正 park 之前”的竞争。<a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/sema.go#L628-L663" rel="noopener noreferrer" target="_blank"><code>NotifyAll</code></a> 一次摘下全部链表再在锁外唤醒；<a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/sema.go#L665-L722" rel="noopener noreferrer" target="_blank"><code>NotifyOne</code></a> 查找对应 ticket 并唤醒一个 waiter。</p>
 <p><strong>📝 Signal 不提供调度优先级</strong></p>
 <p><code>Signal</code> 选中某个 waiter 不等于该 waiter 会立即取得 <code>L</code>。已经在 CPU 上运行并竞争 <code>L</code> 的 goroutine 可能先进入临界区。</p>
-<h1 id="syncmapgo-124-的并发-hash-trie"><code>sync.Map</code>：Go 1.24+ 的并发 Hash-Trie</h1>
+<h3 id="四并发容器与对象复用">四、并发容器与对象复用</h3>
+<h4 id="syncmapgo-124-的并发-hash-trie"><code>sync.Map</code>：Go 1.24+ 的并发 Hash-Trie</h4>
 <p><strong>⚠️ 旧的 read/dirty/misses 分析已过时</strong></p>
-<p>Go 1.24 替换了 <code>sync.Map</code> 实现。Go 1.26.5 的公开 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/sync/map.go#L38-L42" rel="noopener noreferrer" target="_blank"><code>sync.Map</code></a> 只包装 <code>internal/sync.HashTrieMap[any, any]</code>。</p>
-<h2 id="结构">结构</h2>
-<p><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/internal/sync/hashtriemap.go#L14-L28" rel="noopener noreferrer" target="_blank"><code>HashTrieMap</code></a> 保存根节点的原子指针、key 哈希函数、value 比较函数和随机 seed。每个间接节点有 16 个原子子指针，每层消耗哈希值的 4 bit：</p>
-<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="mermaid"><code><span class="line"><span style="color:#F97583">flowchart</span><span style="color:#B392F0"> TD</span></span>
-<span class="line"><span style="color:#FFAB70">    R</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"root: atomic.Pointer"</span><span style="color:#F97583">]</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> N0</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"indirect node&#x3C;br/>16 children + node mutex"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    N0 </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">"hash[63:60]"</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> N1</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"indirect node"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    N0 </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">"另一个 4-bit 分支"</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> E1</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"entry: key/value"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    N1 </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">"hash[59:56]"</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> E2</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"entry: key/value"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    N1 </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">"同 hash"</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> O</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"overflow atomic list"</span><span style="color:#F97583">]</span></span></code></pre>
+<p>Go 1.24 替换了 <code>sync.Map</code> 实现。Go 1.26.5 的公开 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/sync/map.go#L38-L42" rel="noopener noreferrer" target="_blank"><code>sync.Map</code></a> 只包装 <code>internal/sync.HashTrieMap[any, any]</code>。网上大量基于 <code>read</code>/<code>dirty</code>/<code>misses</code> 字段的源码分析对应的是旧实现，看的时候注意版本。
+<a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/internal/sync/hashtriemap.go#L14-L28" rel="noopener noreferrer" target="_blank"><code>HashTrieMap</code></a> 保存根节点的原子指针、key 哈希函数、value 比较函数和随机 seed。每个间接节点有 16 个原子子指针，每层消耗哈希值的 4 bit：</p>
+<img src="/images/go/13-结构.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
 <p>16 路分支常量与节点布局见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/internal/sync/hashtriemap.go#L530-L569" rel="noopener noreferrer" target="_blank"><code>hashtriemap.go#L530-L569</code></a>。</p>
-<h2 id="读不加锁写只锁局部节点">读不加锁，写只锁局部节点</h2>
-<p><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/internal/sync/hashtriemap.go#L61-L83" rel="noopener noreferrer" target="_blank"><code>Load</code></a> 从 root 开始按每 4 bit 读取原子子指针，全程不获取 Mutex。</p>
+<p>读路径完全无锁：<a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/internal/sync/hashtriemap.go#L61-L83" rel="noopener noreferrer" target="_blank"><code>Load</code></a> 从 root 开始按每 4 bit 读取原子子指针，全程不获取 Mutex。</p>
 <p><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/internal/sync/hashtriemap.go#L85-L163" rel="noopener noreferrer" target="_blank"><code>LoadOrStore</code></a> 先无锁定位候选 slot，然后只锁定父间接节点，在锁下二次确认 slot 未变化，最后原子发布新 entry/子树。不同哈希分支的写入因此可并行。</p>
-<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="mermaid"><code><span class="line"><span style="color:#F97583">flowchart</span><span style="color:#B392F0"> TD</span></span>
-<span class="line"><span style="color:#FFAB70">    A</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"Store / LoadOrStore"</span><span style="color:#F97583">]</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> B</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"原子读遍历，找候选 slot"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    B </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> C</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"锁父 indirect.mu"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    C </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> D</span><span style="color:#F97583">{</span><span style="color:#9ECBFF">"slot 仍是原状态且节点未 dead?"</span><span style="color:#F97583">}</span></span>
-<span class="line"><span style="color:#FFAB70">    D </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">"否"</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> E</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"解锁，从 root 重试"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    E </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> B</span></span>
-<span class="line"><span style="color:#FFAB70">    D </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">"是"</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> F</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"创建新 entry / 扩展子树"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    F </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> G</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"atomic slot.Store 发布"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    G </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> H</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"解锁"</span><span style="color:#F97583">]</span></span></code></pre>
+<img src="/images/go/14-读不加锁-写只锁局部节点.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
 <p><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/internal/sync/hashtriemap.go#L307-L356" rel="noopener noreferrer" target="_blank"><code>LoadAndDelete</code></a> 删除 entry 后会向上清理空节点，通过 <code>dead</code> 位与父子节点锁保证与并发写者协调。<a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/internal/sync/hashtriemap.go#L521-L528" rel="noopener noreferrer" target="_blank"><code>Clear</code></a> 则直接用一个新空根替换旧根。</p>
-<h3 id="使用边界">使用边界</h3>
+<p>使用边界：</p>
 <ul>
-<li><code>sync.Map</code> 适合“写一次、读很多”或“不同 goroutine 主要操作不相交的 key 集合”；</li>
+<li><code>sync.Map</code> 适合”写一次、读很多”或”不同 goroutine 主要操作不相交的 key 集合”；</li>
 <li>大多数业务代码仍应使用 <code>map[K]V + Mutex/RWMutex</code>，以保留类型安全并与其他字段共同维护不变式；</li>
 <li><code>Range</code> 不是一致性快照，并发写入时可以观察到任意时点的值；</li>
 <li><code>Load</code> 后再 <code>Store</code> 不是一个原子复合操作，应使用 <code>LoadOrStore</code>、<code>Swap</code>、<code>CompareAndSwap</code> 等方法表达协议。</li>
 </ul>
-<h1 id="syncpool每-p-临时对象缓存"><code>sync.Pool</code>：每 P 临时对象缓存</h1>
-<p><code>Pool</code> 用于降低多 goroutine 共享的短命临时对象分配压力，不是可靠缓存、连接池或有容量保证的对象池。</p>
-<h2 id="per-p-分片">per-P 分片</h2>
+<h4 id="syncpool每-p-临时对象缓存"><code>sync.Pool</code>：每 P 临时对象缓存</h4>
+<p><code>Pool</code> 用于降低多 goroutine 共享的短命临时对象分配压力，<strong>不是可靠缓存、连接池或有容量保证的对象池</strong>。</p>
 <p><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/sync/pool.go#L51-L78" rel="noopener noreferrer" target="_blank"><code>Pool</code></a> 为每个 P 维护一个 <code>poolLocal</code>：</p>
-<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="mermaid"><code><span class="line"><span style="color:#F97583">flowchart</span><span style="color:#B392F0"> TD</span></span>
-<span class="line"><span style="color:#FFAB70">    P</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"sync.Pool"</span><span style="color:#F97583">]</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> L0</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"P0 local&#x3C;br/>private + shared chain"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    P </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> L1</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"P1 local&#x3C;br/>private + shared chain"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    P </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> LN</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"Pn local&#x3C;br/>private + shared chain"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    G0</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"P0 上的 goroutine"</span><span style="color:#F97583">]</span><span style="color:#F97583"> -->|</span><span style="color:#9ECBFF">"Put/Get 快路径"</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> L0</span></span>
-<span class="line"><span style="color:#FFAB70">    G0 </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">"本地为空时从 tail 偷取"</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> L1</span></span>
-<span class="line"><span style="color:#FFAB70">    V</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"上一轮 GC 的 victim cache"</span><span style="color:#F97583">]</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> G0</span></span></code></pre>
+<img src="/images/go/15-per-p-分片.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
 <ul>
 <li><code>private</code>：当前 P 独占的单个快速槽位；</li>
 <li><code>shared poolChain</code>：当前 P 在 head 端 push/pop，其他 P 可从 tail 端偷取；</li>
@@ -496,81 +398,60 @@
 <li>上一轮 GC 的 victim cache；</li>
 <li>若仍为空，调用 <code>New</code>。</li>
 </ol>
-<h2 id="gc-与-victim-cache">GC 与 victim cache</h2>
 <p><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/sync/pool.go#L247-L281" rel="noopener noreferrer" target="_blank"><code>poolCleanup</code></a> 在 GC 开始的 STW 阶段运行：</p>
-<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="mermaid"><code><span class="line"><span style="color:#F97583">flowchart</span><span style="color:#B392F0"> LR</span></span>
-<span class="line"><span style="color:#FFAB70">    A</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"GC N 前&#x3C;br/>primary 有对象"</span><span style="color:#F97583">]</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> B</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"GC N&#x3C;br/>primary -> victim"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    B </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> C</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"GC N+1 前&#x3C;br/>Get 仍可从 victim 取"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    C </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> D</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"GC N+1&#x3C;br/>丢弃旧 victim"</span><span style="color:#F97583">]</span></span></code></pre>
+<img src="/images/go/16-gc-与-victim-cache.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
 <p>因此 <code>Pool.Get</code> 随时可以返回 nil/新对象，即使程序之前执行过 <code>Put</code>。不得把必须存活的状态、只能归还一次的资源或带有业务所有权的对象存入 Pool。</p>
-<h1 id="syncatomic原子性不等于不变式"><code>sync/atomic</code>：原子性不等于不变式</h1>
+<h3 id="五原子操作syncatomic">五、原子操作：<code>sync/atomic</code></h3>
 <p>Go 1.26.5 推荐优先使用 typed atomic，如 <code>atomic.Bool</code>、<code>atomic.Int64</code>、<code>atomic.Uint64</code>、<code>atomic.Pointer[T]</code>。它们的定义与对齐保证见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/sync/atomic/type.go#L9-L254" rel="noopener noreferrer" target="_blank"><code>sync/atomic/type.go</code></a>。</p>
 <pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">type</span><span style="color:#B392F0"> Metrics</span><span style="color:#F97583"> struct</span><span style="color:#E1E4E8"> {</span></span>
 <span class="line"><span style="color:#E1E4E8">	requests </span><span style="color:#B392F0">atomic</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">Uint64</span></span>
 <span class="line"><span style="color:#E1E4E8">	ready    </span><span style="color:#B392F0">atomic</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">Bool</span></span>
 <span class="line"><span style="color:#E1E4E8">}</span></span>
 <span class="line"></span>
-<span class="line"><span style="color:#F97583">func</span><span style="color:#E1E4E8"> (</span><span style="color:#FFAB70">m </span><span style="color:#F97583">*</span><span style="color:#B392F0">Metrics</span><span style="color:#E1E4E8">) </span><span style="color:#B392F0">Inc</span><span style="color:#E1E4E8">()       { m.requests.</span><span style="color:#B392F0">Add</span><span style="color:#E1E4E8">(</span><span style="color:#79B8FF">1</span><span style="color:#E1E4E8">) }</span></span>
-<span class="line"><span style="color:#F97583">func</span><span style="color:#E1E4E8"> (</span><span style="color:#FFAB70">m </span><span style="color:#F97583">*</span><span style="color:#B392F0">Metrics</span><span style="color:#E1E4E8">) </span><span style="color:#B392F0">Requests</span><span style="color:#E1E4E8">() </span><span style="color:#F97583">uint64</span><span style="color:#E1E4E8"> { </span><span style="color:#F97583">return</span><span style="color:#E1E4E8"> m.requests.</span><span style="color:#B392F0">Load</span><span style="color:#E1E4E8">() }</span></span></code></pre>
-<p><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/sync/atomic/doc.go#L5-L48" rel="noopener noreferrer" target="_blank"><code>sync/atomic</code> 文档</a> 定义 Go 的原子操作为顺序一致，但原子性只覆盖单次操作：</p>
+<span class="line"><span style="color:#F97583">func</span><span style="color:#E1E4E8"> (</span><span style="color:#FFAB70">m </span><span style="color:#F97583">*</span><span style="color:#B392F0">Metrics</span><span style="color:#E1E4E8">) </span><span style="color:#B392F0">Inc</span><span style="color:#E1E4E8">()              { m.requests.</span><span style="color:#B392F0">Add</span><span style="color:#E1E4E8">(</span><span style="color:#79B8FF">1</span><span style="color:#E1E4E8">) }</span></span>
+<span class="line"><span style="color:#F97583">func</span><span style="color:#E1E4E8"> (</span><span style="color:#FFAB70">m </span><span style="color:#F97583">*</span><span style="color:#B392F0">Metrics</span><span style="color:#E1E4E8">) </span><span style="color:#B392F0">Requests</span><span style="color:#E1E4E8">() </span><span style="color:#F97583">uint64</span><span style="color:#E1E4E8">  { </span><span style="color:#F97583">return</span><span style="color:#E1E4E8"> m.requests.</span><span style="color:#B392F0">Load</span><span style="color:#E1E4E8">() }</span></span></code></pre>
+<p><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/sync/atomic/doc.go#L5-L48" rel="noopener noreferrer" target="_blank"><code>sync/atomic</code> 文档</a> 定义 Go 的原子操作为顺序一致，但原子性只覆盖<strong>单次操作</strong>：</p>
 <pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#6A737D">// 逻辑竞争：Load 和 Store 各自原子，组合起来却不原子</span></span>
 <span class="line"><span style="color:#F97583">if</span><span style="color:#E1E4E8"> x.</span><span style="color:#B392F0">Load</span><span style="color:#E1E4E8">() </span><span style="color:#F97583">==</span><span style="color:#79B8FF"> 0</span><span style="color:#E1E4E8"> {</span></span>
 <span class="line"><span style="color:#E1E4E8">	x.</span><span style="color:#B392F0">Store</span><span style="color:#E1E4E8">(</span><span style="color:#79B8FF">1</span><span style="color:#E1E4E8">)</span></span>
 <span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
-<p>如果协议要求“仅当仍为 0 时改成 1”，应使用 <code>CompareAndSwap(0, 1)</code>。如果需要同时维护多个字段的关系，通常应使用 Mutex 保护整个不变式，而不是把每个字段都换成 atomic。</p>
+<p>如果协议要求”仅当仍为 0 时改成 1”，应使用 <code>CompareAndSwap(0, 1)</code>。如果需要同时维护多个字段的关系，通常应使用 Mutex 保护整个不变式，而不是把每个字段都换成 atomic。</p>
 <p><strong>💡 何时使用 atomic</strong></p>
 <p>独立计数器、只读配置指针的原子发布、状态位以及经过严格证明的 lock-free 算法是常见场景。业务逻辑若需要轮询多个原子变量才能理解，往往已经应该换成锁或 channel。</p>
-<h1 id="选型与实践">选型与实践</h1>
-<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="mermaid"><code><span class="line"><span style="color:#F97583">flowchart</span><span style="color:#B392F0"> TD</span></span>
-<span class="line"><span style="color:#FFAB70">    A</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"需要同步什么?" </span><span style="color:#F97583">]</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> B</span><span style="color:#F97583">{</span><span style="color:#9ECBFF">"是所有权/消息传递?"</span><span style="color:#F97583">}</span></span>
-<span class="line"><span style="color:#FFAB70">    B </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">"是"</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> C</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"channel / context"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    B </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">"否"</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> D</span><span style="color:#F97583">{</span><span style="color:#9ECBFF">"保护多字段不变式?"</span><span style="color:#F97583">}</span></span>
-<span class="line"><span style="color:#FFAB70">    D </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">"是"</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> E</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"Mutex"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    D </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">"否"</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> F</span><span style="color:#F97583">{</span><span style="color:#9ECBFF">"读多写少且临界区较大?"</span><span style="color:#F97583">}</span></span>
-<span class="line"><span style="color:#FFAB70">    F </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">"是，已 benchmark"</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> G</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"RWMutex"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    F </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">"否"</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> H</span><span style="color:#F97583">{</span><span style="color:#9ECBFF">"只等一组任务完成?"</span><span style="color:#F97583">}</span></span>
-<span class="line"><span style="color:#FFAB70">    H </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">"是"</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> I</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"WaitGroup.Go / Wait"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    H </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">"否"</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> J</span><span style="color:#F97583">{</span><span style="color:#9ECBFF">"只初始化一次?"</span><span style="color:#F97583">}</span></span>
-<span class="line"><span style="color:#FFAB70">    J </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">"是"</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> K</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"Once / OnceValue"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    J </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">"否"</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> L</span><span style="color:#F97583">{</span><span style="color:#9ECBFF">"等待可重复变化的条件?"</span><span style="color:#F97583">}</span></span>
-<span class="line"><span style="color:#FFAB70">    L </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">"是"</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> M</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"Cond"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    L </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">"否"</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> N</span><span style="color:#F97583">{</span><span style="color:#9ECBFF">"单值状态/计数器?"</span><span style="color:#F97583">}</span></span>
-<span class="line"><span style="color:#FFAB70">    N </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">"是"</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> O</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"typed atomic"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    N </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">"特殊并发 map 模式"</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> P</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"sync.Map"</span><span style="color:#F97583">]</span></span></code></pre>
-<h2 id="常见陷阱">常见陷阱</h2>
+<h3 id="六选型与实践">六、选型与实践</h3>
+<img src="/images/go/17-选型与实践.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
+<p>常见陷阱：</p>
 <ul>
 <li>持锁执行网络 I/O、磁盘 I/O、无界回调或向可能阻塞的 channel 发送，会把锁竞争放大成系统尾延迟；</li>
 <li><code>defer mu.Unlock()</code> 通常更安全，但临界区边界仍应清晰；不要为了便于 defer 而扩大持锁范围；</li>
 <li>不要在一个导出方法中返回受锁保护的 map/slice 底层引用；返回副本或在锁内完成操作；</li>
 <li>有多把锁时定义并遵守全局锁顺序；Go 的 Mutex 不会自动检测死锁环；</li>
 <li><code>TryLock</code> 往往意味着协议没有定义清楚，不应用 <code>for !TryLock() {}</code> 实现忙等；</li>
-<li>锁保护的是不变式，不是某一行赋值。同一组状态的所有读写必须使用同一同步协议。</li>
+<li>锁保护的是<strong>不变式</strong>，不是某一行赋值。同一组状态的所有读写必须使用同一同步协议。</li>
 </ul>
-<h2 id="测试与观测">测试与观测</h2>
-<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="bash"><code><span class="line"><span style="color:#6A737D"># 数据竞争</span></span>
-<span class="line"><span style="color:#B392F0">go</span><span style="color:#9ECBFF"> test</span><span style="color:#79B8FF"> -race</span><span style="color:#9ECBFF"> ./...</span></span>
+<p>测试与观测：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="bash"><code><span class="line"><span style="color:#6A737D">## 数据竞争go test -race ./...</span></span>
 <span class="line"></span>
-<span class="line"><span style="color:#6A737D"># 拷贝锁、WaitGroup.Add 位置等静态检查</span></span>
-<span class="line"><span style="color:#B392F0">go</span><span style="color:#9ECBFF"> vet</span><span style="color:#9ECBFF"> ./...</span></span>
+<span class="line"><span style="color:#6A737D">## 拷贝锁、WaitGroup.Add 位置等静态检查go vet ./...</span></span>
 <span class="line"></span>
-<span class="line"><span style="color:#6A737D"># 锁竞争与阻塞剖析</span></span>
-<span class="line"><span style="color:#B392F0">go</span><span style="color:#9ECBFF"> test</span><span style="color:#79B8FF"> -run</span><span style="color:#9ECBFF"> '^$'</span><span style="color:#79B8FF"> -bench</span><span style="color:#9ECBFF"> .</span><span style="color:#79B8FF"> -mutexprofile</span><span style="color:#9ECBFF"> mutex.out</span><span style="color:#79B8FF"> -blockprofile</span><span style="color:#9ECBFF"> block.out</span><span style="color:#9ECBFF"> ./...</span></span>
+<span class="line"><span style="color:#6A737D">## 锁竞争与阻塞剖析go test -run '^$' -bench . -mutexprofile mutex.out -blockprofile block.out ./...</span></span>
 <span class="line"><span style="color:#B392F0">go</span><span style="color:#9ECBFF"> tool</span><span style="color:#9ECBFF"> pprof</span><span style="color:#9ECBFF"> mutex.out</span></span>
 <span class="line"><span style="color:#B392F0">go</span><span style="color:#9ECBFF"> tool</span><span style="color:#9ECBFF"> pprof</span><span style="color:#9ECBFF"> block.out</span></span></code></pre>
 <p><strong>💡 看 profile 时先优化临界区，再换锁</strong></p>
 <p>缩小锁粒度、把慢 I/O 移出临界区、消除重复计算和减少共享状态，通常比盲目把 <code>Mutex</code> 换成 <code>RWMutex</code>/atomic 更有效。</p>
-<h1 id="总结">总结</h1>
+<h3 id="附录">附录</h3>
+<h4 id="总结">总结</h4>
 <ol>
 <li><code>Mutex</code> 是 CAS 快路径、有限自旋、runtime 信号量停放和 1ms 饥饿交接的组合；</li>
 <li><code>RWMutex</code> 用负的 <code>readerCount</code> 阻止新读者，确保 pending writer 最终获锁；</li>
 <li><code>WaitGroup</code> 在一个 64 位状态中压缩 task counter、synctest 标志和 waiter count，Go 1.25+ 优先使用 <code>WaitGroup.Go</code>；</li>
-<li><code>Once</code> 的关键是“<code>f</code> 完成后才发布 done”，不是简单的 CAS 抢执行权；</li>
+<li><code>Once</code> 的关键是”<code>f</code> 完成后才发布 done”，不是简单的 CAS 抢执行权；</li>
 <li><code>Cond</code> 使用 ticket + sudog 通知队列，而用户仍必须在锁下循环检查条件；</li>
 <li>Go 1.24+ <code>sync.Map</code> 是 16 路 Hash-Trie，原子读指针配合局部节点锁；</li>
 <li><code>Pool</code> 是 GC 可清理的 per-P 临时对象复用机制，不提供缓存可靠性；</li>
 <li>atomic 保证单次操作与内存顺序，不自动保护多字段业务不变式。</li>
 </ol>
-<h1 id="参考资料">参考资料</h1>
+<h4 id="参考资料">参考资料</h4>
 <ul>
 <li><a href="https://go.dev/doc/devel/release" rel="noopener noreferrer" target="_blank">Go 官方发布历史</a></li>
 <li><a href="https://go.dev/doc/go1.24#sync" rel="noopener noreferrer" target="_blank">Go 1.24 Release Notes：sync.Map</a></li>
@@ -579,4 +460,4 @@
 <li><a href="https://pkg.go.dev/sync/atomic" rel="noopener noreferrer" target="_blank">sync/atomic 包文档（Go 1.26.5）</a></li>
 <li><a href="https://go.dev/ref/mem" rel="noopener noreferrer" target="_blank">The Go Memory Model</a></li>
 <li><a href="https://github.com/golang/go/tree/c19862e5f8415b4f24b189d065ed739517c548ba/src" rel="noopener noreferrer" target="_blank">Go 1.26.5 源码树</a></li>
-</ul></main><aside class="toc"><p class="toc-title">本页目录</p><ul><li class="toc-d2"><a href="#最新版需要先知道的变化">最新版需要先知道的变化</a></li><li class="toc-d2"><a href="#源码地图">源码地图</a></li><li class="toc-d2"><a href="#公开结构已经变成包装层">公开结构已经变成包装层</a></li><li class="toc-d2"><a href="#真实数据结构">真实数据结构</a></li><li class="toc-d2"><a href="#lock快路径与慢路径">Lock：快路径与慢路径</a></li><li class="toc-d3"><a href="#为什么只短暂自旋">为什么只短暂自旋</a></li><li class="toc-d2"><a href="#正常模式与饥饿模式">正常模式与饥饿模式</a></li><li class="toc-d2"><a href="#unlock先清位再决定是否唤醒">Unlock：先清位，再决定是否唤醒</a></li><li class="toc-d2"><a href="#runtime-信号量不是业务计数信号量">runtime 信号量：不是业务计数信号量</a></li><li class="toc-d2"><a href="#数据结构">数据结构</a></li><li class="toc-d2"><a href="#读锁路径">读锁路径</a></li><li class="toc-d2"><a href="#写锁路径与写者优先">写锁路径与写者优先</a></li><li class="toc-d2"><a href="#64-位状态压缩">64 位状态压缩</a></li><li class="toc-d2"><a href="#add--done">Add / Done</a></li><li class="toc-d2"><a href="#wait">Wait</a></li><li class="toc-d2"><a href="#go-125-新增-waitgroupgo">Go 1.25 新增 WaitGroup.Go</a></li><li class="toc-d3"><a href="#常见误用">常见误用</a></li><li class="toc-d2"><a href="#结构与-wait-协议">结构与 Wait 协议</a></li><li class="toc-d2"><a href="#runtimenotifylist">runtime.notifyList</a></li><li class="toc-d2"><a href="#结构">结构</a></li><li class="toc-d2"><a href="#读不加锁写只锁局部节点">读不加锁，写只锁局部节点</a></li><li class="toc-d3"><a href="#使用边界">使用边界</a></li><li class="toc-d2"><a href="#per-p-分片">per-P 分片</a></li><li class="toc-d2"><a href="#gc-与-victim-cache">GC 与 victim cache</a></li><li class="toc-d2"><a href="#常见陷阱">常见陷阱</a></li><li class="toc-d2"><a href="#测试与观测">测试与观测</a></li></ul></aside></div><div class="lightbox" id="lightbox" aria-hidden="true"><img alt=""></div><script type="module" src="/_astro/Base.astro_astro_type_script_index_0_lang.DKvZf7If.js"></script></body></html>
+</ul></main><aside class="toc"><p class="toc-title">本页目录</p><ul><li class="toc-d3"><a href="#快速理解">快速理解</a></li><li class="toc-d3"><a href="#一基础内存模型与原语地图">一、基础：内存模型与原语地图</a></li><li class="toc-d3"><a href="#二互斥mutex-与-rwmutex">二、互斥：Mutex 与 RWMutex</a></li><li class="toc-d3"><a href="#三协同等待waitgroup--once--cond">三、协同等待：WaitGroup / Once / Cond</a></li><li class="toc-d3"><a href="#四并发容器与对象复用">四、并发容器与对象复用</a></li><li class="toc-d3"><a href="#五原子操作syncatomic">五、原子操作：sync/atomic</a></li><li class="toc-d3"><a href="#六选型与实践">六、选型与实践</a></li><li class="toc-d3"><a href="#附录">附录</a></li></ul></aside></div><div class="lightbox" id="lightbox" aria-hidden="true"><img alt=""></div><script type="module" src="/_astro/Base.astro_astro_type_script_index_0_lang.DKvZf7If.js"></script></body></html>
