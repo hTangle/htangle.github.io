@@ -1,0 +1,248 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>字符串：Go 1.26.5 源码分析</title><script>
+      (function () {
+        var s = localStorage.getItem('theme');
+        if (s === 'light' || s === 'dark') {
+          document.documentElement.setAttribute('data-theme', s);
+        }
+      })();
+    </script><link rel="stylesheet" href="/_astro/Base.CYI339jz.css"></head><body><header class="topbar"><a href="/" class="brand">HLDay</a><nav><a href="/">专题</a><a href="/posts/">博客</a><a href="https://github.com/hTangle" class="nav-github" aria-label="GitHub">GitHub</a></nav><button class="theme-toggle" id="themeToggle" type="button" title="切换主题（自动/浅色/深色）" aria-label="切换主题">🖥️</button></header><div class="layout"><aside class="booknav"><ul class="nav-tree"><li><p class="nav-group">Go</p><ul><li><p class="nav-subgroup">并发编程</p><ul><li class><a href="/gmp/">GMP 调度器</a></li><li class><a href="/netpoll/">网络轮询器</a></li><li class><a href="/timer/">定时器</a></li><li class><a href="/sync-lock/">同步和锁</a></li><li class><a href="/channel/">Channel</a></li><li class><a href="/context/">Context</a></li></ul></li><li><p class="nav-subgroup">内存管理</p><ul><li class><a href="/memory-alloc/">内存分配器</a></li><li class><a href="/gc/">垃圾收集器</a></li><li class><a href="/stack/">栈空间管理</a></li></ul></li><li><p class="nav-subgroup">数据结构</p><ul><li class><a href="/array/">数组</a></li><li class><a href="/slice/">切片</a></li><li class><a href="/swiss-map/">哈希表 (Swiss Table)</a></li><li class="active"><a href="/string/">字符串</a></li></ul></li></ul></li><li><p class="nav-group">Agent 开发</p><ul><li><p class="nav-subgroup">核心协议与机制</p><ul><li class><a href="/mcp/">MCP</a></li><li class><a href="/skill/">Skill</a></li><li class><a href="/tool-call/">Tool Call</a></li></ul></li></ul></li></ul></aside><main class="prose"><h1>字符串：Go 1.26.5 源码分析</h1><blockquote>
+<p>[!abstract] 一句话理解
+Go string 是不可修改的只读字节序列，运行时由数据指针和字节长度构成。它不保证内容是 UTF-8；<code>len</code> 和下标处理字节，<code>range</code> 才按 UTF-8 解码 rune。</p>
+</blockquote>
+<p>本文以 Go 1.26.5、提交 <code>c19862e5f8415b4f24b189d065ed739517c548ba</code> 为准。相关主题：<a href="/array/">数组</a>、<a href="/slice/">切片</a>、<a href="/memory-alloc/">内存分配器</a>、<a href="/gc/">垃圾收集器</a>。</p>
+<h2 id="1-运行时表示">1. 运行时表示</h2>
+<p>运行时结构见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/string.go#L290-L303" rel="noopener noreferrer" target="_blank"><code>runtime/string.go#L290-L303</code></a>：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">type</span><span style="color:#B392F0"> stringStruct</span><span style="color:#F97583"> struct</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">    str </span><span style="color:#B392F0">unsafe</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">Pointer</span></span>
+<span class="line"><span style="color:#E1E4E8">    len </span><span style="color:#F97583">int</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<img src="/images/go/01-运行时表示.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
+<p>在 64 位平台，字符串值通常是 16 字节。复制字符串只复制指针和长度，不复制全部字节；字符串本身没有 <code>Cap</code>，也没有原地 append。</p>
+<p>内部可保活版本的等价布局见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/internal/unsafeheader/unsafeheader.go#L28-L37" rel="noopener noreferrer" target="_blank"><code>internal/unsafeheader.String#L28-L37</code></a>。业务代码不要依赖 <code>reflect.StringHeader.Data uintptr</code> 管理对象生命周期。</p>
+<h2 id="2-字节rune-与-utf-8">2. 字节、rune 与 UTF-8</h2>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#E1E4E8">s </span><span style="color:#F97583">:=</span><span style="color:#9ECBFF"> "Go语言"</span></span>
+<span class="line"><span style="color:#E1E4E8">fmt.</span><span style="color:#B392F0">Println</span><span style="color:#E1E4E8">(</span><span style="color:#B392F0">len</span><span style="color:#E1E4E8">(s))         </span><span style="color:#6A737D">// 8 字节</span></span>
+<span class="line"><span style="color:#E1E4E8">fmt.</span><span style="color:#B392F0">Println</span><span style="color:#E1E4E8">(utf8.</span><span style="color:#B392F0">RuneCountInString</span><span style="color:#E1E4E8">(s)) </span><span style="color:#6A737D">// 4 个 rune</span></span>
+<span class="line"><span style="color:#E1E4E8">fmt.</span><span style="color:#B392F0">Printf</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">"</span><span style="color:#79B8FF">%x\n</span><span style="color:#9ECBFF">"</span><span style="color:#E1E4E8">, s[</span><span style="color:#79B8FF">2</span><span style="color:#E1E4E8">])   </span><span style="color:#6A737D">// “语”的第一个 UTF-8 字节</span></span></code></pre>
+<p>三个层次必须分开：</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>概念</th><th>Go 类型/操作</th><th>含义</th></tr></thead><tbody><tr><td>byte</td><td><code>byte</code>、<code>s[i]</code>、<code>len(s)</code></td><td>原始字节</td></tr><tr><td>rune</td><td><code>rune</code>、<code>for range</code></td><td>Unicode 码点</td></tr><tr><td>字形簇</td><td>需额外 Unicode 分段库</td><td>用户眼中的一个字符，可能含多个 rune</td></tr></tbody></table>
+<p><code>range</code> 每轮返回当前 rune 的起始字节索引和解码结果；遇到非法 UTF-8 时返回 <code>utf8.RuneError</code>，并按 1 字节前进。</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#E1E4E8">s </span><span style="color:#F97583">:=</span><span style="color:#9ECBFF"> "A界"</span></span>
+<span class="line"><span style="color:#F97583">for</span><span style="color:#E1E4E8"> i, r </span><span style="color:#F97583">:=</span><span style="color:#F97583"> range</span><span style="color:#E1E4E8"> s {</span></span>
+<span class="line"><span style="color:#E1E4E8">    fmt.</span><span style="color:#B392F0">Printf</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">"byteIndex=</span><span style="color:#79B8FF">%d</span><span style="color:#9ECBFF"> rune=</span><span style="color:#79B8FF">%U\n</span><span style="color:#9ECBFF">"</span><span style="color:#E1E4E8">, i, r)</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span>
+<span class="line"><span style="color:#6A737D">// byteIndex=0 rune=U+0041</span></span>
+<span class="line"><span style="color:#6A737D">// byteIndex=1 rune=U+754C</span></span></code></pre>
+<div class="markdown-alert markdown-alert-important" dir="auto">
+<p class="markdown-alert-title" dir="auto"><svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M0 1.75C0 .784.784 0 1.75 0h12.5C15.216 0 16 .784 16 1.75v9.5A1.75 1.75 0 0 1 14.25 13H8.06l-2.573 2.573A1.458 1.458 0 0 1 3 14.543V13H1.75A1.75 1.75 0 0 1 0 11.25Zm1.75-.25a.25.25 0 0 0-.25.25v9.5c0 .138.112.25.25.25h2a.75.75 0 0 1 .75.75v2.19l2.72-2.72a.749.749 0 0 1 .53-.22h6.5a.25.25 0 0 0 .25-.25v-9.5a.25.25 0 0 0-.25-.25Zm7 2.25v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 9a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>IMPORTANT</p>
+<p> string 不验证 UTF-8
+<code>string([]byte{0xff})</code> 完全合法。网络协议、文件格式和数据库字段是否要求 UTF-8，应在边界处显式校验 <code>utf8.ValidString</code>。</p>
+</div>
+<h2 id="3-不可变性到底约束什么">3. 不可变性到底约束什么</h2>
+<p>Go 语法不允许修改字符串中的字节：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#E1E4E8">s </span><span style="color:#F97583">:=</span><span style="color:#9ECBFF"> "hello"</span></span>
+<span class="line"><span style="color:#6A737D">// s[0] = 'H' // 编译错误</span></span></code></pre>
+<p>不可变性带来：</p>
+<ul>
+<li>多个 string 可安全共享同一字节存储；</li>
+<li>字符串可比较、可作为 map key；</li>
+<li>哈希和比较无需担心内容被合法 Go 代码原地修改；</li>
+<li>子串可只复制头部而共享原字节区。</li>
+</ul>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#E1E4E8">whole </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> strings.</span><span style="color:#B392F0">Repeat</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">"x"</span><span style="color:#E1E4E8">, </span><span style="color:#79B8FF">1</span><span style="color:#F97583">&#x3C;&#x3C;</span><span style="color:#79B8FF">20</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"><span style="color:#E1E4E8">part </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> whole[:</span><span style="color:#79B8FF">8</span><span style="color:#E1E4E8">] </span><span style="color:#6A737D">// 可能仍保留整块 1 MiB 存储</span></span>
+<span class="line"><span style="color:#E1E4E8">part </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> strings.</span><span style="color:#B392F0">Clone</span><span style="color:#E1E4E8">(part) </span><span style="color:#6A737D">// 需要长期保存小子串时切断引用</span></span></code></pre>
+<blockquote>
+<p>[!danger] unsafe 会破坏语言保证
+使用 <code>unsafe.String</code> 让 string 指向可变 <code>[]byte</code> 后再修改该切片，会破坏不可变性，可能导致数据竞争、map key 失效和难以复现的错误。只有在能证明所有权、只读性和生命周期时才考虑零拷贝。</p>
+</blockquote>
+<h2 id="4-字符串常量与生命周期">4. 字符串常量与生命周期</h2>
+<p>字符串字面量的字节通常进入程序只读数据；动态构造的字符串数据则可能位于栈或堆。header 指向哪里是编译器和运行时实现细节，不能用“字符串一定在只读段”概括所有 string。</p>
+<img src="/images/go/02-字符串常量与生命周期.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
+<p>运行时会检查不能让逃逸字符串错误地引用已经失效的栈数据，例如拼接只有一个非空操作数时的处理见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/string.go#L44-L59" rel="noopener noreferrer" target="_blank"><code>concatstrings#L44-L59</code></a>。</p>
+<h2 id="5-拼接concatstrings">5. 拼接：concatstrings</h2>
+<p>编译器把 <code>a + b + c</code> 降为 <code>concatstring2</code> 到 <code>concatstring5</code> 或通用 <code>concatstrings</code>。核心源码见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/string.go#L17-L79" rel="noopener noreferrer" target="_blank"><code>runtime/string.go#L17-L79</code></a>。</p>
+<img src="/images/go/03-拼接-concatstrings.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
+<p>若逃逸分析证明结果不逃逸，编译器可传入 32 字节临时缓冲区；<code>rawstringtmp</code> 会优先使用它，见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/string.go#L17-L28" rel="noopener noreferrer" target="_blank"><code>tmpStringBufSize#L17-L28</code></a> 和 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/string.go#L184-L192" rel="noopener noreferrer" target="_blank"><code>rawstringtmp#L184-L192</code></a>。</p>
+<p>循环拼接仍可能反复分配和复制：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">var</span><span style="color:#E1E4E8"> out </span><span style="color:#F97583">string</span></span>
+<span class="line"><span style="color:#F97583">for</span><span style="color:#E1E4E8"> _, p </span><span style="color:#F97583">:=</span><span style="color:#F97583"> range</span><span style="color:#E1E4E8"> parts {</span></span>
+<span class="line"><span style="color:#E1E4E8">    out </span><span style="color:#F97583">+=</span><span style="color:#E1E4E8"> p</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>已知会多次写入时使用 <code>strings.Builder</code>：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">var</span><span style="color:#E1E4E8"> b </span><span style="color:#B392F0">strings</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">Builder</span></span>
+<span class="line"><span style="color:#E1E4E8">b.</span><span style="color:#B392F0">Grow</span><span style="color:#E1E4E8">(totalBytes)</span></span>
+<span class="line"><span style="color:#F97583">for</span><span style="color:#E1E4E8"> _, p </span><span style="color:#F97583">:=</span><span style="color:#F97583"> range</span><span style="color:#E1E4E8"> parts {</span></span>
+<span class="line"><span style="color:#E1E4E8">    b.</span><span style="color:#B392F0">WriteString</span><span style="color:#E1E4E8">(p)</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span>
+<span class="line"><span style="color:#E1E4E8">out </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> b.</span><span style="color:#B392F0">String</span><span style="color:#E1E4E8">()</span></span></code></pre>
+<p><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/strings/builder.go#L45-L48" rel="noopener noreferrer" target="_blank"><code>strings.Builder.String</code></a> 用 <code>unsafe.String</code> 返回内部 buffer 的只读视图，因此非零 Builder 不能按值复制；<a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/strings/builder.go#L26-L43" rel="noopener noreferrer" target="_blank"><code>copyCheck</code></a> 会检测非法复制。</p>
+<h2 id="6-byte-与-string-转换">6. []byte 与 string 转换</h2>
+<h3 id="61-byte--string">6.1 []byte → string</h3>
+<p>一般语义是复制字节，从而保证之后修改原切片不会改变字符串：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#E1E4E8">b </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> []</span><span style="color:#F97583">byte</span><span style="color:#E1E4E8">(</span><span style="color:#9ECBFF">"hello"</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"><span style="color:#E1E4E8">s </span><span style="color:#F97583">:=</span><span style="color:#F97583"> string</span><span style="color:#E1E4E8">(b)</span></span>
+<span class="line"><span style="color:#E1E4E8">b[</span><span style="color:#79B8FF">0</span><span style="color:#E1E4E8">] </span><span style="color:#F97583">=</span><span style="color:#9ECBFF"> '</span><span style="color:#79B8FF">H</span><span style="color:#9ECBFF">'</span></span>
+<span class="line"><span style="color:#E1E4E8">fmt.</span><span style="color:#B392F0">Println</span><span style="color:#E1E4E8">(s) </span><span style="color:#6A737D">// hello</span></span></code></pre>
+<p>运行时入口 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/string.go#L133-L174" rel="noopener noreferrer" target="_blank"><code>slicebytetostring#L133-L174</code></a>：</p>
+<ul>
+<li>长度 0 直接返回空串；</li>
+<li>长度 1 可复用静态单字节表；</li>
+<li>不逃逸且长度不超过 32 字节时可用栈上临时缓冲；</li>
+<li>其他情况分配目标内存并 <code>memmove</code>。</li>
+</ul>
+<p>编译器能证明转换只用于临时只读场景时，可能使用零拷贝临时形式 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/string.go#L194-L222" rel="noopener noreferrer" target="_blank"><code>slicebytetostringtmp#L194-L222</code></a>，例如某些 map 查询、比较和拼接。它是编译器优化，不改变语言层面的独立值语义。</p>
+<h3 id="62-string--byte">6.2 string → []byte</h3>
+<p>一般语义同样创建可修改副本。运行时 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/string.go#L224-L234" rel="noopener noreferrer" target="_blank"><code>stringtoslicebyte#L224-L234</code></a> 选择栈上临时缓冲或新 byte slice，然后 copy 字节。</p>
+<img src="/images/go/04-string-byte.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
+<h3 id="63-rune-转换">6.3 rune 转换</h3>
+<p><code>[]rune(s)</code> 需要先数 rune 再分配并解码，见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/string.go#L236-L258" rel="noopener noreferrer" target="_blank"><code>stringtoslicerune#L236-L258</code></a>。<code>string(runes)</code> 先计算 UTF-8 目标字节数，再编码，见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/string.go#L260-L288" rel="noopener noreferrer" target="_blank"><code>slicerunetostring#L260-L288</code></a>。两者都不是 O(1) 头部转换。</p>
+<h2 id="7-比较查找与-map-key">7. 比较、查找与 map key</h2>
+<p>字符串相等比较先利用长度快速排除，再比较字节；排序比较是按字节字典序，不是按语言学排序规则。</p>
+<p>字符串作为 map key 时，哈希对象是当前字节序列。短暂查询不必手工把 string 转换缓存为 <code>[]byte</code>；当前编译器已能优化若干临时 <code>string(b)</code> 查询场景。</p>
+<p>对于用户可控的大量 key，仍要关注：</p>
+<ul>
+<li>key 总字节数和基数；</li>
+<li>重复字符串是否被业务层无界保留；</li>
+<li>规范化规则是否一致，例如大小写、Unicode normalization；</li>
+<li>不要用 unsafe 可变别名制造 map key。</li>
+</ul>
+<h2 id="8-并发语义">8. 并发语义</h2>
+<p>合法 Go 代码不能修改字符串字节，所以多个 goroutine 并发读取同一 string 数据安全。但如果它们并发读写同一个 string 变量，header 的赋值仍需同步。</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">var</span><span style="color:#E1E4E8"> current </span><span style="color:#F97583">string</span></span>
+<span class="line"><span style="color:#6A737D">// 一个 goroutine 写 current，另一个读 current：没有同步就是数据竞争</span></span></code></pre>
+<p>可按场景使用 mutex、channel 或 <code>atomic.Pointer</code>/<code>atomic.Value</code> 安全发布。涉及 unsafe 零拷贝时，原始 buffer 的任何并发修改都会重新引入数据竞争。</p>
+<h2 id="9-性能选择">9. 性能选择</h2>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>场景</th><th>推荐</th></tr></thead><tbody><tr><td>少量、单个表达式拼接</td><td><code>a + b + c</code>，编译器/运行时可一次分配</td></tr><tr><td>循环构建字符串</td><td><code>strings.Builder</code>，可先 <code>Grow</code></td></tr><tr><td>需要读写二进制缓冲</td><td><code>[]byte</code> / <code>bytes.Buffer</code></td></tr><tr><td>只读文本传递和 map key</td><td><code>string</code></td></tr><tr><td>长期保存大字符串的小片段</td><td><code>strings.Clone</code> 后保留</td></tr><tr><td>Unicode 码点处理</td><td><code>range</code>、<code>utf8</code>；不要直接按 byte 当字符</td></tr></tbody></table>
+<p>用真实负载验证：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="bash"><code><span class="line"><span style="color:#B392F0">go</span><span style="color:#9ECBFF"> test</span><span style="color:#79B8FF"> -bench=.</span><span style="color:#79B8FF"> -benchmem</span><span style="color:#9ECBFF"> ./...</span></span>
+<span class="line"><span style="color:#B392F0">go</span><span style="color:#9ECBFF"> test</span><span style="color:#79B8FF"> -run=</span><span style="color:#9ECBFF">'^$'</span><span style="color:#79B8FF"> -bench=BenchmarkText</span><span style="color:#79B8FF"> -memprofile=mem.out</span></span>
+<span class="line"><span style="color:#B392F0">go</span><span style="color:#9ECBFF"> tool</span><span style="color:#9ECBFF"> pprof</span><span style="color:#79B8FF"> -alloc_objects</span><span style="color:#9ECBFF"> mem.out</span></span>
+<span class="line"><span style="color:#B392F0">go</span><span style="color:#9ECBFF"> build</span><span style="color:#79B8FF"> -gcflags=</span><span style="color:#9ECBFF">'-m=2'</span><span style="color:#9ECBFF"> ./...</span></span></code></pre>
+<h2 id="10-常见误区">10. 常见误区</h2>
+<blockquote>
+<p>[!failure] len(string) 是字符数
+错。它是字节数。码点数使用 <code>utf8.RuneCountInString</code>，用户可见字符还需要字形簇算法。</p>
+</blockquote>
+<blockquote>
+<p>[!failure] string 永远位于只读数据段
+错。字面量通常如此，动态拼接和转换得到的数据可能在栈或堆。</p>
+</blockquote>
+<blockquote>
+<p>[!failure] string 与 []byte 转换一定堆分配
+错。语义通常要求复制，但编译器可使用栈缓冲或在严格临时只读场景消除复制。以逃逸报告和基准为准。</p>
+</blockquote>
+<blockquote>
+<p>[!failure] strings.Builder.String 会复制完整字符串
+当前实现直接返回内部 buffer 的 string 视图，因此 Builder 有严格的复制和后续使用约束。</p>
+</blockquote>
+<h2 id="11-源码导航">11. 源码导航</h2>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>主题</th><th>Go 1.26.5 源码</th></tr></thead><tbody><tr><td>运行时字符串头</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/string.go#L290-L303" rel="noopener noreferrer" target="_blank"><code>stringStruct</code></a></td></tr><tr><td>拼接</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/string.go#L23-L79" rel="noopener noreferrer" target="_blank"><code>concatstrings</code></a></td></tr><tr><td>[]byte 转 string</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/string.go#L133-L174" rel="noopener noreferrer" target="_blank"><code>slicebytetostring</code></a></td></tr><tr><td>临时零拷贝转换</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/string.go#L194-L222" rel="noopener noreferrer" target="_blank"><code>slicebytetostringtmp</code></a></td></tr><tr><td>string 转 []byte</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/string.go#L224-L234" rel="noopener noreferrer" target="_blank"><code>stringtoslicebyte</code></a></td></tr><tr><td>rune 转换</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/string.go#L236-L258" rel="noopener noreferrer" target="_blank"><code>stringtoslicerune</code></a></td></tr><tr><td>原始字符串分配</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/string.go#L320-L327" rel="noopener noreferrer" target="_blank"><code>rawstring</code></a></td></tr><tr><td>Builder</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/strings/builder.go#L14-L115" rel="noopener noreferrer" target="_blank"><code>strings.Builder</code></a></td></tr></tbody></table>
+<h2 id="12-自测题">12. 自测题</h2>
+<ol>
+<li>为什么 string 需要 Data 和 Len，却不需要 Cap？</li>
+<li><code>len("中")</code> 为什么是 3？range 返回的索引为什么可能不连续？</li>
+<li><code>string(b)</code> 在什么情况下必须复制，编译器又能优化哪些临时场景？</li>
+<li>为什么非零 <code>strings.Builder</code> 不能按值复制？</li>
+<li>保存一个大字符串的小子串时，怎样避免内存保留？</li>
+</ol>
+<p>能够沿着“字节序列 → header → UTF-8 语义 → 拼接/转换 → 逃逸与所有权”解释一次字符串操作，才算掌握 Go 字符串。</p></main><aside class="toc"><p class="toc-title">本页目录</p><ul><li class="toc-d2"><a href="#1-运行时表示">1. 运行时表示</a></li><li class="toc-d2"><a href="#2-字节rune-与-utf-8">2. 字节、rune 与 UTF-8</a></li><li class="toc-d2"><a href="#3-不可变性到底约束什么">3. 不可变性到底约束什么</a></li><li class="toc-d2"><a href="#4-字符串常量与生命周期">4. 字符串常量与生命周期</a></li><li class="toc-d2"><a href="#5-拼接concatstrings">5. 拼接：concatstrings</a></li><li class="toc-d2"><a href="#6-byte-与-string-转换">6. []byte 与 string 转换</a></li><li class="toc-d3"><a href="#61-byte--string">6.1 []byte → string</a></li><li class="toc-d3"><a href="#62-string--byte">6.2 string → []byte</a></li><li class="toc-d3"><a href="#63-rune-转换">6.3 rune 转换</a></li><li class="toc-d2"><a href="#7-比较查找与-map-key">7. 比较、查找与 map key</a></li><li class="toc-d2"><a href="#8-并发语义">8. 并发语义</a></li><li class="toc-d2"><a href="#9-性能选择">9. 性能选择</a></li><li class="toc-d2"><a href="#10-常见误区">10. 常见误区</a></li><li class="toc-d2"><a href="#11-源码导航">11. 源码导航</a></li><li class="toc-d2"><a href="#12-自测题">12. 自测题</a></li></ul></aside></div><div class="lightbox" id="lightbox" aria-hidden="true"><img alt=""></div><script type="module" src="/_astro/Base.astro_astro_type_script_index_0_lang.DKvZf7If.js"></script></body></html>

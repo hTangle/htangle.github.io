@@ -1,0 +1,307 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>哈希表：Go 1.26.5 Swiss Table 源码分析</title><script>
+      (function () {
+        var s = localStorage.getItem('theme');
+        if (s === 'light' || s === 'dark') {
+          document.documentElement.setAttribute('data-theme', s);
+        }
+      })();
+    </script><link rel="stylesheet" href="/_astro/Base.CYI339jz.css"></head><body><header class="topbar"><a href="/" class="brand">HLDay</a><nav><a href="/">专题</a><a href="/posts/">博客</a><a href="https://github.com/hTangle" class="nav-github" aria-label="GitHub">GitHub</a></nav><button class="theme-toggle" id="themeToggle" type="button" title="切换主题（自动/浅色/深色）" aria-label="切换主题">🖥️</button></header><div class="layout"><aside class="booknav"><ul class="nav-tree"><li><p class="nav-group">Go</p><ul><li><p class="nav-subgroup">并发编程</p><ul><li class><a href="/gmp/">GMP 调度器</a></li><li class><a href="/netpoll/">网络轮询器</a></li><li class><a href="/timer/">定时器</a></li><li class><a href="/sync-lock/">同步和锁</a></li><li class><a href="/channel/">Channel</a></li><li class><a href="/context/">Context</a></li></ul></li><li><p class="nav-subgroup">内存管理</p><ul><li class><a href="/memory-alloc/">内存分配器</a></li><li class><a href="/gc/">垃圾收集器</a></li><li class><a href="/stack/">栈空间管理</a></li></ul></li><li><p class="nav-subgroup">数据结构</p><ul><li class><a href="/array/">数组</a></li><li class><a href="/slice/">切片</a></li><li class="active"><a href="/swiss-map/">哈希表 (Swiss Table)</a></li><li class><a href="/string/">字符串</a></li></ul></li></ul></li><li><p class="nav-group">Agent 开发</p><ul><li><p class="nav-subgroup">核心协议与机制</p><ul><li class><a href="/mcp/">MCP</a></li><li class><a href="/skill/">Skill</a></li><li class><a href="/tool-call/">Tool Call</a></li></ul></li></ul></li></ul></aside><main class="prose"><h1>哈希表：Go 1.26.5 Swiss Table 源码分析</h1><blockquote>
+<p>[!abstract] 一句话理解
+Go 1.26.5 的内置 map 使用 Swiss Table：8 个键值槽组成一个 Group，8 字节控制字一次筛选整组候选；Group 之间使用二次探测，Table 达到阈值后扩容或分裂，顶层 Directory 通过可扩展哈希选择 Table。</p>
+</blockquote>
+<p>本文以 Go 1.26.5、提交 <code>c19862e5f8415b4f24b189d065ed739517c548ba</code> 为准。基础延伸：解决哈希冲突的几种办法、同步和锁、<a href="/memory-alloc/">内存分配器</a>、<a href="/gc/">垃圾收集器</a>。</p>
+<h2 id="1-先分清语言契约与实现">1. 先分清语言契约与实现</h2>
+<p>语言层面可以依赖：</p>
+<ul>
+<li>key 必须是可比较类型；</li>
+<li>查询不存在的 key 返回元素零值，逗号 ok 可区分是否存在；</li>
+<li>nil map 可读、可 <code>len</code>、可 <code>delete</code>、可 <code>clear</code>，但写入会 panic；</li>
+<li>迭代顺序未指定；迭代期间删除尚未到达的项不会返回，新增项可能返回也可能不返回；</li>
+<li>普通 map 不支持无同步的并发读写。</li>
+</ul>
+<p>实现层面用于理解性能，不能作为业务协议：Group 固定 8 槽、H2 使用 7 位、Table 上限 1024 槽、目录分裂策略、具体内存布局和扩容时机。</p>
+<h2 id="2-整体架构">2. 整体架构</h2>
+<p>源码总览见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/internal/runtime/maps/map.go#L16-L180" rel="noopener noreferrer" target="_blank"><code>internal/runtime/maps/map.go#L16-L180</code></a>。核心层次如下：</p>
+<img src="/images/go/01-整体架构.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
+<p>术语：</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>层级</th><th>职责</th></tr></thead><tbody><tr><td>Slot</td><td>存一个 key/elem 对</td></tr><tr><td>Group</td><td>8 个 Slot + 8 个控制字节</td></tr><tr><td>Table</td><td>完整的 Swiss Table，负责一部分哈希空间</td></tr><tr><td>Directory</td><td>根据哈希高位选择 Table</td></tr><tr><td>Map</td><td>元素数、随机种子、目录和并发/迭代状态</td></tr></tbody></table>
+<p><code>internal/abi</code> 固定每组 8 个槽，key 或 elem 大于 128 字节时改为间接存储，见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/internal/abi/map.go#L11-L23" rel="noopener noreferrer" target="_blank"><code>internal/abi/map.go#L11-L23</code></a> 和 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/internal/abi/map.go#L32-L64" rel="noopener noreferrer" target="_blank"><code>MapType#L32-L64</code></a>。</p>
+<h2 id="3-map-顶层结构">3. Map 顶层结构</h2>
+<p>运行时 <code>Map</code> 定义见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/internal/runtime/maps/map.go#L194-L246" rel="noopener noreferrer" target="_blank"><code>map.go#L194-L246</code></a>：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">type</span><span style="color:#B392F0"> Map</span><span style="color:#F97583"> struct</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">    used              </span><span style="color:#F97583">uint64</span></span>
+<span class="line"><span style="color:#E1E4E8">    seed              </span><span style="color:#F97583">uintptr</span></span>
+<span class="line"><span style="color:#E1E4E8">    dirPtr            </span><span style="color:#B392F0">unsafe</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">Pointer</span></span>
+<span class="line"><span style="color:#E1E4E8">    dirLen            </span><span style="color:#F97583">int</span></span>
+<span class="line"><span style="color:#E1E4E8">    globalDepth       </span><span style="color:#F97583">uint8</span></span>
+<span class="line"><span style="color:#E1E4E8">    globalShift       </span><span style="color:#F97583">uint8</span></span>
+<span class="line"><span style="color:#E1E4E8">    writing           </span><span style="color:#F97583">uint8</span></span>
+<span class="line"><span style="color:#E1E4E8">    tombstonePossible </span><span style="color:#F97583">bool</span></span>
+<span class="line"><span style="color:#E1E4E8">    clearSeq          </span><span style="color:#F97583">uint64</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<ul>
+<li><code>used</code> 必须在首字段，编译器据此实现 <code>len(m)</code>；</li>
+<li><code>seed</code> 是每个 map 独立的随机哈希种子；</li>
+<li><code>dirPtr/dirLen</code> 指向 Directory；</li>
+<li><code>globalDepth/globalShift</code> 决定使用多少哈希高位选择 Table；</li>
+<li><code>writing</code> 用于尽早发现并发写、读写冲突；</li>
+<li><code>clearSeq</code> 帮助迭代器识别迭代期间的 clear。</li>
+</ul>
+<p>map 变量本身类似指针语义：赋值或传参共享同一个运行时 Map，不会深拷贝键值。</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#E1E4E8">a </span><span style="color:#F97583">:=</span><span style="color:#F97583"> map</span><span style="color:#E1E4E8">[</span><span style="color:#F97583">string</span><span style="color:#E1E4E8">]</span><span style="color:#F97583">int</span><span style="color:#E1E4E8">{</span><span style="color:#9ECBFF">"x"</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">1</span><span style="color:#E1E4E8">}</span></span>
+<span class="line"><span style="color:#E1E4E8">b </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> a</span></span>
+<span class="line"><span style="color:#E1E4E8">b[</span><span style="color:#9ECBFF">"x"</span><span style="color:#E1E4E8">] </span><span style="color:#F97583">=</span><span style="color:#79B8FF"> 2</span></span>
+<span class="line"><span style="color:#E1E4E8">fmt.</span><span style="color:#B392F0">Println</span><span style="color:#E1E4E8">(a[</span><span style="color:#9ECBFF">"x"</span><span style="color:#E1E4E8">]) </span><span style="color:#6A737D">// 2</span></span></code></pre>
+<h2 id="4-小-map单-group-快速路径">4. 小 map：单 Group 快速路径</h2>
+<p>最多 8 项的小 map 可以让 <code>dirPtr</code> 直接指向一个 Group，此时 <code>dirLen == 0</code>，无需 Directory、Table 和探测序列。说明见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/internal/runtime/maps/map.go#L204-L222" rel="noopener noreferrer" target="_blank"><code>Map.dirPtr#L204-L222</code></a>。</p>
+<img src="/images/go/02-小-map-单-group-快速路径.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
+<p><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/internal/runtime/maps/map.go#L264-L328" rel="noopener noreferrer" target="_blank"><code>NewMap#L264-L328</code></a> 对 <code>hint &#x3C;= 8</code> 延迟分配 Group；如果没有任何写入，连 Group 分配也能省掉。编译器还可能把不逃逸的 Map 和首个 Group 放在栈上，运行时入口见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/map.go#L30-L68" rel="noopener noreferrer" target="_blank"><code>runtime/makemap</code></a>。</p>
+<p>写入第 9 个不同 key 时，小 map 转为完整 Table，见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/internal/runtime/maps/map.go#L486-L533" rel="noopener noreferrer" target="_blank"><code>Map.PutSlot#L486-L533</code></a>。</p>
+<h2 id="5-group-与控制字">5. Group 与控制字</h2>
+<p>每个 Group 有 8 个控制字节，与 8 个 Slot 一一对应：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="text"><code><span class="line"><span>ctrl:  [c0 c1 c2 c3 c4 c5 c6 c7]</span></span>
+<span class="line"><span>slots: [s0 s1 s2 s3 s4 s5 s6 s7]</span></span></code></pre>
+<p>编码见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/internal/runtime/maps/group.go#L114-L126" rel="noopener noreferrer" target="_blank"><code>group.go#L114-L126</code></a>：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="text"><code><span class="line"><span>empty:   1 0 0 0 0 0 0 0   = 0x80</span></span>
+<span class="line"><span>deleted: 1 1 1 1 1 1 1 0   = 0xfe</span></span>
+<span class="line"><span>full:    0 h h h h h h h   = H2</span></span></code></pre>
+<p>一个哈希值被拆为：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#E1E4E8">H1 </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> hash </span><span style="color:#F97583">>></span><span style="color:#79B8FF"> 7</span><span style="color:#6A737D">   // 高 57 位，选择目录和探测起点</span></span>
+<span class="line"><span style="color:#E1E4E8">H2 </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> hash </span><span style="color:#F97583">&#x26;</span><span style="color:#F97583"> 0x</span><span style="color:#79B8FF">7f</span><span style="color:#6A737D"> // 低 7 位，写入控制字节</span></span></code></pre>
+<p>源码见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/internal/runtime/maps/map.go#L181-L192" rel="noopener noreferrer" target="_blank"><code>h1/h2#L181-L192</code></a>。</p>
+<h3 id="51-为什么控制字快">5.1 为什么控制字快</h3>
+<p>查找时先把目标 H2 与整个 64 位控制字比较，得到候选槽位 bitset，再只对候选做完整 key 比较：</p>
+<img src="/images/go/03-为什么控制字快.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
+<p>通用位运算实现见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/internal/runtime/maps/group.go#L150-L171" rel="noopener noreferrer" target="_blank"><code>ctrlGroupMatchH2#L150-L171</code></a>；AMD64 会替换为 SIMD intrinsic。H2 只有 7 位，会产生假阳性，但随后完整 key 相等比较保证正确性。</p>
+<h2 id="6-查询完整路径">6. 查询完整路径</h2>
+<p>通用访问入口见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/internal/runtime/maps/runtime.go#L49-L128" rel="noopener noreferrer" target="_blank"><code>runtime_mapaccess1#L49-L128</code></a>：</p>
+<img src="/images/go/04-查询完整路径.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
+<p>看到 Empty 就能结束，是开放寻址的关键不变量：插入搜索如果曾越过该位置，这里就不会仍是 Empty。Deleted 不能终止搜索。</p>
+<h3 id="61-二次探测">6.1 二次探测</h3>
+<p>Group 探测序列见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/internal/runtime/maps/table.go#L1261-L1292" rel="noopener noreferrer" target="_blank"><code>probeSeq#L1261-L1292</code></a>：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="text"><code><span class="line"><span>p(i) = H1 + (i² + i) / 2  mod groupCount</span></span></code></pre>
+<p>即：<code>H1, H1+1, H1+1+2, H1+1+2+3 ...</code>。Group 数必须是 2 的幂，这个序列才会恰好访问每个 Group 一次。</p>
+<p>时间复杂度通常摊销 O(1)，但语言不承诺严格最坏 O(1)。碰撞、超大 key 比较、哈希成本和缓存局部性都影响真实延迟。</p>
+<h2 id="7-写入更新复用墓碑或扩容">7. 写入：更新、复用墓碑或扩容</h2>
+<p>Table 插入实现见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/internal/runtime/maps/table.go#L259-L364" rel="noopener noreferrer" target="_blank"><code>table.PutSlot#L259-L364</code></a>：</p>
+<img src="/images/go/05-写入-更新-复用墓碑或扩容.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
+<p>负载阈值由 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/internal/runtime/maps/group.go#L14-L23" rel="noopener noreferrer" target="_blank"><code>maxAvgGroupLoad = 7</code></a> 控制，即多 Group Table 平均最多使用 7/8 槽位，以保证探测最终能遇到 Empty。</p>
+<p><code>make(map[K]V, hint)</code> 是容量提示，不是固定容量，也不是保证不扩容。合理 hint 可减少 rehash；极端高估会提前占用内存。</p>
+<h2 id="8-删除与墓碑">8. 删除与墓碑</h2>
+<p>删除实现见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/internal/runtime/maps/table.go#L421-L493" rel="noopener noreferrer" target="_blank"><code>table.Delete#L421-L493</code></a>。找到目标后先清理 key/elem，之后决定控制字：</p>
+<ul>
+<li>当前 Group 仍有 Empty：目标槽可直接标 Empty；</li>
+<li>当前 Group 没有 Empty：标 Deleted 墓碑，防止后续查询提前停止。</li>
+</ul>
+<img src="/images/go/06-删除与墓碑.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
+<p>插入会优先复用墓碑。墓碑过多会增加探测成本，因此写入无剩余增长空间时先尝试 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/internal/runtime/maps/table.go#L496-L610" rel="noopener noreferrer" target="_blank"><code>pruneTombstones#L496-L610</code></a>；只有墓碑达到容量约 10% 才值得做 O(n) 清理，否则进入 grow/split。</p>
+<p><code>clear(m)</code> 清空所有元素、保留 map 可继续使用，并更新随机种子/清理迭代状态；它不等于把变量赋为 nil，也不承诺立刻归还全部底层内存。</p>
+<h2 id="9-扩容table-grow-与-split">9. 扩容：Table grow 与 split</h2>
+<p>单个 Table 的最大容量当前为 1024 个槽，见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/internal/runtime/maps/table.go#L13-L23" rel="noopener noreferrer" target="_blank"><code>maxTableCapacity</code></a>。<a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/internal/runtime/maps/table.go#L1142-L1168" rel="noopener noreferrer" target="_blank"><code>rehash#L1142-L1168</code></a> 有两条路径：</p>
+<img src="/images/go/07-扩容-table-grow-与-split.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
+<p>Table grow 见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/internal/runtime/maps/table.go#L1223-L1259" rel="noopener noreferrer" target="_blank"><code>table.grow#L1223-L1259</code></a>，split 见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/internal/runtime/maps/table.go#L1178-L1221" rel="noopener noreferrer" target="_blank"><code>table.split#L1178-L1221</code></a>。两者都会重新散列有效元素，顺便消除墓碑。</p>
+<h3 id="91-可扩展哈希目录">9.1 可扩展哈希目录</h3>
+<p>Directory 长度为 <code>1 &#x3C;&#x3C; globalDepth</code>。每个 Table 保存自己的 <code>localDepth</code>；当 <code>localDepth &#x3C; globalDepth</code> 时，连续多个目录项可以指向同一 Table。</p>
+<img src="/images/go/08-可扩展哈希目录.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
+<p>如果被拆分 Table 的 <code>localDepth == globalDepth</code>，目录先翻倍；原目录的每个引用复制两份，再安装新分裂的 left/right。代码见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/internal/runtime/maps/map.go#L363-L414" rel="noopener noreferrer" target="_blank"><code>installTableSplit#L363-L414</code></a>。</p>
+<p>这种结构把一次增长的搬迁范围限制在一个 Table，而不是一次处理整张大 map；但触发 split 的那次写入仍可能出现明显尾延迟，尤其 key/elem 很大或哈希昂贵时。</p>
+<h2 id="10-迭代器为何复杂">10. 迭代器为何复杂</h2>
+<p>迭代语义和扩容处理的设计说明见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/internal/runtime/maps/map.go#L132-L180" rel="noopener noreferrer" target="_blank"><code>map.go#L132-L180</code></a>，实现见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/internal/runtime/maps/table.go#L641-L700" rel="noopener noreferrer" target="_blank"><code>Iter#L641-L700</code></a> 与 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/internal/runtime/maps/table.go#L803-L1140" rel="noopener noreferrer" target="_blank"><code>Iter.Next#L803-L1140</code></a>。</p>
+<p>必须同时满足：</p>
+<ol>
+<li>同一项不能返回两次；</li>
+<li>迭代中新增项可能出现；</li>
+<li>已修改项返回最新值；</li>
+<li>已删除项不能返回；</li>
+<li>顺序不确定，当前实现主动随机化起点。</li>
+</ol>
+<p>扩容发生后，迭代器继续沿旧 Table 的槽位决定“哪些 key 已遍历”，避免重复；真正返回前再到当前新 Table 查一次，拿最新值并确认未删除。</p>
+<img src="/images/go/09-迭代器为何复杂.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
+<p>不要用 map range 顺序做分页、签名、测试快照或一致性协议。需要稳定输出时先收集 key 并排序。</p>
+<h2 id="11-并发安全">11. 并发安全</h2>
+<p>运行时会在一些冲突中抛出：</p>
+<ul>
+<li><code>concurrent map writes</code>；</li>
+<li><code>concurrent map read and map write</code>；</li>
+<li><code>concurrent map iteration and map write</code>。</li>
+</ul>
+<p>例如访问路径在 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/internal/runtime/maps/runtime.go#L77-L79" rel="noopener noreferrer" target="_blank"><code>runtime_mapaccess1#L77-L79</code></a> 检查写状态，迭代在 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/internal/runtime/maps/table.go#L818-L821" rel="noopener noreferrer" target="_blank"><code>Iter.Next#L818-L821</code></a> 检查。</p>
+<blockquote>
+<p>[!danger] fatal 检查不是同步机制
+它不能保证捕获所有数据竞争，也不能把竞态程序变正确。共享 map 必须使用 mutex、RWMutex、channel 所有权、copy-on-write，或在适用场景选择 <code>sync.Map</code>。</p>
+</blockquote>
+<p>选型建议：</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>场景</th><th>常用方案</th></tr></thead><tbody><tr><td>普通读写、需要复合不变量</td><td><code>map + sync.Mutex</code></td></tr><tr><td>读多写少且临界区只读</td><td>评估 <code>map + sync.RWMutex</code></td></tr><tr><td>单 goroutine 拥有状态</td><td>channel 传命令</td></tr><tr><td>写少读多、快照整体替换</td><td>immutable map + <code>atomic.Pointer</code></td></tr><tr><td>key 稳定且多 goroutine 各写不同 key，或读多写少缓存</td><td>基准验证 <code>sync.Map</code></td></tr></tbody></table>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="bash"><code><span class="line"><span style="color:#B392F0">go</span><span style="color:#9ECBFF"> test</span><span style="color:#79B8FF"> -race</span><span style="color:#9ECBFF"> ./...</span></span></code></pre>
+<h2 id="12-性能与生产诊断">12. 性能与生产诊断</h2>
+<h3 id="121-keyelem-设计">12.1 key/elem 设计</h3>
+<ul>
+<li>大于 128 字节的 key 或 elem 会间接存储，增加分配与指针追踪；</li>
+<li>string key 的成本还包含按字节哈希和比较；</li>
+<li>含指针 key/elem 增加 GC 扫描；</li>
+<li>结构体 key 应避免未规范化字段导致逻辑重复；</li>
+<li>不要为省一次转换用 unsafe 制造可变 string key。</li>
+</ul>
+<h3 id="122-容量和生命周期">12.2 容量和生命周期</h3>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#E1E4E8">m </span><span style="color:#F97583">:=</span><span style="color:#B392F0"> make</span><span style="color:#E1E4E8">(</span><span style="color:#F97583">map</span><span style="color:#E1E4E8">[</span><span style="color:#F97583">string</span><span style="color:#E1E4E8">]</span><span style="color:#B392F0">Item</span><span style="color:#E1E4E8">, estimated)</span></span></code></pre>
+<p>hint 接近实际峰值可减少 grow/split；长期高峰后元素大量删除，map 的内部容量可能仍保持较高。若内存必须回落，可以在合适的维护点重建：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#E1E4E8">next </span><span style="color:#F97583">:=</span><span style="color:#B392F0"> make</span><span style="color:#E1E4E8">(</span><span style="color:#F97583">map</span><span style="color:#E1E4E8">[</span><span style="color:#B392F0">K</span><span style="color:#E1E4E8">]</span><span style="color:#B392F0">V</span><span style="color:#E1E4E8">, </span><span style="color:#B392F0">len</span><span style="color:#E1E4E8">(old))</span></span>
+<span class="line"><span style="color:#F97583">for</span><span style="color:#E1E4E8"> k, v </span><span style="color:#F97583">:=</span><span style="color:#F97583"> range</span><span style="color:#E1E4E8"> old {</span></span>
+<span class="line"><span style="color:#E1E4E8">    next[k] </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> v</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span>
+<span class="line"><span style="color:#E1E4E8">old </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> next</span></span></code></pre>
+<p>这会产生瞬时双份内存，应结合流量窗口、内存预算和回滚策略实施。</p>
+<h3 id="123-观测">12.3 观测</h3>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="bash"><code><span class="line"><span style="color:#B392F0">go</span><span style="color:#9ECBFF"> test</span><span style="color:#79B8FF"> -bench=.</span><span style="color:#79B8FF"> -benchmem</span><span style="color:#9ECBFF"> ./...</span></span>
+<span class="line"><span style="color:#B392F0">go</span><span style="color:#9ECBFF"> test</span><span style="color:#79B8FF"> -run=</span><span style="color:#9ECBFF">'^$'</span><span style="color:#79B8FF"> -bench=BenchmarkMap</span><span style="color:#79B8FF"> -cpuprofile=cpu.out</span><span style="color:#79B8FF"> -memprofile=mem.out</span></span>
+<span class="line"><span style="color:#B392F0">go</span><span style="color:#9ECBFF"> tool</span><span style="color:#9ECBFF"> pprof</span><span style="color:#9ECBFF"> cpu.out</span></span>
+<span class="line"><span style="color:#B392F0">go</span><span style="color:#9ECBFF"> tool</span><span style="color:#9ECBFF"> pprof</span><span style="color:#79B8FF"> -alloc_space</span><span style="color:#9ECBFF"> mem.out</span></span></code></pre>
+<p>生产侧关注：map 元素数量与 key 字节数、分配速率、堆/RSS、GC CPU、写入 P99、锁等待、热点 key、缓存命中率和基数增长。运行时不会暴露某张 map 的墓碑数或 split 次数，必要时从业务层建立可解释指标。</p>
+<h2 id="13-常见误区">13. 常见误区</h2>
+<blockquote>
+<p>[!failure] map 的操作永远是 O(1)
+通常是摊销 O(1)，但哈希、碰撞、比较、扩容和缓存未命中都会影响尾延迟。</p>
+</blockquote>
+<blockquote>
+<p>[!failure] make 的 hint 是容量上限
+它只是初始容量提示，map 会继续增长。</p>
+</blockquote>
+<blockquote>
+<p>[!failure] 只并发读取一定安全，所以写很少可以不加锁
+一旦任何写与读/迭代并发，就有数据竞争；“写得少”不会改变正确性。</p>
+</blockquote>
+<blockquote>
+<p>[!failure] delete 后内存一定立即下降
+元素引用会被清理，但 Table/Directory 容量可能保留，且 GC/RSS 回落另有节奏。</p>
+</blockquote>
+<blockquote>
+<p>[!failure] 可以依赖某次观察到的 range 顺序
+顺序未指定且实现主动随机化，扩容还会改变遍历结构。</p>
+</blockquote>
+<h2 id="14-源码导航">14. 源码导航</h2>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>主题</th><th>Go 1.26.5 源码</th></tr></thead><tbody><tr><td>总体设计</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/internal/runtime/maps/map.go#L16-L180" rel="noopener noreferrer" target="_blank"><code>internal/runtime/maps/map.go</code></a></td></tr><tr><td>Map 结构</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/internal/runtime/maps/map.go#L194-L246" rel="noopener noreferrer" target="_blank"><code>Map</code></a></td></tr><tr><td>创建 map</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/internal/runtime/maps/map.go#L264-L328" rel="noopener noreferrer" target="_blank"><code>NewMap</code></a></td></tr><tr><td>控制字匹配</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/internal/runtime/maps/group.go#L114-L210" rel="noopener noreferrer" target="_blank"><code>ctrlGroup.matchH2</code></a></td></tr><tr><td>Table 结构</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/internal/runtime/maps/table.go#L25-L71" rel="noopener noreferrer" target="_blank"><code>table</code></a></td></tr><tr><td>查询</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/internal/runtime/maps/runtime.go#L49-L128" rel="noopener noreferrer" target="_blank"><code>runtime_mapaccess1</code></a></td></tr><tr><td>写入</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/internal/runtime/maps/table.go#L259-L364" rel="noopener noreferrer" target="_blank"><code>table.PutSlot</code></a></td></tr><tr><td>删除</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/internal/runtime/maps/table.go#L421-L493" rel="noopener noreferrer" target="_blank"><code>table.Delete</code></a></td></tr><tr><td>grow/split</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/internal/runtime/maps/table.go#L1142-L1259" rel="noopener noreferrer" target="_blank"><code>rehash</code></a></td></tr><tr><td>二次探测</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/internal/runtime/maps/table.go#L1261-L1292" rel="noopener noreferrer" target="_blank"><code>probeSeq</code></a></td></tr><tr><td>迭代器</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/internal/runtime/maps/table.go#L641-L700" rel="noopener noreferrer" target="_blank"><code>Iter</code></a></td></tr><tr><td>ABI 元数据</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/internal/abi/map.go#L11-L64" rel="noopener noreferrer" target="_blank"><code>abi.MapType</code></a></td></tr></tbody></table>
+<h2 id="15-自测题">15. 自测题</h2>
+<ol>
+<li>H1 与 H2 分别在哪一层发挥作用？</li>
+<li>为什么看到 Empty 可以停止查询，看到 Deleted 却不行？</li>
+<li>Group 控制字如何减少昂贵的完整 key 比较？</li>
+<li>Table grow 和 split 有什么区别，何时需要目录翻倍？</li>
+<li>迭代期间扩容后，为什么要沿旧 Table 选 key，再到新 Table 查值？</li>
+<li>运行时的并发 fatal 为什么不能替代锁和 race detector？</li>
+</ol>
+<p>能从“hash → Directory → Table → probeSeq → Group/H2 → key compare”完整走通一次查询，并解释删除、扩容和迭代的特殊处理，才算真正掌握 Go 1.26.5 的 map。</p></main><aside class="toc"><p class="toc-title">本页目录</p><ul><li class="toc-d2"><a href="#1-先分清语言契约与实现">1. 先分清语言契约与实现</a></li><li class="toc-d2"><a href="#2-整体架构">2. 整体架构</a></li><li class="toc-d2"><a href="#3-map-顶层结构">3. Map 顶层结构</a></li><li class="toc-d2"><a href="#4-小-map单-group-快速路径">4. 小 map：单 Group 快速路径</a></li><li class="toc-d2"><a href="#5-group-与控制字">5. Group 与控制字</a></li><li class="toc-d3"><a href="#51-为什么控制字快">5.1 为什么控制字快</a></li><li class="toc-d2"><a href="#6-查询完整路径">6. 查询完整路径</a></li><li class="toc-d3"><a href="#61-二次探测">6.1 二次探测</a></li><li class="toc-d2"><a href="#7-写入更新复用墓碑或扩容">7. 写入：更新、复用墓碑或扩容</a></li><li class="toc-d2"><a href="#8-删除与墓碑">8. 删除与墓碑</a></li><li class="toc-d2"><a href="#9-扩容table-grow-与-split">9. 扩容：Table grow 与 split</a></li><li class="toc-d3"><a href="#91-可扩展哈希目录">9.1 可扩展哈希目录</a></li><li class="toc-d2"><a href="#10-迭代器为何复杂">10. 迭代器为何复杂</a></li><li class="toc-d2"><a href="#11-并发安全">11. 并发安全</a></li><li class="toc-d2"><a href="#12-性能与生产诊断">12. 性能与生产诊断</a></li><li class="toc-d3"><a href="#121-keyelem-设计">12.1 key/elem 设计</a></li><li class="toc-d3"><a href="#122-容量和生命周期">12.2 容量和生命周期</a></li><li class="toc-d3"><a href="#123-观测">12.3 观测</a></li><li class="toc-d2"><a href="#13-常见误区">13. 常见误区</a></li><li class="toc-d2"><a href="#14-源码导航">14. 源码导航</a></li><li class="toc-d2"><a href="#15-自测题">15. 自测题</a></li></ul></aside></div><div class="lightbox" id="lightbox" aria-hidden="true"><img alt=""></div><script type="module" src="/_astro/Base.astro_astro_type_script_index_0_lang.DKvZf7If.js"></script></body></html>
