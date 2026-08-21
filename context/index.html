@@ -5,10 +5,29 @@
           document.documentElement.setAttribute('data-theme', s);
         }
       })();
-    </script><link rel="stylesheet" href="/_astro/Base.C1_PNgav.css"></head><body><header class="topbar"><a href="/" class="brand">HLDay</a><nav><a href="/">专题</a><a href="/posts/">博客</a><a href="https://github.com/hTangle" class="nav-github" aria-label="GitHub">GitHub</a></nav><button class="theme-toggle" id="themeToggle" type="button" title="切换主题（自动/浅色/深色）" aria-label="切换主题">🖥️</button></header><div class="layout"><aside class="booknav"><ul class="nav-tree"><li><p class="nav-group">Go</p><ul><li><p class="nav-subgroup">并发编程</p><ul><li class><a href="/gmp/">GMP 调度器</a></li><li class><a href="/sync-lock/">同步和锁</a></li><li class><a href="/channel/">Channel</a></li><li class="active"><a href="/context/">Context</a></li></ul></li><li><p class="nav-subgroup">内存管理</p><ul><li class><a href="/memory-alloc/">内存分配器</a></li><li class><a href="/gc/">垃圾收集器</a></li><li class><a href="/stack/">栈空间管理</a></li></ul></li></ul></li><li><p class="nav-group">Agent 开发</p><ul><li><p class="nav-subgroup">核心协议与机制</p><ul><li class><a href="/mcp/">MCP</a></li><li class><a href="/skill/">Skill</a></li><li class><a href="/tool-call/">Tool Call</a></li></ul></li></ul></li></ul></aside><main class="prose"><h1>Context：Go 1.26.5 源码分析</h1><p><code>context.Context</code> 是 Go 中跨 API 边界传递 <strong>取消信号、截止时间、取消原因和请求域数据</strong> 的标准协议。它本身不创建“控制中心”，而是通过一棵不可变的派生链，把取消从父节点广播到所有仍然注册的子节点。</p>
+    </script><link rel="stylesheet" href="/_astro/Base.CYI339jz.css"></head><body><header class="topbar"><a href="/" class="brand">HLDay</a><nav><a href="/">专题</a><a href="/posts/">博客</a><a href="https://github.com/hTangle" class="nav-github" aria-label="GitHub">GitHub</a></nav><button class="theme-toggle" id="themeToggle" type="button" title="切换主题（自动/浅色/深色）" aria-label="切换主题">🖥️</button></header><div class="layout"><aside class="booknav"><ul class="nav-tree"><li><p class="nav-group">Go</p><ul><li><p class="nav-subgroup">并发编程</p><ul><li class><a href="/gmp/">GMP 调度器</a></li><li class><a href="/sync-lock/">同步和锁</a></li><li class><a href="/channel/">Channel</a></li><li class="active"><a href="/context/">Context</a></li></ul></li><li><p class="nav-subgroup">内存管理</p><ul><li class><a href="/memory-alloc/">内存分配器</a></li><li class><a href="/gc/">垃圾收集器</a></li><li class><a href="/stack/">栈空间管理</a></li></ul></li></ul></li><li><p class="nav-group">Agent 开发</p><ul><li><p class="nav-subgroup">核心协议与机制</p><ul><li class><a href="/mcp/">MCP</a></li><li class><a href="/skill/">Skill</a></li><li class><a href="/tool-call/">Tool Call</a></li></ul></li></ul></li></ul></aside><main class="prose"><h1>Context：Go 1.26.5 源码分析</h1><p><code>context.Context</code> 是 Go 中跨 API 边界传递 <strong>取消信号、截止时间、取消原因和请求域数据</strong> 的标准协议。它本身不创建“控制中心”，而是通过一棵不可变的派生链，把取消从父节点广播到所有仍然注册的子节点。</p>
 <img src="/images/go/01-context-go-1-26-5-源码分析.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
-<p><strong>💡 先建立心智模型：它解决什么问题</strong></p>
-<p>Context 是一根沿函数调用链往下传的”接力棒”，主要用来告诉下游”<strong>别干了，可以收工了</strong>”。处理请求时用户断开连接、超时、主动取消，都要靠它通知整条链路上的操作停下来，别再浪费 CPU/连接。它还顺带一个闹钟（Deadline）和一个小背包（Value）。接口就四个方法：<code>Done()</code> 返回一个<strong>被关闭时表示取消</strong>的只读 channel（注意是 close 广播，不是发消息）；<code>Err()</code> 告诉你为什么停；<code>Deadline()</code> 告诉你最晚几点；<code>Value(key)</code> 沿父链往上找请求域数据。典型用法：```goctx, cancel := context.WithTimeout(ctx, 3*time.Second)defer cancel()select {case data := &#x3C;-fetch(ctx):case &#x3C;-ctx.Done():    return ctx.Err() // 超时/取消，收工}````WithCancel/WithTimeout/WithValue<code>不是修改原 context，而是在外面**包一层**，于是形成一条链、一棵树：父取消则所有子孙一起取消，子取消不影响父——根（Background）永远不取消。内部</code>cancelCtx<code>维护 children 集合，取消时先记下</code>err<code>再</code>close(done)<code>，保证别人从 Done 醒来时 Err 已可读；</code>timerCtx<code> 只是加了个到点自动 cancel 的定时器；</code>valueCtx<code> 找不到就问爹。几条铁律：</code>defer cancel()<code>一定要调（否则 timer/子节点泄漏）；不要把 Context 存进结构体长期持有，它应当作函数第一个参数一路传；不要传 nil，拿不准用</code>context.TODO()<code>；Value 只放 requestID/trace 这类请求域数据，别用来传可选参数。取消是**协作式**的：ctx 取消不会强杀 goroutine，只是把 </code>Done()<code>关闭，goroutine 要在"能安全停下的检查点"主动响应。阻塞操作（channel、网络 IO、数据库/RPC 调用、timer、锁）天然支持，把 ctx 传进去或放进 select 即可；**纯 CPU 计算没有阻塞点，要自己在循环边界轮询</code>ctx.Err()`**，比如每处理 N 个元素查一次，收到非 nil 就清理返回——一段不可拆分的长计算没法中途取消，只能等它跑到检查点。所以启动 goroutine 前要想清楚它在哪些点能停。记住这些，后面的数据结构和源码路径都是在讲这套机制怎么实现得又安全又高效。</p>
+<div class="markdown-alert markdown-alert-tip" dir="auto">
+<p class="markdown-alert-title" dir="auto"><svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8 1.5c-2.363 0-4 1.69-4 3.75 0 .984.424 1.625.984 2.304l.214.253c.223.264.47.556.673.848.284.411.537.896.621 1.49a.75.75 0 0 1-1.484.211c-.04-.282-.163-.547-.37-.847a8.456 8.456 0 0 0-.542-.68c-.084-.1-.173-.205-.268-.32C3.201 7.75 2.5 6.766 2.5 5.25 2.5 2.31 4.863 0 8 0s5.5 2.31 5.5 5.25c0 1.516-.701 2.5-1.328 3.259-.095.115-.184.22-.268.319-.207.245-.383.453-.541.681-.208.3-.33.565-.37.847a.751.751 0 0 1-1.485-.212c.084-.593.337-1.078.621-1.489.203-.292.45-.584.673-.848.075-.088.147-.173.213-.253.561-.679.985-1.32.985-2.304 0-2.06-1.637-3.75-4-3.75ZM5.75 12h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1 0-1.5ZM6 15.25a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1-.75-.75Z"></path></svg>TIP</p>
+<p> 先建立心智模型：它解决什么问题
+Context 是一根沿函数调用链往下传的”接力棒”，主要用来告诉下游”<strong>别干了，可以收工了</strong>”。处理请求时用户断开连接、超时、主动取消，都要靠它通知整条链路上的操作停下来，别再浪费 CPU/连接。它还顺带一个闹钟（Deadline）和一个小背包（Value）。</p>
+<p>接口就四个方法：<code>Done()</code> 返回一个<strong>被关闭时表示取消</strong>的只读 channel（注意是 close 广播，不是发消息）；<code>Err()</code> 告诉你为什么停；<code>Deadline()</code> 告诉你最晚几点；<code>Value(key)</code> 沿父链往上找请求域数据。典型用法：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#E1E4E8">ctx, cancel </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> context.</span><span style="color:#B392F0">WithTimeout</span><span style="color:#E1E4E8">(ctx, </span><span style="color:#79B8FF">3</span><span style="color:#F97583">*</span><span style="color:#E1E4E8">time.Second)</span></span>
+<span class="line"><span style="color:#F97583">defer</span><span style="color:#B392F0"> cancel</span><span style="color:#E1E4E8">()</span></span>
+<span class="line"><span style="color:#F97583">select</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">case</span><span style="color:#E1E4E8"> data </span><span style="color:#F97583">:=</span><span style="color:#F97583"> &#x3C;-</span><span style="color:#B392F0">fetch</span><span style="color:#E1E4E8">(ctx):</span></span>
+<span class="line"><span style="color:#F97583">case</span><span style="color:#F97583"> &#x3C;-</span><span style="color:#E1E4E8">ctx.</span><span style="color:#B392F0">Done</span><span style="color:#E1E4E8">():</span></span>
+<span class="line"><span style="color:#F97583">    return</span><span style="color:#E1E4E8"> ctx.</span><span style="color:#B392F0">Err</span><span style="color:#E1E4E8">() </span><span style="color:#6A737D">// 超时/取消，收工</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p><code>WithCancel/WithTimeout/WithValue</code> 不是修改原 context，而是在外面<strong>包一层</strong>，于是形成一条链、一棵树：父取消则所有子孙一起取消，子取消不影响父——根（Background）永远不取消。内部 <code>cancelCtx</code> 维护 children 集合，取消时先记下 <code>err</code> 再 <code>close(done)</code>，保证别人从 Done 醒来时 Err 已可读；<code>timerCtx</code> 只是加了个到点自动 cancel 的定时器；<code>valueCtx</code> 找不到就问爹。</p>
+<p>几条铁律：<code>defer cancel()</code> 一定要调（否则 timer/子节点泄漏）；不要把 Context 存进结构体长期持有，它应当作函数第一个参数一路传；不要传 nil，拿不准用 <code>context.TODO()</code>；Value 只放 requestID/trace 这类请求域数据，别用来传可选参数。</p>
+<p>取消是<strong>协作式</strong>的：ctx 取消不会强杀 goroutine，只是把 <code>Done()</code> 关闭，goroutine 要在”能安全停下的检查点”主动响应。阻塞操作（channel、网络 IO、数据库/RPC 调用、timer、锁）天然支持，把 ctx 传进去或放进 select 即可；<strong>纯 CPU 计算没有阻塞点，要自己在循环边界轮询 <code>ctx.Err()</code></strong>，比如每处理 N 个元素查一次，收到非 nil 就清理返回——一段不可拆分的长计算没法中途取消，只能等它跑到检查点。所以启动 goroutine 前要想清楚它在哪些点能停。</p>
+<p>记住这些，后面的数据结构和源码路径都是在讲这套机制怎么实现得又安全又高效。</p>
+</div>
+<blockquote>
+<p>[!info] 版本与源码基线
+本文以 <strong>Go 1.26.5</strong> 为基准，所有源码链接固定到提交 <code>c19862e5f8415b4f24b189d065ed739517c548ba</code>。</p>
+</blockquote>
 <p><strong>版本变化</strong></p>
 
 
@@ -177,8 +196,11 @@
 <li><code>Background()</code> 用在 <code>main</code>、初始化、测试和请求树根部。</li>
 <li><code>TODO()</code> 的运行语义相同，但表达“这里应该传什么 Context 尚未决定”。它是代码审阅信号，不是永久默认值。</li>
 </ul>
-<p><strong>⚠️ 不要传 nil Context</strong></p>
-<p>标准库构造函数会对 nil parent panic。即使暂时不确定，也应显式传 <code>context.TODO()</code>。</p>
+<div class="markdown-alert markdown-alert-warning" dir="auto">
+<p class="markdown-alert-title" dir="auto"><svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>WARNING</p>
+<p> 不要传 nil Context
+标准库构造函数会对 nil parent panic。即使暂时不确定，也应显式传 <code>context.TODO()</code>。</p>
+</div>
 <h2 id="cancelctx取消树的核心"><code>cancelCtx</code>：取消树的核心</h2>
 <p><strong>数据结构</strong></p>
 <p><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/context/context.go#L431-L439" rel="noopener noreferrer" target="_blank"><code>cancelCtx</code></a> 内嵌父 Context：</p>
@@ -207,9 +229,12 @@
 <p><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/context/context.go#L546-L579" rel="noopener noreferrer" target="_blank"><code>cancelCtx.cancel</code></a> 的顺序非常关键：</p>
 <img src="/images/go/07-取消-只执行第一次-先发布状态再广播.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
 <p>为什么先设 <code>err/cause</code> 再关闭 <code>Done</code>？因为其他 goroutine 从 <code>&#x3C;-Done()</code> 返回后，必须能立即读取到稳定的 <code>Err()</code> 和 <code>Cause()</code>。</p>
-<p><strong>⚠️ 取消函数必须被调用</strong></p>
-<p>即使操作成功提前完成，也应 <code>defer cancel()</code>。它不仅关闭信号，还会停止 timer，并把子节点从父节点的 <code>children</code> 集合移除；长期遗漏会保留对象和定时器直到父节点取消。
-<strong>取消原因：<code>Cause</code></strong></p>
+<div class="markdown-alert markdown-alert-warning" dir="auto">
+<p class="markdown-alert-title" dir="auto"><svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>WARNING</p>
+<p> 取消函数必须被调用
+即使操作成功提前完成，也应 <code>defer cancel()</code>。它不仅关闭信号，还会停止 timer，并把子节点从父节点的 <code>children</code> 集合移除；长期遗漏会保留对象和定时器直到父节点取消。</p>
+</div>
+<p><strong>取消原因：<code>Cause</code></strong></p>
 <p>传统 <code>Err()</code> 只有两个稳定类别：<code>context.Canceled</code> 与 <code>context.DeadlineExceeded</code>。Go 1.20 的 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/context/context.go#L255-L300" rel="noopener noreferrer" target="_blank"><code>WithCancelCause</code> 与 <code>Cause</code></a> 把“控制流分类”和“业务根因”分开：</p>
 <pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#E1E4E8">ctx, cancel </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> context.</span><span style="color:#B392F0">WithCancelCause</span><span style="color:#E1E4E8">(parent)</span></span>
 <span class="line"><span style="color:#F97583">defer</span><span style="color:#B392F0"> cancel</span><span style="color:#E1E4E8">(</span><span style="color:#79B8FF">nil</span><span style="color:#E1E4E8">)</span></span>

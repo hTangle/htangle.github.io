@@ -5,21 +5,14 @@
           document.documentElement.setAttribute('data-theme', s);
         }
       })();
-    </script><link rel="stylesheet" href="/_astro/Base.C1_PNgav.css"></head><body><header class="topbar"><a href="/" class="brand">HLDay</a><nav><a href="/">专题</a><a href="/posts/">博客</a><a href="https://github.com/hTangle" class="nav-github" aria-label="GitHub">GitHub</a></nav><button class="theme-toggle" id="themeToggle" type="button" title="切换主题（自动/浅色/深色）" aria-label="切换主题">🖥️</button></header><div class="layout"><aside class="booknav"><ul class="nav-tree"><li><p class="nav-group">Go</p><ul><li><p class="nav-subgroup">并发编程</p><ul><li class><a href="/gmp/">GMP 调度器</a></li><li class><a href="/sync-lock/">同步和锁</a></li><li class><a href="/channel/">Channel</a></li><li class><a href="/context/">Context</a></li></ul></li><li><p class="nav-subgroup">内存管理</p><ul><li class><a href="/memory-alloc/">内存分配器</a></li><li class="active"><a href="/gc/">垃圾收集器</a></li><li class><a href="/stack/">栈空间管理</a></li></ul></li></ul></li><li><p class="nav-group">Agent 开发</p><ul><li><p class="nav-subgroup">核心协议与机制</p><ul><li class><a href="/mcp/">MCP</a></li><li class><a href="/skill/">Skill</a></li><li class><a href="/tool-call/">Tool Call</a></li></ul></li></ul></li></ul></aside><main class="prose"><h1>垃圾收集器：Go 1.26.5 源码分析</h1><p>Go 1.26.5 默认使用 <strong>Green Tea GC</strong>。当前 GC 的总体语义是并发、精确、非分代、不压缩；Green Tea 通过重新组织小对象的标记与扫描工作，提高内存访问局部性和多核扩展性。</p>
-<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="mermaid"><code><span class="line"><span style="color:#F97583">flowchart</span><span style="color:#B392F0"> LR</span></span>
-<span class="line"><span style="color:#FFAB70">    M</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"Mutator：用户 goroutine"</span><span style="color:#F97583">]</span><span style="color:#F97583"> -->|</span><span style="color:#9ECBFF">"分配、写指针"</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> H</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"Go heap"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    R</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"Root：栈、全局、runtime roots"</span><span style="color:#F97583">]</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> G</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"并发 mark"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    G </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> GT</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"Green Tea：按 span 聚合小对象"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    GT </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> H</span></span>
-<span class="line"><span style="color:#FFAB70">    M </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">"write barrier"</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> G</span></span>
-<span class="line"><span style="color:#FFAB70">    M </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">"allocation assist"</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> G</span></span>
-<span class="line"><span style="color:#FFAB70">    G </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> S</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"mark termination"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    S </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> W</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"并发 sweep"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    W </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> A</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"空 slot/page 可再次分配"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    A </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> SC</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"scavenger 可归还物理页"</span><span style="color:#F97583">]</span></span></code></pre>
-<p><strong>• 本文的结论</strong></p>
-<p>Go 1.26.5 的 GC 仍然是 concurrent mark-and-sweep；Green Tea 优化的是 <strong>mark/scan 的局部性与扩展性</strong>，不是把 Go 改成分代 GC，也不是让对象移动或压缩。</p>
-<h3 id="go-1265-版本结论">Go 1.26.5 版本结论</h3>
+    </script><link rel="stylesheet" href="/_astro/Base.CYI339jz.css"></head><body><header class="topbar"><a href="/" class="brand">HLDay</a><nav><a href="/">专题</a><a href="/posts/">博客</a><a href="https://github.com/hTangle" class="nav-github" aria-label="GitHub">GitHub</a></nav><button class="theme-toggle" id="themeToggle" type="button" title="切换主题（自动/浅色/深色）" aria-label="切换主题">🖥️</button></header><div class="layout"><aside class="booknav"><ul class="nav-tree"><li><p class="nav-group">Go</p><ul><li><p class="nav-subgroup">并发编程</p><ul><li class><a href="/gmp/">GMP 调度器</a></li><li class><a href="/sync-lock/">同步和锁</a></li><li class><a href="/channel/">Channel</a></li><li class><a href="/context/">Context</a></li></ul></li><li><p class="nav-subgroup">内存管理</p><ul><li class><a href="/memory-alloc/">内存分配器</a></li><li class="active"><a href="/gc/">垃圾收集器</a></li><li class><a href="/stack/">栈空间管理</a></li></ul></li></ul></li><li><p class="nav-group">Agent 开发</p><ul><li><p class="nav-subgroup">核心协议与机制</p><ul><li class><a href="/mcp/">MCP</a></li><li class><a href="/skill/">Skill</a></li><li class><a href="/tool-call/">Tool Call</a></li></ul></li></ul></li></ul></aside><main class="prose"><h1>垃圾收集器：Go 1.26.5 源码分析</h1><p>Go 1.26.5 默认使用 <strong>Green Tea GC</strong>。当前 GC 的总体语义是并发、精确、非分代、不压缩；Green Tea 通过重新组织小对象的标记与扫描工作，提高内存访问局部性和多核扩展性。</p>
+<img src="/images/go/01-垃圾收集器-go-1-26-5-源码分析.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
+<div class="markdown-alert markdown-alert-important" dir="auto">
+<p class="markdown-alert-title" dir="auto"><svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M0 1.75C0 .784.784 0 1.75 0h12.5C15.216 0 16 .784 16 1.75v9.5A1.75 1.75 0 0 1 14.25 13H8.06l-2.573 2.573A1.458 1.458 0 0 1 3 14.543V13H1.75A1.75 1.75 0 0 1 0 11.25Zm1.75-.25a.25.25 0 0 0-.25.25v9.5c0 .138.112.25.25.25h2a.75.75 0 0 1 .75.75v2.19l2.72-2.72a.749.749 0 0 1 .53-.22h6.5a.25.25 0 0 0 .25-.25v-9.5a.25.25 0 0 0-.25-.25Zm7 2.25v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 9a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>IMPORTANT</p>
+<p> 本文的结论
+Go 1.26.5 的 GC 仍然是 concurrent mark-and-sweep；Green Tea 优化的是 <strong>mark/scan 的局部性与扩展性</strong>，不是把 Go 改成分代 GC，也不是让对象移动或压缩。</p>
+</div>
+<h2 id="go-1265-版本结论">Go 1.26.5 版本结论</h2>
 
 
 
@@ -67,7 +60,7 @@
 
 <table><thead><tr><th>能力</th><th>Go 1.26.5 状态</th></tr></thead><tbody><tr><td>Green Tea GC</td><td>默认开启；可在构建时用 <code>GOEXPERIMENT=nogreenteagc</code> 临时关闭</td></tr><tr><td>收集方式</td><td>并发 mark + 并发 sweep，精确扫描</td></tr><tr><td>分代</td><td>否</td></tr><tr><td>压缩/移动对象</td><td>否，<code>heapObjectsCanMove()</code> 返回 <code>false</code></td></tr><tr><td>写屏障</td><td>混合写屏障：同时 shade 旧指针与新指针</td></tr><tr><td>新对象</td><td>标记期 allocate black</td></tr><tr><td>GC 调节</td><td><code>GOGC</code> + <code>GOMEMLIMIT</code>/<code>debug.SetMemoryLimit</code></td></tr><tr><td>STW</td><td>sweep termination 与 mark termination 仍有短暂停顿</td></tr><tr><td>goroutine leak profile</td><td>Go 1.26 实验能力，构建时需开启对应 experiment</td></tr></tbody></table>
 <p>官方说明给出的预期是：对 GC 压力较重的真实程序，Green Tea 可降低约 10%～40% GC 开销；较新的 amd64 CPU 还可能从向量化扫描获得额外收益。实际效果必须以自己的 workload 为准：<a href="https://go.dev/doc/go1.26" rel="noopener noreferrer" target="_blank">Go 1.26 Release Notes</a>。</p>
-<h3 id="源码地图">源码地图</h3>
+<h2 id="源码地图">源码地图</h2>
 
 
 
@@ -131,46 +124,28 @@
 
 <table><thead><tr><th>主题</th><th>源码入口</th></tr></thead><tbody><tr><td>算法与阶段总览</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mgc.go#L5-L127" rel="noopener noreferrer" target="_blank"><code>runtime/mgc.go#L5-L127</code></a></td></tr><tr><td>GC 触发与启动</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mgc.go#L676-L930" rel="noopener noreferrer" target="_blank"><code>runtime/mgc.go#L676-L930</code></a></td></tr><tr><td>root 与 drain</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mgcmark.go#L221-L430" rel="noopener noreferrer" target="_blank"><code>runtime/mgcmark.go#L221-L430</code></a>、<a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mgcmark.go#L1239-L1380" rel="noopener noreferrer" target="_blank"><code>#L1239-L1380</code></a></td></tr><tr><td>Green Tea</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mgcmark_greenteagc.go#L5-L35" rel="noopener noreferrer" target="_blank"><code>runtime/mgcmark_greenteagc.go#L5-L35</code></a></td></tr><tr><td>Green Tea span 位图</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mgcmark_greenteagc.go#L50-L88" rel="noopener noreferrer" target="_blank"><code>runtime/mgcmark_greenteagc.go#L50-L88</code></a></td></tr><tr><td>Green Tea 扫描</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mgcmark_greenteagc.go#L842-L929" rel="noopener noreferrer" target="_blank"><code>runtime/mgcmark_greenteagc.go#L842-L929</code></a></td></tr><tr><td>GC work queue</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mgcwork.go#L34-L137" rel="noopener noreferrer" target="_blank"><code>runtime/mgcwork.go#L34-L137</code></a></td></tr><tr><td>写屏障</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mbarrier.go#L24-L131" rel="noopener noreferrer" target="_blank"><code>runtime/mbarrier.go#L24-L131</code></a></td></tr><tr><td>allocation assist</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mgcmark.go#L499-L760" rel="noopener noreferrer" target="_blank"><code>runtime/mgcmark.go#L499-L760</code></a></td></tr><tr><td>pacer</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mgcpacer.go#L92-L180" rel="noopener noreferrer" target="_blank"><code>runtime/mgcpacer.go#L92-L180</code></a></td></tr><tr><td>GC CPU limiter</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mgclimit.go#L9-L30" rel="noopener noreferrer" target="_blank"><code>runtime/mgclimit.go#L9-L30</code></a></td></tr><tr><td>sweep</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mgcsweep.go#L359-L457" rel="noopener noreferrer" target="_blank"><code>runtime/mgcsweep.go#L359-L457</code></a></td></tr><tr><td>scavenger</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mgcscavenge.go#L5-L89" rel="noopener noreferrer" target="_blank"><code>runtime/mgcscavenge.go#L5-L89</code></a></td></tr></tbody></table>
 <h2 id="一gc-的基本问题">一、GC 的基本问题</h2>
-<h3 id="可达性而不是出了作用域">可达性，而不是“出了作用域”</h3>
+<h2 id="可达性而不是出了作用域">可达性，而不是“出了作用域”</h2>
 <p>GC 从 root 集合出发，沿指针图寻找可达对象；不可达对象才有资格在 sweep 阶段被回收。</p>
-<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="mermaid"><code><span class="line"><span style="color:#F97583">flowchart</span><span style="color:#B392F0"> TB</span></span>
-<span class="line"><span style="color:#FFAB70">    R1</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"goroutine stack"</span><span style="color:#F97583">]</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> A</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"对象 A"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    R2</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"global"</span><span style="color:#F97583">]</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> B</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"对象 B"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    A </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> C</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"对象 C"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    B </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> C</span></span>
-<span class="line"><span style="color:#FFAB70">    D</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"对象 D"</span><span style="color:#F97583">]</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> E</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"对象 E"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    E </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> D</span></span>
-<span class="line"><span style="color:#FFAB70">    style D fill</span><span style="color:#E1E4E8">:#</span><span style="color:#FFAB70">5b2c2c</span><span style="color:#E1E4E8">,</span><span style="color:#FFAB70">color</span><span style="color:#E1E4E8">:#</span><span style="color:#FFAB70">fff</span></span>
-<span class="line"><span style="color:#FFAB70">    style E fill</span><span style="color:#E1E4E8">:#</span><span style="color:#FFAB70">5b2c2c</span><span style="color:#E1E4E8">,</span><span style="color:#FFAB70">color</span><span style="color:#E1E4E8">:#</span><span style="color:#FFAB70">fff</span></span></code></pre>
+<img src="/images/go/02-可达性-而不是-出了作用域.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
 <p>即使 D 与 E 互相引用，只要 root 到不了它们，整个环仍可回收。反过来，函数返回不保证其对象立即死亡：只要被全局 cache、goroutine、closure、channel buffer 等继续引用，它仍然存活。</p>
-<h3 id="三色抽象仍有用但不是数据结构说明书">三色抽象仍有用，但不是数据结构说明书</h3>
+<h2 id="三色抽象仍有用但不是数据结构说明书">三色抽象仍有用，但不是数据结构说明书</h2>
 <ul>
 <li>白色：尚未确认存活；</li>
 <li>灰色：已发现，但其引用尚未全部扫描；</li>
 <li>黑色：已发现且引用已扫描。</li>
 </ul>
 <p>三色是正确性推理模型。Go 1.26 的 Green Tea 并不一定把每个灰对象都作为独立队列元素；对小对象，它可用 <code>mark bit 已设、scan bit 未设</code> 表示“灰”，再把整个 span 入队。</p>
-<p><strong>📝 弱三色不变式</strong></p>
-<p>并发标记期间必须避免黑对象指向一个无法再被发现的白对象。Go 的混合写屏障通过 shade 被覆盖的旧指针和写入的新指针，加上栈处理规则，维持这一不变式。</p>
+<div class="markdown-alert markdown-alert-note" dir="auto">
+<p class="markdown-alert-title" dir="auto"><svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>NOTE</p>
+<p> 弱三色不变式
+并发标记期间必须避免黑对象指向一个无法再被发现的白对象。Go 的混合写屏障通过 shade 被覆盖的旧指针和写入的新指针，加上栈处理规则，维持这一不变式。</p>
+</div>
 <h2 id="二一个完整-gc-cycle">二、一个完整 GC cycle</h2>
 <p><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mgc.go#L24-L82" rel="noopener noreferrer" target="_blank"><code>mgc.go</code> 顶部注释</a> 给出了权威阶段划分：</p>
-<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="mermaid"><code><span class="line"><span style="color:#F97583">stateDiagram-v2</span></span>
-<span class="line"><span style="color:#F97583">    [*]</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> SweepTermination</span></span>
-<span class="line"><span style="color:#FFAB70">    SweepTermination</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> STW</span></span>
-<span class="line"><span style="color:#FFAB70">    SweepTermination</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> 完成上轮未 sweep span</span></span>
-<span class="line"><span style="color:#FFAB70">    SweepTermination</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> ConcurrentMark</span></span>
-<span class="line"><span style="color:#FFAB70">    ConcurrentMark</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> 开启写屏障和 assist</span></span>
-<span class="line"><span style="color:#FFAB70">    ConcurrentMark</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> root scan + GC workers + mutator assists</span></span>
-<span class="line"><span style="color:#FFAB70">    ConcurrentMark</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> MarkTermination</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> 分布式终止检测完成</span></span>
-<span class="line"><span style="color:#FFAB70">    MarkTermination</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> STW</span></span>
-<span class="line"><span style="color:#FFAB70">    MarkTermination</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> flush cache / 统计 / 切换阶段</span></span>
-<span class="line"><span style="color:#FFAB70">    MarkTermination</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> ConcurrentSweep</span></span>
-<span class="line"><span style="color:#FFAB70">    ConcurrentSweep</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> 关闭写屏障</span></span>
-<span class="line"><span style="color:#FFAB70">    ConcurrentSweep</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> 后台 sweep + allocation-time sweep</span></span>
-<span class="line"><span style="color:#FFAB70">    ConcurrentSweep</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> SweepTermination</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> 达到下次触发条件</span></span></code></pre>
-<h3 id="1-sweep-terminationstw">1. Sweep termination：STW</h3>
+<img src="/images/go/03-二-一个完整-gc-cycle.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
+<h2 id="1-sweep-terminationstw">1. Sweep termination：STW</h2>
 <p>新一轮 mark 不能与旧一轮尚未完成的 sweep 混在一起。runtime 停止世界，完成必要的 unswept span，并让所有 P 在一致的阶段边界开启写屏障。</p>
-<h3 id="2-concurrent-mark主要并发阶段">2. Concurrent mark：主要并发阶段</h3>
+<h2 id="2-concurrent-mark主要并发阶段">2. Concurrent mark：主要并发阶段</h2>
 <p>进入 <code>_GCmark</code> 后：</p>
 <ul>
 <li>写屏障开启；</li>
@@ -180,9 +155,9 @@
 <li>标记期新分配对象直接为黑色。</li>
 </ul>
 <p>root 扫描任务入口是 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mgcmark.go#L221-L329" rel="noopener noreferrer" target="_blank"><code>markroot</code></a>。扫描 goroutine stack 时会短暂停止目标 G，完成精确指针扫描后恢复。</p>
-<h3 id="3-mark-terminationstw">3. Mark termination：STW</h3>
+<h2 id="3-mark-terminationstw">3. Mark termination：STW</h2>
 <p>当所有 root job 和灰对象工作都耗尽，<code>gcMarkDone</code> 执行分布式终止检测，见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mgc.go#L1015-L1095" rel="noopener noreferrer" target="_blank"><code>mgc.go#L1015-L1095</code></a>。随后 STW 进入 mark termination，完成 cache flush、统计和 sweep generation 切换。</p>
-<h3 id="4-concurrent-sweep">4. Concurrent sweep</h3>
+<h2 id="4-concurrent-sweep">4. Concurrent sweep</h2>
 <p>sweep 逐 span 比较本轮 mark bits 与 allocation bits：</p>
 <ul>
 <li>未标记 slot 变为空闲；</li>
@@ -200,37 +175,17 @@
 <span class="line"><span style="color:#E1E4E8">    }</span></span>
 <span class="line"><span style="color:#F97583">    *</span><span style="color:#E1E4E8">slot </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> ptr</span></span></code></pre>
 <p>实际说明见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mbarrier.go#L24-L131" rel="noopener noreferrer" target="_blank"><code>mbarrier.go#L24-L131</code></a>。源码进一步优化为通常不检查当前栈是否灰，直接同时 shade 两者，以减少热路径条件判断。</p>
-<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="mermaid"><code><span class="line"><span style="color:#F97583">sequenceDiagram</span></span>
-<span class="line"><span style="color:#F97583">    participant</span><span style="color:#FFAB70"> M</span><span style="color:#F97583"> as</span><span style="color:#9ECBFF"> Mutator</span></span>
-<span class="line"><span style="color:#F97583">    participant</span><span style="color:#FFAB70"> WB</span><span style="color:#F97583"> as</span><span style="color:#9ECBFF"> Write Barrier</span></span>
-<span class="line"><span style="color:#F97583">    participant</span><span style="color:#FFAB70"> Q</span><span style="color:#F97583"> as</span><span style="color:#9ECBFF"> GC Work</span></span>
-<span class="line"><span style="color:#F97583">    participant</span><span style="color:#FFAB70"> H</span><span style="color:#F97583"> as</span><span style="color:#9ECBFF"> Heap Slot</span></span>
-<span class="line"><span style="color:#FFAB70">    M</span><span style="color:#F97583">->></span><span style="color:#FFAB70">WB</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> *slot = newPtr</span></span>
-<span class="line"><span style="color:#FFAB70">    WB</span><span style="color:#F97583">->></span><span style="color:#FFAB70">Q</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> shade(oldPtr)</span></span>
-<span class="line"><span style="color:#FFAB70">    WB</span><span style="color:#F97583">->></span><span style="color:#FFAB70">Q</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> shade(newPtr)</span></span>
-<span class="line"><span style="color:#FFAB70">    WB</span><span style="color:#F97583">->></span><span style="color:#FFAB70">H</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> publish newPtr</span></span></code></pre>
-<h3 id="为什么栈写通常不走写屏障">为什么栈写通常不走写屏障</h3>
+<img src="/images/go/04-三-写屏障-并发正确性的核心.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
+<h2 id="为什么栈写通常不走写屏障">为什么栈写通常不走写屏障</h2>
 <p>栈属于当前 goroutine 私有，GC 通过停止该 G 并扫描整个栈来获得一致视图。heap/global 的指针写才是并发 mutator 与 marker 最危险的交叉点。</p>
-<h3 id="批量写也必须有-barrier">批量写也必须有 barrier</h3>
+<h2 id="批量写也必须有-barrier">批量写也必须有 barrier</h2>
 <p><code>typedmemmove</code>、slice copy、map 更新等可能批量写指针，runtime 使用 <code>bulkBarrierPreWrite</code> 等路径在真正复制前处理指针，见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mbarrier.go#L150-L220" rel="noopener noreferrer" target="_blank"><code>mbarrier.go#L150-L220</code></a>。这也是为什么 runtime 源码中的 <code>//go:nowritebarrier</code>/<code>//go:nowritebarrierrec</code> 是严格约束。</p>
 <h2 id="四green-teago-126-默认的新标记扫描路径">四、Green Tea：Go 1.26 默认的新标记扫描路径</h2>
-<h3 id="green-tea-要解决的局部性问题">Green Tea 要解决的局部性问题</h3>
+<h2 id="green-tea-要解决的局部性问题">Green Tea 要解决的局部性问题</h2>
 <p>以对象为单位组织扫描工作时，处理过程是：发现对象 -> 标记对象 -> 把对象指针压入 work buffer -> 之后弹出并扫描。若对象很小且分散，扫描会频繁访问不同 span、不同 metadata 与不同 cache line，局部性较差。</p>
 <p>Green Tea 的核心注释位于 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mgcmark_greenteagc.go#L5-L33" rel="noopener noreferrer" target="_blank"><code>mgcmark_greenteagc.go#L5-L33</code></a>：<strong>延迟扫描，在同一 span 上积累多个待扫描对象，再批量扫描。</strong></p>
-<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="mermaid"><code><span class="line"><span style="color:#F97583">flowchart</span><span style="color:#B392F0"> TB</span></span>
-<span class="line"><span style="color:#F97583">    subgraph</span><span style="color:#FFAB70"> Object</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"对象级工作"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">      O1</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"发现 A1"</span><span style="color:#F97583">]</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> Q1</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"workbuf push A1"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">      O2</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"发现 B7"</span><span style="color:#F97583">]</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> Q2</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"workbuf push B7"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">      O3</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"发现 A4"</span><span style="color:#F97583">]</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> Q3</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"workbuf push A4"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#F97583">    end</span></span>
-<span class="line"><span style="color:#F97583">    subgraph</span><span style="color:#FFAB70"> GT</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"Green Tea span 级工作"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">      G1</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"发现 span A 的 obj1"</span><span style="color:#F97583">]</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> MA</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"设置 marks[1]"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">      G2</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"发现 span A 的 obj4"</span><span style="color:#F97583">]</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> MA2</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"设置 marks[4]"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">      MA </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> QA</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"span A 只入队一次"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">      MA2 </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> QA</span></span>
-<span class="line"><span style="color:#FFAB70">      QA </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> SA</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"批量扫描 obj1 + obj4"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#F97583">    end</span></span></code></pre>
-<h3 id="marks-与-scans"><code>marks</code> 与 <code>scans</code></h3>
+<img src="/images/go/05-green-tea-要解决的局部性问题.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
+<h2 id="marks-与-scans"><code>marks</code> 与 <code>scans</code></h2>
 <p>符合条件的小对象 span 尾部有一个 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mgcmark_greenteagc.go#L50-L71" rel="noopener noreferrer" target="_blank"><code>spanInlineMarkBits</code></a>：</p>
 <pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">type</span><span style="color:#B392F0"> spanInlineMarkBits</span><span style="color:#F97583"> struct</span><span style="color:#E1E4E8"> {</span></span>
 <span class="line"><span style="color:#E1E4E8">    scans [</span><span style="color:#79B8FF">63</span><span style="color:#E1E4E8">]</span><span style="color:#F97583">uint8</span></span>
@@ -245,7 +200,7 @@
 <li><code>owned</code>：控制 span 是否已被某个 worker 获取/入队。</li>
 </ul>
 <p><code>gcUsesSpanInlineMarkBits</code> 当前要求 metadata 可放 span 且对象大小至少 16 B，见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mgcmark_greenteagc.go#L252-L260" rel="noopener noreferrer" target="_blank"><code>#L252-L260</code></a>。不满足条件的大对象或其他特殊对象仍走对象级 workbuf 路径。</p>
-<h3 id="发现指针标记对象排队-span">发现指针：标记对象，排队 span</h3>
+<h2 id="发现指针标记对象排队-span">发现指针：标记对象，排队 span</h2>
 <p><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mgcmark_greenteagc.go#L262-L314" rel="noopener noreferrer" target="_blank"><code>tryDeferToSpanScan</code></a> 的步骤是：</p>
 <ol>
 <li>用 arena bitmap 快速判断地址所在 span 是否支持 inline mark bits；</li>
@@ -255,10 +210,10 @@
 <li>scan 对象尝试获取 span ownership；</li>
 <li>把代表该 span 的条目放入当前 P 的 FIFO span queue。</li>
 </ol>
-<h3 id="为什么-span-queue-用-fifo">为什么 span queue 用 FIFO</h3>
+<h2 id="为什么-span-queue-用-fifo">为什么 span queue 用 FIFO</h2>
 <p>源码说明 FIFO 比传统 workbuf 的 LIFO 更有利于“让同一 span 继续积累对象”，见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mgcmark_greenteagc.go#L19-L28" rel="noopener noreferrer" target="_blank"><code>mgcmark_greenteagc.go#L19-L28</code></a>。每个 P 有本地可窃取的 <code>spanQueue</code>，减少全局争用；工作不足时可从其他 P steal。</p>
 <p>GC work 的优先级也经过设计：先消费 P-local 对象 workbuf，再消费 P-local span queue，然后才访问全局/窃取，见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mgcwork.go#L51-L68" rel="noopener noreferrer" target="_blank"><code>mgcwork.go#L51-L68</code></a>。优先对象级工作可以给 span 更多时间积累待扫对象。</p>
-<h3 id="批量扫描-span">批量扫描 span</h3>
+<h2 id="批量扫描-span">批量扫描 span</h2>
 <p><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mgcmark_greenteagc.go#L842-L929" rel="noopener noreferrer" target="_blank"><code>scanSpan</code></a> 会：</p>
 <ol>
 <li>释放 span ownership；</li>
@@ -268,20 +223,14 @@
 <li>密度足够且平台支持时调用 packed/vectorized span scan；</li>
 <li>把发现的新指针继续送入 span queue 或传统 object queue。</li>
 </ol>
-<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="mermaid"><code><span class="line"><span style="color:#F97583">flowchart</span><span style="color:#B392F0"> TD</span></span>
-<span class="line"><span style="color:#FFAB70">    A</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"dequeue span"</span><span style="color:#F97583">]</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> B</span><span style="color:#F97583">{</span><span style="color:#9ECBFF">"只有一个新 mark?"</span><span style="color:#F97583">}</span></span>
-<span class="line"><span style="color:#FFAB70">    B </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">"是"</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> C</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"扫描代表对象"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    B </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">"否"</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> D</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"toScan = marks - scans"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    D </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> E</span><span style="color:#F97583">{</span><span style="color:#9ECBFF">"密度与平台满足 fast scan?"</span><span style="color:#F97583">}</span></span>
-<span class="line"><span style="color:#FFAB70">    E </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">"否"</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> F</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"sparse object scan"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    E </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">"是"</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> G</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"ScanSpanPacked / SIMD 机会"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    C </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> H</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"处理新发现指针"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    F </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> H</span></span>
-<span class="line"><span style="color:#FFAB70">    G </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> H</span></span></code></pre>
-<p><strong>💡 Green Tea 没有消灭三色标记</strong></p>
-<p>它把“灰对象队列”部分改写为“mark bit 与 scan bit 的差集 + span queue”。可达性、安全屏障、root scan、assist、mark termination、sweep 等总体协议仍然存在。</p>
+<img src="/images/go/06-批量扫描-span.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
+<div class="markdown-alert markdown-alert-tip" dir="auto">
+<p class="markdown-alert-title" dir="auto"><svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8 1.5c-2.363 0-4 1.69-4 3.75 0 .984.424 1.625.984 2.304l.214.253c.223.264.47.556.673.848.284.411.537.896.621 1.49a.75.75 0 0 1-1.484.211c-.04-.282-.163-.547-.37-.847a8.456 8.456 0 0 0-.542-.68c-.084-.1-.173-.205-.268-.32C3.201 7.75 2.5 6.766 2.5 5.25 2.5 2.31 4.863 0 8 0s5.5 2.31 5.5 5.25c0 1.516-.701 2.5-1.328 3.259-.095.115-.184.22-.268.319-.207.245-.383.453-.541.681-.208.3-.33.565-.37.847a.751.751 0 0 1-1.485-.212c.084-.593.337-1.078.621-1.489.203-.292.45-.584.673-.848.075-.088.147-.173.213-.253.561-.679.985-1.32.985-2.304 0-2.06-1.637-3.75-4-3.75ZM5.75 12h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1 0-1.5ZM6 15.25a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1-.75-.75Z"></path></svg>TIP</p>
+<p> Green Tea 没有消灭三色标记
+它把“灰对象队列”部分改写为“mark bit 与 scan bit 的差集 + span queue”。可达性、安全屏障、root scan、assist、mark termination、sweep 等总体协议仍然存在。</p>
+</div>
 <h2 id="五并行标记work-buffer-与-assist">五、并行标记、work buffer 与 assist</h2>
-<h3 id="gc-worker">GC worker</h3>
+<h2 id="gc-worker">GC worker</h2>
 <p>调度器会运行三类 mark worker：</p>
 <ul>
 <li>dedicated：专用执行标记；</li>
@@ -289,28 +238,18 @@
 <li>idle：只利用本来空闲的 P。</li>
 </ul>
 <p>本地 <code>gcWork</code> 持有两个 object workbuf、一个 Green Tea span queue、临时 pointer buffer 与统计字段，见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mgcwork.go#L70-L137" rel="noopener noreferrer" target="_blank"><code>mgcwork.go#L70-L137</code></a>。双 workbuf 提供迟滞，降低频繁访问全局 full/empty 列表的竞争。</p>
-<h3 id="allocation-assist谁制造垃圾谁帮助清扫">Allocation assist：谁制造垃圾，谁帮助清扫</h3>
+<h2 id="allocation-assist谁制造垃圾谁帮助清扫">Allocation assist：谁制造垃圾，谁帮助清扫</h2>
 <p>GC 期间分配会产生 assist debt。<code>mallocgc</code> 先扣减 credit；债务过高时当前 goroutine 进入 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mgcmark.go#L499-L610" rel="noopener noreferrer" target="_blank"><code>gcAssistAlloc</code></a>，执行一部分标记工作后才能继续大量分配。</p>
-<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="mermaid"><code><span class="line"><span style="color:#F97583">sequenceDiagram</span></span>
-<span class="line"><span style="color:#F97583">    participant</span><span style="color:#FFAB70"> G</span><span style="color:#F97583"> as</span><span style="color:#9ECBFF"> Allocating G</span></span>
-<span class="line"><span style="color:#F97583">    participant</span><span style="color:#FFAB70"> M</span><span style="color:#F97583"> as</span><span style="color:#9ECBFF"> mallocgc</span></span>
-<span class="line"><span style="color:#F97583">    participant</span><span style="color:#FFAB70"> P</span><span style="color:#F97583"> as</span><span style="color:#9ECBFF"> GC Pacer</span></span>
-<span class="line"><span style="color:#F97583">    participant</span><span style="color:#FFAB70"> W</span><span style="color:#F97583"> as</span><span style="color:#9ECBFF"> Mark Work</span></span>
-<span class="line"><span style="color:#FFAB70">    G</span><span style="color:#F97583">->></span><span style="color:#FFAB70">M</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> allocate N bytes</span></span>
-<span class="line"><span style="color:#FFAB70">    M</span><span style="color:#F97583">->></span><span style="color:#FFAB70">P</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> 扣 assist credit</span></span>
-<span class="line"><span style="color:#FFAB70">    P</span><span style="color:#F97583">-->></span><span style="color:#FFAB70">G</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> debt 超阈值</span></span>
-<span class="line"><span style="color:#FFAB70">    G</span><span style="color:#F97583">->></span><span style="color:#FFAB70">W</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> gcAssistAlloc 扫描</span></span>
-<span class="line"><span style="color:#FFAB70">    W</span><span style="color:#F97583">-->></span><span style="color:#FFAB70">G</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> 获得 credit</span></span>
-<span class="line"><span style="color:#FFAB70">    G</span><span style="color:#F97583">->></span><span style="color:#FFAB70">M</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> 继续分配</span></span></code></pre>
+<img src="/images/go/07-allocation-assist-谁制造垃圾-谁帮助清扫.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
 <p>它既限制 GC 期间的无限制 heap 增长，也把扫描成本按分配速率反馈给 mutator。因此延迟尖刺不一定全来自 STW，也可能是业务 goroutine 在做 assist。</p>
 <h2 id="六pacer决定何时开始用多少-cpu">六、Pacer：决定何时开始、用多少 CPU</h2>
-<h3 id="gogc-的堆目标"><code>GOGC</code> 的堆目标</h3>
+<h2 id="gogc-的堆目标"><code>GOGC</code> 的堆目标</h2>
 <p>稳态下可用近似模型理解：</p>
 <p>$$
 TargetHeap \approx LiveHeap + \frac{GOGC}{100} \times \left(LiveHeap + ScanStacks + ScanGlobals\right)
 $$</p>
 <p><code>GOGC=100</code> 不是简单地承诺“内存翻倍才 GC”，因为当前 pacer 还纳入可扫描栈、全局、memory limit、预测误差和最小 heap goal。源码控制器结构见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mgcpacer.go#L92-L180" rel="noopener noreferrer" target="_blank"><code>gcControllerState</code></a>。</p>
-<h3 id="gomemlimit-是-soft-limit"><code>GOMEMLIMIT</code> 是 soft limit</h3>
+<h2 id="gomemlimit-是-soft-limit"><code>GOMEMLIMIT</code> 是 soft limit</h2>
 <p>memory limit 覆盖 runtime 管理的大部分内存，可用官方定义近似理解：</p>
 <pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="text"><code><span class="line"><span>runtime memory = /memory/classes/total:bytes</span></span>
 <span class="line"><span>               - /memory/classes/heap/released:bytes</span></span></code></pre>
@@ -319,9 +258,12 @@ $$</p>
 <p>或：</p>
 <pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#E1E4E8">debug.</span><span style="color:#B392F0">SetMemoryLimit</span><span style="color:#E1E4E8">(</span><span style="color:#79B8FF">1500</span><span style="color:#F97583"> &#x3C;&#x3C;</span><span style="color:#79B8FF"> 20</span><span style="color:#E1E4E8">)</span></span></code></pre>
 <p>limit 是软的：当配置过低导致 GC thrashing 时，runtime 宁可暂时超过 limit，也要保证程序继续前进。内部 <code>gcCPULimiter</code> 使用 leaky bucket，将 GC CPU 保守限制在大约 50%，见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mgclimit.go#L9-L30" rel="noopener noreferrer" target="_blank"><code>mgclimit.go#L9-L30</code></a>。完整调优模型见 <a href="https://go.dev/doc/gc-guide" rel="noopener noreferrer" target="_blank">A Guide to the Go Garbage Collector</a>。</p>
-<p><strong>⚠️ 容器里不要直接把 GOMEMLIMIT 等于 pod limit</strong></p>
-<p>给 thread stack、runtime metadata、cgo、共享库、profile、内核缓冲和瞬时峰值留余量。soft limit 也不是 OOM 的绝对防线。</p>
-<h3 id="触发条件">触发条件</h3>
+<div class="markdown-alert markdown-alert-warning" dir="auto">
+<p class="markdown-alert-title" dir="auto"><svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>WARNING</p>
+<p> 容器里不要直接把 GOMEMLIMIT 等于 pod limit
+给 thread stack、runtime metadata、cgo、共享库、profile、内核缓冲和瞬时峰值留余量。soft limit 也不是 OOM 的绝对防线。</p>
+</div>
+<h2 id="触发条件">触发条件</h2>
 <p><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mgc.go#L703-L725" rel="noopener noreferrer" target="_blank"><code>gcTrigger.test</code></a> 支持：</p>
 <ul>
 <li>heap 达到 controller trigger；</li>
@@ -331,19 +273,13 @@ $$</p>
 <p><code>runtime.GC()</code> 会等待一次完整 cycle 的 mark 和 sweep，而不是“发个信号立即返回”，实现见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mgc.go#L519-L592" rel="noopener noreferrer" target="_blank"><code>mgc.go#L519-L592</code></a>。</p>
 <h2 id="七栈扫描与-gc">七、栈扫描与 GC</h2>
 <p>goroutine stack 是 root 的重要组成部分。GC 获得目标 G 的 stack ownership，依据编译器生成的 stack map 精确识别指针；若 G 停在异步安全点，最内层 frame 可能需要保守扫描。结构见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mgcstack.go#L166-L198" rel="noopener noreferrer" target="_blank"><code>mgcstack.go#L166-L198</code></a>。</p>
-<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="mermaid"><code><span class="line"><span style="color:#F97583">flowchart</span><span style="color:#B392F0"> TD</span></span>
-<span class="line"><span style="color:#FFAB70">    A</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"markroot: goroutine root job"</span><span style="color:#F97583">]</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> B</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"停止/获取目标 G"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    B </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> C</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"unwind frames"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    C </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> D</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"stack map 找指针 slot"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    D </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> E</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"shade heap pointers"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    E </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> F</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"扫描 stack object 指针图"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    F </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> G</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"释放并恢复 G"</span><span style="color:#F97583">]</span></span></code></pre>
+<img src="/images/go/08-七-栈扫描与-gc.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
 <p>栈越多、越大、指针越密集，root scan 成本越高。goroutine 数量不仅是 scheduler 指标，也直接影响 GC 与内存，详见 <a href="/stack/">栈空间管理</a>。</p>
 <h2 id="八sweep-与-scavenger">八、Sweep 与 Scavenger</h2>
-<h3 id="sweep-generation">Sweep generation</h3>
+<h2 id="sweep-generation">Sweep generation</h2>
 <p><code>mspan.sweepgen</code> 与 <code>mheap_.sweepgen</code> 共同表示 span 未 sweep、正在 sweep、已 sweep 或被 mcache 缓存等状态，字段规则写在 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mheap.go#L494-L500" rel="noopener noreferrer" target="_blank"><code>mheap.go#L494-L500</code></a>。每轮 GC sweepgen 增加 2，让 <code>mcentral</code> 的两套 spanSet 交换 swept/unswept 角色。</p>
 <p>这是一种代际编号，不是“分代 GC”。</p>
-<h3 id="scavenger-为什么独立">Scavenger 为什么独立</h3>
+<h2 id="scavenger-为什么独立">Scavenger 为什么独立</h2>
 <p>GC/sweep 决定对象和 page 是否可复用；scavenger 决定空闲 page 的物理 backing 是否应该释放。后台 scavenger 默认只愿意消耗约 1% mutator 时间，源码见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mgcscavenge.go#L100-L126" rel="noopener noreferrer" target="_blank"><code>mgcscavenge.go#L100-L126</code></a>。</p>
 <p>在 memory limit 压力、heap grow 或 <code>debug.FreeOSMemory</code> 场景，还可能同步、更积极地 scavenging。</p>
 <h2 id="九finalizercleanup-与泄漏理解">九、Finalizer、Cleanup 与泄漏理解</h2>
@@ -357,14 +293,9 @@ $$</p>
 </ul>
 <p>Go 1.26 还提供实验性的 <code>goroutineleak</code> profile。它借助 GC 可达性判断一部分永远无法被唤醒的 goroutine，但对仍被 runnable goroutine 或 global 引用的同步原语可能无法判定。该能力需要构建时开启实验，详情见 <a href="https://go.dev/doc/go1.26" rel="noopener noreferrer" target="_blank">Go 1.26 Release Notes</a>。</p>
 <h2 id="十生产诊断">十、生产诊断</h2>
-<h3 id="一套证据链">一套证据链</h3>
-<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="mermaid"><code><span class="line"><span style="color:#F97583">flowchart</span><span style="color:#B392F0"> LR</span></span>
-<span class="line"><span style="color:#FFAB70">    A</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"告警：RSS/延迟/CPU"</span><span style="color:#F97583">]</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> B</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"runtime/metrics 趋势"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    B </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> C</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"heap + alloc profile"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    C </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> D</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"gctrace / execution trace"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    D </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> E</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"代码保留路径或分配热点"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    E </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> F</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"benchmark / load test 验证"</span><span style="color:#F97583">]</span></span></code></pre>
-<h3 id="常用指标">常用指标</h3>
+<h2 id="一套证据链">一套证据链</h2>
+<img src="/images/go/09-一套证据链.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
+<h2 id="常用指标">常用指标</h2>
 
 
 
@@ -407,20 +338,27 @@ $$</p>
 
 
 <table><thead><tr><th>指标/证据</th><th>解释</th></tr></thead><tbody><tr><td><code>/gc/heap/live:bytes</code></td><td>上轮 GC 后确认存活的 heap</td></tr><tr><td><code>/gc/heap/goal:bytes</code></td><td>当前 cycle 的 heap goal</td></tr><tr><td><code>/gc/heap/allocs:bytes</code></td><td>累计 heap 分配</td></tr><tr><td><code>/gc/pauses:seconds</code></td><td>GC stop-the-world pause 分布</td></tr><tr><td><code>/memory/classes/heap/released:bytes</code></td><td>已归还 OS 的 heap page</td></tr><tr><td><code>/gc/scan/heap:bytes</code></td><td>需要扫描的 heap 规模</td></tr><tr><td>heap <code>inuse_space</code></td><td>profile 时仍保留的采样对象</td></tr><tr><td>heap <code>alloc_space</code></td><td>时间区间累计分配热点</td></tr></tbody></table>
-<h3 id="命令">命令</h3>
-<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="bash"><code><span class="line"><span style="color:#6A737D">## 每轮 GC 摘要GODEBUG=gctrace=1 ./app</span></span>
+<h2 id="命令">命令</h2>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="bash"><code><span class="line"><span style="color:#6A737D"># 每轮 GC 摘要</span></span>
+<span class="line"><span style="color:#E1E4E8">GODEBUG</span><span style="color:#F97583">=</span><span style="color:#E1E4E8">gctrace</span><span style="color:#F97583">=</span><span style="color:#9ECBFF">1</span><span style="color:#B392F0"> ./app</span></span>
 <span class="line"></span>
-<span class="line"><span style="color:#6A737D">## 加上 scavenger 摘要GODEBUG=gctrace=1,scavtrace=1 ./app</span></span>
+<span class="line"><span style="color:#6A737D"># 加上 scavenger 摘要</span></span>
+<span class="line"><span style="color:#E1E4E8">GODEBUG</span><span style="color:#F97583">=</span><span style="color:#E1E4E8">gctrace</span><span style="color:#F97583">=</span><span style="color:#9ECBFF">1,</span><span style="color:#E1E4E8">scavtrace</span><span style="color:#F97583">=</span><span style="color:#9ECBFF">1</span><span style="color:#B392F0"> ./app</span></span>
 <span class="line"></span>
-<span class="line"><span style="color:#6A737D">## 测试/benchmark 的 heap profilego test -run='^$' -bench=BenchmarkX -benchmem -memprofile=mem.out ./pkg</span></span>
+<span class="line"><span style="color:#6A737D"># 测试/benchmark 的 heap profile</span></span>
+<span class="line"><span style="color:#B392F0">go</span><span style="color:#9ECBFF"> test</span><span style="color:#79B8FF"> -run=</span><span style="color:#9ECBFF">'^$'</span><span style="color:#79B8FF"> -bench=BenchmarkX</span><span style="color:#79B8FF"> -benchmem</span><span style="color:#79B8FF"> -memprofile=mem.out</span><span style="color:#9ECBFF"> ./pkg</span></span>
 <span class="line"><span style="color:#B392F0">go</span><span style="color:#9ECBFF"> tool</span><span style="color:#9ECBFF"> pprof</span><span style="color:#79B8FF"> -http=:0</span><span style="color:#9ECBFF"> mem.out</span></span>
 <span class="line"></span>
-<span class="line"><span style="color:#6A737D">## 运行时 trace，可看到 GC、assist、STW、调度事件go test -run TestX -trace=trace.out ./pkg</span></span>
+<span class="line"><span style="color:#6A737D"># 运行时 trace，可看到 GC、assist、STW、调度事件</span></span>
+<span class="line"><span style="color:#B392F0">go</span><span style="color:#9ECBFF"> test</span><span style="color:#79B8FF"> -run</span><span style="color:#9ECBFF"> TestX</span><span style="color:#79B8FF"> -trace=trace.out</span><span style="color:#9ECBFF"> ./pkg</span></span>
 <span class="line"><span style="color:#B392F0">go</span><span style="color:#9ECBFF"> tool</span><span style="color:#9ECBFF"> trace</span><span style="color:#9ECBFF"> trace.out</span></span></code></pre>
-<p><strong>💡 Green Tea 的 <code>gctrace=2</code></strong></p>
-<p>Go 1.26 的 Green Tea 源码包含按 size class 的扫描统计，<code>debug.gctrace > 1</code> 时会收集更细数据；这是实现级诊断，格式不应被业务程序当成稳定 API。</p>
-<h3 id="如何解释常见现象">如何解释常见现象</h3>
-<h4 id="gc-很频繁但-heap-不大">GC 很频繁但 heap 不大</h4>
+<div class="markdown-alert markdown-alert-tip" dir="auto">
+<p class="markdown-alert-title" dir="auto"><svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8 1.5c-2.363 0-4 1.69-4 3.75 0 .984.424 1.625.984 2.304l.214.253c.223.264.47.556.673.848.284.411.537.896.621 1.49a.75.75 0 0 1-1.484.211c-.04-.282-.163-.547-.37-.847a8.456 8.456 0 0 0-.542-.68c-.084-.1-.173-.205-.268-.32C3.201 7.75 2.5 6.766 2.5 5.25 2.5 2.31 4.863 0 8 0s5.5 2.31 5.5 5.25c0 1.516-.701 2.5-1.328 3.259-.095.115-.184.22-.268.319-.207.245-.383.453-.541.681-.208.3-.33.565-.37.847a.751.751 0 0 1-1.485-.212c.084-.593.337-1.078.621-1.489.203-.292.45-.584.673-.848.075-.088.147-.173.213-.253.561-.679.985-1.32.985-2.304 0-2.06-1.637-3.75-4-3.75ZM5.75 12h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1 0-1.5ZM6 15.25a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1-.75-.75Z"></path></svg>TIP</p>
+<p><code>gctrace=2</code>
+Go 1.26 的 Green Tea 源码包含按 size class 的扫描统计，<code>debug.gctrace > 1</code> 时会收集更细数据；这是实现级诊断，格式不应被业务程序当成稳定 API。</p>
+</div>
+<h2 id="如何解释常见现象">如何解释常见现象</h2>
+<h3 id="gc-很频繁但-heap-不大">GC 很频繁但 heap 不大</h3>
 <p>优先检查：</p>
 <ul>
 <li><code>GOMEMLIMIT</code> 是否设置过低；</li>
@@ -429,7 +367,7 @@ $$</p>
 <li>non-heap runtime/cgo 内存是否挤压 limit；</li>
 <li>live heap 是否接近 limit，导致 pacer 无 runway。</li>
 </ul>
-<h4 id="heap-profile-看不大但-rss-很高">heap profile 看不大但 RSS 很高</h4>
+<h3 id="heap-profile-看不大但-rss-很高">heap profile 看不大但 RSS 很高</h3>
 <p>检查：</p>
 <ul>
 <li>goroutine stack；</li>
@@ -439,10 +377,10 @@ $$</p>
 <li>binary/shared library mapping；</li>
 <li>profile 采样误差。</li>
 </ul>
-<h4 id="p99-在-gc-期间抬升">P99 在 GC 期间抬升</h4>
+<h3 id="p99-在-gc-期间抬升">P99 在 GC 期间抬升</h3>
 <p>不要只看 STW：还要查看 allocation assist、CPU 被 mark worker 占用、page fault/scavenging、scheduler run queue 与锁竞争。</p>
 <h2 id="十一调优原则">十一、调优原则</h2>
-<h3 id="优先优化分配图而不是先调-gogc">优先优化分配图，而不是先调 GOGC</h3>
+<h2 id="优先优化分配图而不是先调-gogc">优先优化分配图，而不是先调 GOGC</h2>
 <ol>
 <li>减少无意义分配和复制；</li>
 <li>缩小长期存活指针图；</li>
@@ -451,7 +389,7 @@ $$</p>
 <li>在容器中配置合理 <code>GOMEMLIMIT</code> 并留 headroom；</li>
 <li>用稳定 workload 比较吞吐、P99、GC CPU、peak RSS。</li>
 </ol>
-<h3 id="gogc-与内存的基本权衡"><code>GOGC</code> 与内存的基本权衡</h3>
+<h2 id="gogc-与内存的基本权衡"><code>GOGC</code> 与内存的基本权衡</h2>
 <ul>
 <li>提高 <code>GOGC</code>：通常 GC 更少、CPU 更低、峰值 heap 更高；</li>
 <li>降低 <code>GOGC</code>：通常 GC 更频繁、CPU 更高、heap 更低；</li>
@@ -532,7 +470,7 @@ $$</p>
 <pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="text"><code><span class="line"><span>正确性层：root + 混合写屏障 + allocate black + 并发终止检测</span></span>
 <span class="line"><span>性能层：Green Tea span batching + per-P work + pacer + assist + sweep/scavenge</span></span></code></pre>
 <p>Green Tea 没有推翻 Go GC，而是重新组织小对象扫描：把单个对象的随机访存，尽可能转化为同 span 的批量处理。理解它时必须同时连接 <a href="/memory-alloc/">内存分配器</a> 的 span/bitmap 布局和 <a href="/stack/">栈空间管理</a> 的 root scan，才能形成完整内存模型。</p>
-<h3 id="参考资料">参考资料</h3>
+<h2 id="参考资料">参考资料</h2>
 <ul>
 <li><a href="https://go.dev/doc/go1.26" rel="noopener noreferrer" target="_blank">Go 1.26 Release Notes</a></li>
 <li><a href="https://go.dev/doc/gc-guide" rel="noopener noreferrer" target="_blank">A Guide to the Go Garbage Collector</a></li>
@@ -540,4 +478,4 @@ $$</p>
 <li><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mgc.go" rel="noopener noreferrer" target="_blank">Go 1.26.5 runtime/mgc.go</a></li>
 <li><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mgcmark_greenteagc.go" rel="noopener noreferrer" target="_blank">Go 1.26.5 Green Tea implementation</a></li>
 <li><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mgcpacer.go" rel="noopener noreferrer" target="_blank">Go 1.26.5 GC pacer</a></li>
-</ul></main><aside class="toc"><p class="toc-title">本页目录</p><ul><li class="toc-d3"><a href="#go-1265-版本结论">Go 1.26.5 版本结论</a></li><li class="toc-d3"><a href="#源码地图">源码地图</a></li><li class="toc-d2"><a href="#一gc-的基本问题">一、GC 的基本问题</a></li><li class="toc-d3"><a href="#可达性而不是出了作用域">可达性，而不是“出了作用域”</a></li><li class="toc-d3"><a href="#三色抽象仍有用但不是数据结构说明书">三色抽象仍有用，但不是数据结构说明书</a></li><li class="toc-d2"><a href="#二一个完整-gc-cycle">二、一个完整 GC cycle</a></li><li class="toc-d3"><a href="#1-sweep-terminationstw">1. Sweep termination：STW</a></li><li class="toc-d3"><a href="#2-concurrent-mark主要并发阶段">2. Concurrent mark：主要并发阶段</a></li><li class="toc-d3"><a href="#3-mark-terminationstw">3. Mark termination：STW</a></li><li class="toc-d3"><a href="#4-concurrent-sweep">4. Concurrent sweep</a></li><li class="toc-d2"><a href="#三写屏障并发正确性的核心">三、写屏障：并发正确性的核心</a></li><li class="toc-d3"><a href="#为什么栈写通常不走写屏障">为什么栈写通常不走写屏障</a></li><li class="toc-d3"><a href="#批量写也必须有-barrier">批量写也必须有 barrier</a></li><li class="toc-d2"><a href="#四green-teago-126-默认的新标记扫描路径">四、Green Tea：Go 1.26 默认的新标记扫描路径</a></li><li class="toc-d3"><a href="#green-tea-要解决的局部性问题">Green Tea 要解决的局部性问题</a></li><li class="toc-d3"><a href="#marks-与-scans">marks 与 scans</a></li><li class="toc-d3"><a href="#发现指针标记对象排队-span">发现指针：标记对象，排队 span</a></li><li class="toc-d3"><a href="#为什么-span-queue-用-fifo">为什么 span queue 用 FIFO</a></li><li class="toc-d3"><a href="#批量扫描-span">批量扫描 span</a></li><li class="toc-d2"><a href="#五并行标记work-buffer-与-assist">五、并行标记、work buffer 与 assist</a></li><li class="toc-d3"><a href="#gc-worker">GC worker</a></li><li class="toc-d3"><a href="#allocation-assist谁制造垃圾谁帮助清扫">Allocation assist：谁制造垃圾，谁帮助清扫</a></li><li class="toc-d2"><a href="#六pacer决定何时开始用多少-cpu">六、Pacer：决定何时开始、用多少 CPU</a></li><li class="toc-d3"><a href="#gogc-的堆目标">GOGC 的堆目标</a></li><li class="toc-d3"><a href="#gomemlimit-是-soft-limit">GOMEMLIMIT 是 soft limit</a></li><li class="toc-d3"><a href="#触发条件">触发条件</a></li><li class="toc-d2"><a href="#七栈扫描与-gc">七、栈扫描与 GC</a></li><li class="toc-d2"><a href="#八sweep-与-scavenger">八、Sweep 与 Scavenger</a></li><li class="toc-d3"><a href="#sweep-generation">Sweep generation</a></li><li class="toc-d3"><a href="#scavenger-为什么独立">Scavenger 为什么独立</a></li><li class="toc-d2"><a href="#九finalizercleanup-与泄漏理解">九、Finalizer、Cleanup 与泄漏理解</a></li><li class="toc-d2"><a href="#十生产诊断">十、生产诊断</a></li><li class="toc-d3"><a href="#一套证据链">一套证据链</a></li><li class="toc-d3"><a href="#常用指标">常用指标</a></li><li class="toc-d3"><a href="#命令">命令</a></li><li class="toc-d3"><a href="#如何解释常见现象">如何解释常见现象</a></li><li class="toc-d2"><a href="#十一调优原则">十一、调优原则</a></li><li class="toc-d3"><a href="#优先优化分配图而不是先调-gogc">优先优化分配图，而不是先调 GOGC</a></li><li class="toc-d3"><a href="#gogc-与内存的基本权衡">GOGC 与内存的基本权衡</a></li><li class="toc-d2"><a href="#十二常见误区">十二、常见误区</a></li><li class="toc-d2"><a href="#十三源码阅读主线与验收">十三、源码阅读主线与验收</a></li><li class="toc-d2"><a href="#总结">总结</a></li><li class="toc-d3"><a href="#参考资料">参考资料</a></li></ul></aside></div><div class="lightbox" id="lightbox" aria-hidden="true"><img alt=""></div><script type="module" src="/_astro/Base.astro_astro_type_script_index_0_lang.DKvZf7If.js"></script></body></html>
+</ul></main><aside class="toc"><p class="toc-title">本页目录</p><ul><li class="toc-d2"><a href="#go-1265-版本结论">Go 1.26.5 版本结论</a></li><li class="toc-d2"><a href="#源码地图">源码地图</a></li><li class="toc-d2"><a href="#一gc-的基本问题">一、GC 的基本问题</a></li><li class="toc-d2"><a href="#可达性而不是出了作用域">可达性，而不是“出了作用域”</a></li><li class="toc-d2"><a href="#三色抽象仍有用但不是数据结构说明书">三色抽象仍有用，但不是数据结构说明书</a></li><li class="toc-d2"><a href="#二一个完整-gc-cycle">二、一个完整 GC cycle</a></li><li class="toc-d2"><a href="#1-sweep-terminationstw">1. Sweep termination：STW</a></li><li class="toc-d2"><a href="#2-concurrent-mark主要并发阶段">2. Concurrent mark：主要并发阶段</a></li><li class="toc-d2"><a href="#3-mark-terminationstw">3. Mark termination：STW</a></li><li class="toc-d2"><a href="#4-concurrent-sweep">4. Concurrent sweep</a></li><li class="toc-d2"><a href="#三写屏障并发正确性的核心">三、写屏障：并发正确性的核心</a></li><li class="toc-d2"><a href="#为什么栈写通常不走写屏障">为什么栈写通常不走写屏障</a></li><li class="toc-d2"><a href="#批量写也必须有-barrier">批量写也必须有 barrier</a></li><li class="toc-d2"><a href="#四green-teago-126-默认的新标记扫描路径">四、Green Tea：Go 1.26 默认的新标记扫描路径</a></li><li class="toc-d2"><a href="#green-tea-要解决的局部性问题">Green Tea 要解决的局部性问题</a></li><li class="toc-d2"><a href="#marks-与-scans">marks 与 scans</a></li><li class="toc-d2"><a href="#发现指针标记对象排队-span">发现指针：标记对象，排队 span</a></li><li class="toc-d2"><a href="#为什么-span-queue-用-fifo">为什么 span queue 用 FIFO</a></li><li class="toc-d2"><a href="#批量扫描-span">批量扫描 span</a></li><li class="toc-d2"><a href="#五并行标记work-buffer-与-assist">五、并行标记、work buffer 与 assist</a></li><li class="toc-d2"><a href="#gc-worker">GC worker</a></li><li class="toc-d2"><a href="#allocation-assist谁制造垃圾谁帮助清扫">Allocation assist：谁制造垃圾，谁帮助清扫</a></li><li class="toc-d2"><a href="#六pacer决定何时开始用多少-cpu">六、Pacer：决定何时开始、用多少 CPU</a></li><li class="toc-d2"><a href="#gogc-的堆目标">GOGC 的堆目标</a></li><li class="toc-d2"><a href="#gomemlimit-是-soft-limit">GOMEMLIMIT 是 soft limit</a></li><li class="toc-d2"><a href="#触发条件">触发条件</a></li><li class="toc-d2"><a href="#七栈扫描与-gc">七、栈扫描与 GC</a></li><li class="toc-d2"><a href="#八sweep-与-scavenger">八、Sweep 与 Scavenger</a></li><li class="toc-d2"><a href="#sweep-generation">Sweep generation</a></li><li class="toc-d2"><a href="#scavenger-为什么独立">Scavenger 为什么独立</a></li><li class="toc-d2"><a href="#九finalizercleanup-与泄漏理解">九、Finalizer、Cleanup 与泄漏理解</a></li><li class="toc-d2"><a href="#十生产诊断">十、生产诊断</a></li><li class="toc-d2"><a href="#一套证据链">一套证据链</a></li><li class="toc-d2"><a href="#常用指标">常用指标</a></li><li class="toc-d2"><a href="#命令">命令</a></li><li class="toc-d2"><a href="#如何解释常见现象">如何解释常见现象</a></li><li class="toc-d3"><a href="#gc-很频繁但-heap-不大">GC 很频繁但 heap 不大</a></li><li class="toc-d3"><a href="#heap-profile-看不大但-rss-很高">heap profile 看不大但 RSS 很高</a></li><li class="toc-d3"><a href="#p99-在-gc-期间抬升">P99 在 GC 期间抬升</a></li><li class="toc-d2"><a href="#十一调优原则">十一、调优原则</a></li><li class="toc-d2"><a href="#优先优化分配图而不是先调-gogc">优先优化分配图，而不是先调 GOGC</a></li><li class="toc-d2"><a href="#gogc-与内存的基本权衡">GOGC 与内存的基本权衡</a></li><li class="toc-d2"><a href="#十二常见误区">十二、常见误区</a></li><li class="toc-d2"><a href="#十三源码阅读主线与验收">十三、源码阅读主线与验收</a></li><li class="toc-d2"><a href="#总结">总结</a></li><li class="toc-d2"><a href="#参考资料">参考资料</a></li></ul></aside></div><div class="lightbox" id="lightbox" aria-hidden="true"><img alt=""></div><script type="module" src="/_astro/Base.astro_astro_type_script_index_0_lang.DKvZf7If.js"></script></body></html>

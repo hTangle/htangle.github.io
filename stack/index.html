@@ -5,20 +5,14 @@
           document.documentElement.setAttribute('data-theme', s);
         }
       })();
-    </script><link rel="stylesheet" href="/_astro/Base.C1_PNgav.css"></head><body><header class="topbar"><a href="/" class="brand">HLDay</a><nav><a href="/">专题</a><a href="/posts/">博客</a><a href="https://github.com/hTangle" class="nav-github" aria-label="GitHub">GitHub</a></nav><button class="theme-toggle" id="themeToggle" type="button" title="切换主题（自动/浅色/深色）" aria-label="切换主题">🖥️</button></header><div class="layout"><aside class="booknav"><ul class="nav-tree"><li><p class="nav-group">Go</p><ul><li><p class="nav-subgroup">并发编程</p><ul><li class><a href="/gmp/">GMP 调度器</a></li><li class><a href="/sync-lock/">同步和锁</a></li><li class><a href="/channel/">Channel</a></li><li class><a href="/context/">Context</a></li></ul></li><li><p class="nav-subgroup">内存管理</p><ul><li class><a href="/memory-alloc/">内存分配器</a></li><li class><a href="/gc/">垃圾收集器</a></li><li class="active"><a href="/stack/">栈空间管理</a></li></ul></li></ul></li><li><p class="nav-group">Agent 开发</p><ul><li><p class="nav-subgroup">核心协议与机制</p><ul><li class><a href="/mcp/">MCP</a></li><li class><a href="/skill/">Skill</a></li><li class><a href="/tool-call/">Tool Call</a></li></ul></li></ul></li></ul></aside><main class="prose"><h1>栈空间管理：Go 1.26.5 源码分析</h1><p>Go 能承载大量 goroutine，不是因为“goroutine 没有栈”，而是因为每个普通 G 从较小的连续栈开始，按需成倍扩容，并在安全点缩容。编译器负责函数序言、stack map 与逃逸分析；runtime 负责 stack cache、复制、指针修正、抢占和 GC 扫描。</p>
-<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="mermaid"><code><span class="line"><span style="color:#F97583">flowchart</span><span style="color:#B392F0"> LR</span></span>
-<span class="line"><span style="color:#FFAB70">    C</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"编译器"</span><span style="color:#F97583">]</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> E</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"逃逸分析"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    C </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> P</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"函数 prologue stack check"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    C </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> SM</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"stack map / safe point"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    R</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"runtime"</span><span style="color:#F97583">]</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> A</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"newproc1: 初始 stack"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    P </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> M</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"morestack"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    M </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> N</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"newstack"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    N </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> CP</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"copystack: 扩容与指针修正"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    R </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> SH</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"shrinkstack"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    SM </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> GC</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"GC 精确扫描 stack roots"</span><span style="color:#F97583">]</span></span></code></pre>
-<p><strong>• 当前实现</strong></p>
-<p>Go 1.26.5 使用 <strong>连续、可复制栈（contiguous copying stack）</strong>：从小栈开始，空间不足时分配更大的连续区域，复制有效数据并修正栈内指针。</p>
-<h3 id="go-1265-必须先知道的变化">Go 1.26.5 必须先知道的变化</h3>
+    </script><link rel="stylesheet" href="/_astro/Base.CYI339jz.css"></head><body><header class="topbar"><a href="/" class="brand">HLDay</a><nav><a href="/">专题</a><a href="/posts/">博客</a><a href="https://github.com/hTangle" class="nav-github" aria-label="GitHub">GitHub</a></nav><button class="theme-toggle" id="themeToggle" type="button" title="切换主题（自动/浅色/深色）" aria-label="切换主题">🖥️</button></header><div class="layout"><aside class="booknav"><ul class="nav-tree"><li><p class="nav-group">Go</p><ul><li><p class="nav-subgroup">并发编程</p><ul><li class><a href="/gmp/">GMP 调度器</a></li><li class><a href="/sync-lock/">同步和锁</a></li><li class><a href="/channel/">Channel</a></li><li class><a href="/context/">Context</a></li></ul></li><li><p class="nav-subgroup">内存管理</p><ul><li class><a href="/memory-alloc/">内存分配器</a></li><li class><a href="/gc/">垃圾收集器</a></li><li class="active"><a href="/stack/">栈空间管理</a></li></ul></li></ul></li><li><p class="nav-group">Agent 开发</p><ul><li><p class="nav-subgroup">核心协议与机制</p><ul><li class><a href="/mcp/">MCP</a></li><li class><a href="/skill/">Skill</a></li><li class><a href="/tool-call/">Tool Call</a></li></ul></li></ul></li></ul></aside><main class="prose"><h1>栈空间管理：Go 1.26.5 源码分析</h1><p>Go 能承载大量 goroutine，不是因为“goroutine 没有栈”，而是因为每个普通 G 从较小的连续栈开始，按需成倍扩容，并在安全点缩容。编译器负责函数序言、stack map 与逃逸分析；runtime 负责 stack cache、复制、指针修正、抢占和 GC 扫描。</p>
+<img src="/images/go/01-栈空间管理-go-1-26-5-源码分析.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
+<div class="markdown-alert markdown-alert-important" dir="auto">
+<p class="markdown-alert-title" dir="auto"><svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M0 1.75C0 .784.784 0 1.75 0h12.5C15.216 0 16 .784 16 1.75v9.5A1.75 1.75 0 0 1 14.25 13H8.06l-2.573 2.573A1.458 1.458 0 0 1 3 14.543V13H1.75A1.75 1.75 0 0 1 0 11.25Zm1.75-.25a.25.25 0 0 0-.25.25v9.5c0 .138.112.25.25.25h2a.75.75 0 0 1 .75.75v2.19l2.72-2.72a.749.749 0 0 1 .53-.22h6.5a.25.25 0 0 0 .25-.25v-9.5a.25.25 0 0 0-.25-.25Zm7 2.25v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 9a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>IMPORTANT</p>
+<p> 当前实现
+Go 1.26.5 使用 <strong>连续、可复制栈（contiguous copying stack）</strong>：从小栈开始，空间不足时分配更大的连续区域，复制有效数据并修正栈内指针。</p>
+</div>
+<h2 id="go-1265-必须先知道的变化">Go 1.26.5 必须先知道的变化</h2>
 
 
 
@@ -62,7 +56,7 @@
 
 <table><thead><tr><th>主题</th><th>当前结论</th></tr></thead><tbody><tr><td>普通 goroutine 初始栈</td><td><code>stackMin = 2048</code>，通常从 2 KiB 开始</td></tr><tr><td>栈增长</td><td>连续栈复制，通常按 2 倍增长</td></tr><tr><td>栈缩容</td><td>GC/安全点检查；使用不足 1/4 时才考虑缩为一半</td></tr><tr><td>小栈分配</td><td>per-P <code>mcache.stackcache</code> + 全局 <code>stackpool</code></td></tr><tr><td>大栈分配</td><td>从 <code>mheap</code> 申请 manual stack span</td></tr><tr><td>函数检查</td><td>编译器在可分裂函数序言插入 stack bound check</td></tr><tr><td>Go 1.26 编译器变化</td><td>变量长度 <code>make([]T, n)</code> 的 backing store 在更多场景可放栈上，默认试探阈值 32 B</td></tr><tr><td>与 GC 的关系</td><td>stack 是 root；编译器 stack map 支持精确扫描和复制时指针修正</td></tr></tbody></table>
 <p>Go 1.26 的变量长度 slice 栈上分配优化是本篇最重要的新变化，官方说明同时提供 <code>-compile=variablemake</code> bisect 与关闭开关：<a href="https://go.dev/doc/go1.26" rel="noopener noreferrer" target="_blank">Go 1.26 Release Notes</a>。</p>
-<h3 id="源码地图">源码地图</h3>
+<h2 id="源码地图">源码地图</h2>
 
 
 
@@ -122,40 +116,26 @@
 
 <table><thead><tr><th>主题</th><th>源码入口</th></tr></thead><tbody><tr><td>栈常量与 guard</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/stack.go#L70-L145" rel="noopener noreferrer" target="_blank"><code>runtime/stack.go#L70-L145</code></a></td></tr><tr><td>stack pool/cache</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/stack.go#L147-L335" rel="noopener noreferrer" target="_blank"><code>runtime/stack.go#L147-L335</code></a></td></tr><tr><td>stack 分配/释放</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/stack.go#L338-L530" rel="noopener noreferrer" target="_blank"><code>runtime/stack.go#L338-L530</code></a></td></tr><tr><td>goroutine 创建</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/proc.go#L5272-L5355" rel="noopener noreferrer" target="_blank"><code>runtime/proc.go#L5272-L5355</code></a></td></tr><tr><td>amd64 <code>morestack</code></td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/asm_amd64.s#L622-L688" rel="noopener noreferrer" target="_blank"><code>runtime/asm_amd64.s#L622-L688</code></a></td></tr><tr><td>栈复制</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/stack.go#L898-L1003" rel="noopener noreferrer" target="_blank"><code>runtime/stack.go#L898-L1003</code></a></td></tr><tr><td><code>newstack</code></td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/stack.go#L1014-L1185" rel="noopener noreferrer" target="_blank"><code>runtime/stack.go#L1014-L1185</code></a></td></tr><tr><td>栈缩容</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/stack.go#L1253-L1305" rel="noopener noreferrer" target="_blank"><code>runtime/stack.go#L1253-L1305</code></a></td></tr><tr><td><code>g</code> 的 stack 字段</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/runtime2.go#L459-L534" rel="noopener noreferrer" target="_blank"><code>runtime/runtime2.go#L459-L534</code></a></td></tr><tr><td>逃逸分析</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/cmd/compile/internal/escape/escape.go#L21-L47" rel="noopener noreferrer" target="_blank"><code>cmd/compile/internal/escape/escape.go#L21-L47</code></a></td></tr><tr><td>variable make</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/cmd/compile/internal/walk/builtin.go#L469-L500" rel="noopener noreferrer" target="_blank"><code>cmd/compile/internal/walk/builtin.go#L469-L500</code></a></td></tr><tr><td>GC stack scan</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mgcstack.go#L166-L240" rel="noopener noreferrer" target="_blank"><code>runtime/mgcstack.go#L166-L240</code></a></td></tr></tbody></table>
 <h2 id="一进程里不止一种栈">一、进程里不止一种栈</h2>
-<h3 id="普通-g-stack">普通 G stack</h3>
+<h2 id="普通-g-stack">普通 G stack</h2>
 <p>每个普通 goroutine 的 <code>g.stack</code> 描述严格的 <code>[lo, hi)</code> 地址区间，<code>stackguard0</code> 是函数序言比较的 guard，结构定义见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/runtime2.go#L459-L483" rel="noopener noreferrer" target="_blank"><code>runtime2.go#L459-L483</code></a>。</p>
-<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="mermaid"><code><span class="line"><span style="color:#F97583">flowchart</span><span style="color:#B392F0"> TB</span></span>
-<span class="line"><span style="color:#FFAB70">    HI</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"stack.hi：高地址"</span><span style="color:#F97583">]</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> F1</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"较早调用者 frame"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    F1 </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> F2</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"当前函数 frame"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    F2 </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> SP</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"SP"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    SP </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> FREE</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"尚未使用空间"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    FREE </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> GUARD</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"stackguard0 = stack.lo + stackGuard"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    GUARD </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> LO</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"stack.lo：低地址"</span><span style="color:#F97583">]</span></span></code></pre>
+<img src="/images/go/02-普通-g-stack.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
 <p>Go 支持的多数架构上栈向低地址增长。函数序言在真正建立较大 frame 前检查 SP 与 guard，空间不足则进入 <code>morestack</code>。</p>
-<h3 id="g0每个-m-的调度栈">g0：每个 M 的调度栈</h3>
+<h2 id="g0每个-m-的调度栈">g0：每个 M 的调度栈</h2>
 <p>每个 OS thread 对应的 M 有一个 <code>g0</code>。调度器、栈分配、栈复制、部分 GC 和必须 <code>//go:systemstack</code> 的 runtime 代码运行在 g0 上。</p>
 <p>为什么不能在待扩容的 G stack 上执行 <code>stackalloc</code>？因为分配过程自身可能持锁、调用 page allocator；若它再需要扩容会形成递归或自死锁。<code>stackalloc</code> 明确要求运行在 scheduler stack，见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/stack.go#L338-L351" rel="noopener noreferrer" target="_blank"><code>stack.go#L338-L351</code></a>。</p>
-<h3 id="gsignal信号处理栈">gsignal：信号处理栈</h3>
+<h2 id="gsignal信号处理栈">gsignal：信号处理栈</h2>
 <p>每个 M 还有 <code>gsignal</code>，用于操作系统信号。<code>morestack</code> 明确禁止扩容 g0 与 gsignal；amd64 检查见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/asm_amd64.s#L628-L653" rel="noopener noreferrer" target="_blank"><code>asm_amd64.s#L628-L653</code></a>。</p>
-<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="mermaid"><code><span class="line"><span style="color:#F97583">flowchart</span><span style="color:#B392F0"> LR</span></span>
-<span class="line"><span style="color:#FFAB70">    M</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"M / OS thread"</span><span style="color:#F97583">]</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> G0</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"g0 scheduler stack"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    M </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> GS</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"gsignal stack"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    M </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> CUR</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"curg: 当前普通 goroutine stack"</span><span style="color:#F97583">]</span></span></code></pre>
+<img src="/images/go/03-gsignal-信号处理栈.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
 <h2 id="二栈与堆的决定发生在哪里">二、栈与堆的决定发生在哪里</h2>
-<h3 id="逃逸分析的两个不变量">逃逸分析的两个不变量</h3>
+<h2 id="逃逸分析的两个不变量">逃逸分析的两个不变量</h2>
 <p>编译器要求：</p>
 <ol>
 <li>指向 stack object 的指针不能被存入 heap 并在栈帧失效后继续存在；</li>
 <li>指向 stack object 的指针不能比对象本身活得更久。</li>
 </ol>
 <p>源码使用带权数据流图分析变量之间的地址/解引用关系，见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/cmd/compile/internal/escape/escape.go#L21-L47" rel="noopener noreferrer" target="_blank"><code>escape.go#L21-L47</code></a>。</p>
-<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="mermaid"><code><span class="line"><span style="color:#F97583">flowchart</span><span style="color:#B392F0"> TD</span></span>
-<span class="line"><span style="color:#FFAB70">    A</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"局部变量/隐式分配"</span><span style="color:#F97583">]</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> B</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"构建 location graph"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    B </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> C</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"跨赋值、取址、解引用传播"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    C </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> D</span><span style="color:#F97583">{</span><span style="color:#9ECBFF">"地址可能存入 heap&#x3C;br/>或超出生命周期?"</span><span style="color:#F97583">}</span></span>
-<span class="line"><span style="color:#FFAB70">    D </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">"否"</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> S</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"stack/register"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    D </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">"是"</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> H</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"EscHeap -> runtime allocation"</span><span style="color:#F97583">]</span></span></code></pre>
-<h3 id="常见逃逸场景不是绝对规则">常见逃逸场景不是绝对规则</h3>
+<img src="/images/go/04-逃逸分析的两个不变量.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
+<h2 id="常见逃逸场景不是绝对规则">常见逃逸场景不是绝对规则</h2>
 
 
 
@@ -199,8 +179,11 @@
 <table><thead><tr><th>场景</th><th>可能结果</th><th>关键判断</th></tr></thead><tbody><tr><td>返回局部变量地址</td><td>常逃逸</td><td>调用者是否可持有该指针</td></tr><tr><td>闭包捕获变量</td><td>可能逃逸</td><td>闭包是否逃出当前调用</td></tr><tr><td>传给 interface</td><td>可能逃逸</td><td>装箱值的生命周期与调用是否可内联</td></tr><tr><td><code>make([]T, const)</code></td><td>可能在栈</td><td>backing store 是否小且不逃逸</td></tr><tr><td><code>make([]T, n)</code></td><td>Go 1.26 更多情况在栈</td><td>动态容量是否通过运行时阈值判断且结果不逃逸</td></tr><tr><td>传指针给不会保存它的函数</td><td>可不逃逸</td><td>跨函数摘要是否证明安全</td></tr></tbody></table>
 <p>诊断命令：</p>
 <pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="bash"><code><span class="line"><span style="color:#B392F0">go</span><span style="color:#9ECBFF"> build</span><span style="color:#79B8FF"> -gcflags=</span><span style="color:#9ECBFF">'all=-m=2'</span><span style="color:#9ECBFF"> ./...</span></span></code></pre>
-<p><strong>⚠️ 编译器输出是结论，不是永久契约</strong></p>
-<p>内联、泛型实例化、PGO、Go 版本和控制流都会影响结果。优化必须用目标 Go 版本重新编译与 benchmark。</p>
+<div class="markdown-alert markdown-alert-warning" dir="auto">
+<p class="markdown-alert-title" dir="auto"><svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>WARNING</p>
+<p> 编译器输出是结论，不是永久契约
+内联、泛型实例化、PGO、Go 版本和控制流都会影响结果。优化必须用目标 Go 版本重新编译与 benchmark。</p>
+</div>
 <h2 id="三go-126-的-variable-size-slice-栈上分配">三、Go 1.26 的 variable-size slice 栈上分配</h2>
 <p>对于动态 <code>make([]T, n)</code>，Go 1.26 会在满足逃逸和大小条件时生成一个小型栈 backing store 与运行时分支：容量不超过阈值时使用栈，否则调用 <code>makeslice</code> 分配 heap backing store。</p>
 <p>源码的默认阈值为 <strong>32 B</strong>，见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/cmd/compile/internal/base/flag.go#L179-L190" rel="noopener noreferrer" target="_blank"><code>base/flag.go#L179-L190</code></a>。lowering 伪代码直接写在 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/cmd/compile/internal/walk/builtin.go#L476-L500" rel="noopener noreferrer" target="_blank"><code>walk/builtin.go#L476-L500</code></a>：</p>
@@ -211,38 +194,31 @@
 <span class="line"><span style="color:#E1E4E8">} </span><span style="color:#F97583">else</span><span style="color:#E1E4E8"> {</span></span>
 <span class="line"><span style="color:#E1E4E8">    slice </span><span style="color:#F97583">=</span><span style="color:#B392F0"> makeslice</span><span style="color:#E1E4E8">(elemType, len, cap)</span></span>
 <span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
-<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="mermaid"><code><span class="line"><span style="color:#F97583">flowchart</span><span style="color:#B392F0"> TD</span></span>
-<span class="line"><span style="color:#FFAB70">    A</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"make([]T, len, cap)"</span><span style="color:#F97583">]</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> B</span><span style="color:#F97583">{</span><span style="color:#9ECBFF">"结果不逃逸且优化开启?"</span><span style="color:#F97583">}</span></span>
-<span class="line"><span style="color:#FFAB70">    B </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">"否"</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> H</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"runtime.makeslice -> heap"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    B </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">"是"</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> C</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"K = 32 / sizeof(T)"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    C </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> D</span><span style="color:#F97583">{</span><span style="color:#9ECBFF">"cap &#x3C;= K?"</span><span style="color:#F97583">}</span></span>
-<span class="line"><span style="color:#FFAB70">    D </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">"是"</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> S</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"使用当前 frame 内 [K]T"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    D </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">"否"</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> H</span></span></code></pre>
+<img src="/images/go/05-三-go-1-26-的-variable-size-slice-栈上分配.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
 <p>注意：32 B 是当前默认启发式，不是 Go 语言保证，也不是所有栈对象总大小限制。编译器还要检查 element size、逃逸、优化开关和具体 IR 位置。</p>
 <p>若该变化触发问题，可按官方说明：</p>
-<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="bash"><code><span class="line"><span style="color:#6A737D">## 使用 bisect 定位 variablemake 优化点bisect -compile=variablemake &#x3C;command></span></span>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="bash"><code><span class="line"><span style="color:#6A737D"># 使用 bisect 定位 variablemake 优化点</span></span>
+<span class="line"><span style="color:#B392F0">bisect</span><span style="color:#79B8FF"> -compile=variablemake</span><span style="color:#F97583"> &#x3C;</span><span style="color:#9ECBFF">comman</span><span style="color:#E1E4E8">d</span><span style="color:#F97583">></span></span>
 <span class="line"></span>
-<span class="line"><span style="color:#6A737D">## 临时关闭新增的 variable make 栈分配go build -gcflags=all=-d=variablemakehash=n ./...</span></span></code></pre>
+<span class="line"><span style="color:#6A737D"># 临时关闭新增的 variable make 栈分配</span></span>
+<span class="line"><span style="color:#B392F0">go</span><span style="color:#9ECBFF"> build</span><span style="color:#79B8FF"> -gcflags=all=-d=variablemakehash=n</span><span style="color:#9ECBFF"> ./...</span></span></code></pre>
 <h2 id="四goroutine-创建与初始栈">四、goroutine 创建与初始栈</h2>
 <p>编译器把 <code>go f()</code> 转成 <code>runtime.newproc</code>。<code>newproc1</code> 先尝试从当前 P 的 dead-G cache 取 <code>g</code>；没有则 <code>malg(stackMin)</code>，见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/proc.go#L5313-L5325" rel="noopener noreferrer" target="_blank"><code>proc.go#L5313-L5325</code></a>。</p>
 <p><code>stackMin = 2048</code> 定义在 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/stack.go#L70-L89" rel="noopener noreferrer" target="_blank"><code>stack.go#L70-L89</code></a>。<code>malg</code> 把大小向上舍入为 2 的幂，调用 <code>stackalloc</code>，然后设置：</p>
 <pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="text"><code><span class="line"><span>stackguard0 = stack.lo + stackGuard</span></span>
 <span class="line"><span>stackguard1 = ^uintptr(0)  // 普通 G 不允许 systemstack prologue 使用它</span></span></code></pre>
 <p>实现见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/proc.go#L5272-L5289" rel="noopener noreferrer" target="_blank"><code>proc.go#L5272-L5289</code></a>。</p>
-<p><strong>📝 2 KiB 是初始 reservation，不等于 goroutine 的全部内存成本</strong></p>
-<p><code>g</code>、<code>sudog</code>、timer、channel wait、defer、业务对象、profile/race 元数据都可能增加成本；已扩容 stack 也不会因为 goroutine 阻塞就立刻缩回 2 KiB。</p>
+<div class="markdown-alert markdown-alert-note" dir="auto">
+<p class="markdown-alert-title" dir="auto"><svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>NOTE</p>
+<p> 2 KiB 是初始 reservation，不等于 goroutine 的全部内存成本
+<code>g</code>、<code>sudog</code>、timer、channel wait、defer、业务对象、profile/race 元数据都可能增加成本；已扩容 stack 也不会因为 goroutine 阻塞就立刻缩回 2 KiB。</p>
+</div>
 <h2 id="五小栈如何分配">五、小栈如何分配</h2>
-<h3 id="per-p-stack-cache">per-P stack cache</h3>
+<h2 id="per-p-stack-cache">per-P stack cache</h2>
 <p>小栈按 order 管理：2 KiB、4 KiB、8 KiB、16 KiB 等。当前 P 的 <code>mcache.stackcache[order]</code> 保存 free list；cache 空时从全局 <code>stackpool</code> 批量 refill。</p>
-<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="mermaid"><code><span class="line"><span style="color:#F97583">flowchart</span><span style="color:#B392F0"> LR</span></span>
-<span class="line"><span style="color:#FFAB70">    G</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"new G / grow stack"</span><span style="color:#F97583">]</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> A</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"stackalloc(2^n)"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    A </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> B</span><span style="color:#F97583">{</span><span style="color:#9ECBFF">"&#x3C; 32 KiB 且属于缓存 order?"</span><span style="color:#F97583">}</span></span>
-<span class="line"><span style="color:#FFAB70">    B </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">"是"</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> C</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"P.mcache.stackcache"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    C </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">"空"</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> D</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"global stackpool[order]"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    B </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">"否"</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> E</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"stackLarge cache"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    E </span><span style="color:#F97583">-->|</span><span style="color:#9ECBFF">"空"</span><span style="color:#F97583">|</span><span style="color:#FFAB70"> F</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"mheap.allocManual(spanAllocStack)"</span><span style="color:#F97583">]</span></span></code></pre>
+<img src="/images/go/06-per-p-stack-cache.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
 <p>小栈 fast path 见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/stack.go#L368-L405" rel="noopener noreferrer" target="_blank"><code>stackalloc#L368-L405</code></a>。栈内存不是普通 GC heap object：大栈通过 <code>allocManual(..., spanAllocStack)</code> 取得手工管理 span，GC 不把整段栈当普通对象扫描。</p>
-<h3 id="为什么栈大小必须是-2-的幂">为什么栈大小必须是 2 的幂</h3>
+<h2 id="为什么栈大小必须是-2-的幂">为什么栈大小必须是 2 的幂</h2>
 <p><code>stackalloc</code> 明确检查 <code>n&#x26;(n-1)==0</code>。好处包括：</p>
 <ul>
 <li>order 与 cache 索引简单；</li>
@@ -256,21 +232,9 @@
 <span class="line"><span style="color:#E1E4E8">    runtime.</span><span style="color:#B392F0">morestack</span><span style="color:#E1E4E8">()</span></span>
 <span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
 <p>实际还要防止下溢、支持 small/large frame、NOSPLIT 链和架构 ABI。权威说明在 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/stack.go#L17-L67" rel="noopener noreferrer" target="_blank"><code>stack.go</code> 顶部注释</a>。</p>
-<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="mermaid"><code><span class="line"><span style="color:#F97583">sequenceDiagram</span></span>
-<span class="line"><span style="color:#F97583">    participant</span><span style="color:#FFAB70"> F</span><span style="color:#F97583"> as</span><span style="color:#9ECBFF"> Function Prologue</span></span>
-<span class="line"><span style="color:#F97583">    participant</span><span style="color:#FFAB70"> MS</span><span style="color:#F97583"> as</span><span style="color:#9ECBFF"> morestack (asm)</span></span>
-<span class="line"><span style="color:#F97583">    participant</span><span style="color:#FFAB70"> G0</span><span style="color:#F97583"> as</span><span style="color:#9ECBFF"> m.g0 stack</span></span>
-<span class="line"><span style="color:#F97583">    participant</span><span style="color:#FFAB70"> NS</span><span style="color:#F97583"> as</span><span style="color:#9ECBFF"> newstack</span></span>
-<span class="line"><span style="color:#F97583">    participant</span><span style="color:#FFAB70"> CP</span><span style="color:#F97583"> as</span><span style="color:#9ECBFF"> copystack</span></span>
-<span class="line"><span style="color:#FFAB70">    F</span><span style="color:#F97583">->></span><span style="color:#FFAB70">F</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> compare SP and stackguard0</span></span>
-<span class="line"><span style="color:#FFAB70">    F</span><span style="color:#F97583">->></span><span style="color:#FFAB70">MS</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> guard check fails</span></span>
-<span class="line"><span style="color:#FFAB70">    MS</span><span style="color:#F97583">->></span><span style="color:#FFAB70">MS</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> save g.sched and m.morebuf</span></span>
-<span class="line"><span style="color:#FFAB70">    MS</span><span style="color:#F97583">->></span><span style="color:#FFAB70">G0</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> switch current g to m.g0</span></span>
-<span class="line"><span style="color:#FFAB70">    G0</span><span style="color:#F97583">->></span><span style="color:#FFAB70">NS</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> call newstack</span></span>
-<span class="line"><span style="color:#FFAB70">    NS</span><span style="color:#F97583">->></span><span style="color:#FFAB70">CP</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> allocate/copy/adjust</span></span>
-<span class="line"><span style="color:#FFAB70">    CP</span><span style="color:#F97583">-->></span><span style="color:#FFAB70">F</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> resume and recheck prologue</span></span></code></pre>
+<img src="/images/go/07-六-函数序言与-morestack.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
 <p>amd64 <code>morestack</code> 保存当前 G 的 PC/SP/BP/context，再保存调用者上下文，切到 g0 后调用 <code>newstack</code>，见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/asm_amd64.s#L628-L682" rel="noopener noreferrer" target="_blank"><code>asm_amd64.s#L628-L682</code></a>。</p>
-<h3 id="nosplit-不是更快注解"><code>NOSPLIT</code> 不是“更快”注解</h3>
+<h2 id="nosplit-不是更快注解"><code>NOSPLIT</code> 不是“更快”注解</h2>
 <p><code>//go:nosplit</code> 表示函数不能触发栈增长。linker 会检查 NOSPLIT 调用链不能超过 guard 预算。它主要用于 runtime 的底层路径、信号与栈扩容自身；业务代码不应为了省一次检查而随意使用。</p>
 <p>guard 除了增长检查，还复用为同步抢占触发器：runtime 可把 <code>stackguard0</code> 设置为特殊的 <code>stackPreempt</code>，让下一次函数序言失败并进入 <code>newstack</code> 的抢占分支，常量见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/stack.go#L124-L145" rel="noopener noreferrer" target="_blank"><code>stack.go#L124-L145</code></a>。</p>
 <h2 id="七newstack扩容与同步抢占共用入口">七、<code>newstack</code>：扩容与同步抢占共用入口</h2>
@@ -282,19 +246,11 @@
 <p>普通 64 位平台 runtime 初始化时把最大 goroutine stack 设置为约 1 GB，32 位为约 250 MB，并另有 ceiling 防止计算溢出，见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/proc.go#L156-L168" rel="noopener noreferrer" target="_blank"><code>proc.go#L156-L168</code></a>。超过限制会 fatal，无法 <code>recover</code>。</p>
 <h2 id="八copystack复制的不只是字节">八、<code>copystack</code>：复制的不只是字节</h2>
 <p>栈扩容最难的部分不是 <code>memmove</code>，而是修正所有指向旧栈的指针。<code>copystack</code> 的总体步骤见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/stack.go#L898-L1003" rel="noopener noreferrer" target="_blank"><code>stack.go#L898-L1003</code></a>：</p>
-<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="mermaid"><code><span class="line"><span style="color:#F97583">flowchart</span><span style="color:#B392F0"> TD</span></span>
-<span class="line"><span style="color:#FFAB70">    A</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"计算 old used bytes"</span><span style="color:#F97583">]</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> B</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"stackalloc(newsize)"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    B </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> C</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"delta = new.hi - old.hi"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    C </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> D</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"锁住必要 channel，调整 sudog.elem"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    D </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> E</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"复制实际使用区域"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    E </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> F</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"修正 ctxt / defer / panic"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    F </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> G</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"切换 gp.stack 与 sched.sp"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    G </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> H</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"按 stack map 修正 frame 内指针"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    H </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> I</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"stackfree(old)"</span><span style="color:#F97583">]</span></span></code></pre>
-<h3 id="为什么-channel-会让复制复杂">为什么 channel 会让复制复杂</h3>
+<img src="/images/go/08-八-copystack-复制的不只是字节.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
+<h2 id="为什么-channel-会让复制复杂">为什么 channel 会让复制复杂</h2>
 <p>阻塞的 send/receive 使用 <code>sudog.elem</code> 指向 goroutine 栈上的发送值或接收 slot。另一个 goroutine 可能通过 channel 操作访问这段内存，所以复制时必须与 channel lock 协调。</p>
 <p><code>g.activeStackChans</code>、<code>g.parkingOnChan</code> 记录这些危险状态，字段与注释见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/runtime2.go#L526-L534" rel="noopener noreferrer" target="_blank"><code>runtime2.go#L526-L534</code></a>。<code>copystack</code> 在 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/stack.go#L929-L953" rel="noopener noreferrer" target="_blank"><code>stack.go#L929-L953</code></a> 调整 sudog，并只在安全同步后复制相关区域。</p>
-<h3 id="为什么-unsafe-很容易与栈移动冲突">为什么 unsafe 很容易与栈移动冲突</h3>
+<h2 id="为什么-unsafe-很容易与栈移动冲突">为什么 unsafe 很容易与栈移动冲突</h2>
 <p>Go 指针能被 runtime 根据 stack map 修正；藏在 <code>uintptr</code>、C 内存或 runtime 不知道的数据结构里的地址不会自动更新。</p>
 <pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#E1E4E8">p </span><span style="color:#F97583">:=</span><span style="color:#F97583"> &#x26;</span><span style="color:#E1E4E8">buf[</span><span style="color:#79B8FF">0</span><span style="color:#E1E4E8">]</span></span>
 <span class="line"><span style="color:#E1E4E8">u </span><span style="color:#F97583">:=</span><span style="color:#F97583"> uintptr</span><span style="color:#E1E4E8">(unsafe.</span><span style="color:#B392F0">Pointer</span><span style="color:#E1E4E8">(p))</span></span>
@@ -317,16 +273,12 @@
 <li>满足后缩为当前大小的一半并走 <code>copystack</code>。</li>
 </ul>
 <p>判断见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/stack.go#L1253-L1299" rel="noopener noreferrer" target="_blank"><code>stack.go#L1253-L1299</code></a>。1/4 阈值提供迟滞，避免 1/2 附近反复扩缩。</p>
-<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="mermaid"><code><span class="line"><span style="color:#F97583">stateDiagram-v2</span></span>
-<span class="line"><span style="color:#F97583">    [*]</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> Size2K</span></span>
-<span class="line"><span style="color:#FFAB70">    Size2K</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> Size4K</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> 空间不足</span></span>
-<span class="line"><span style="color:#FFAB70">    Size4K</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> Size8K</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> 空间不足</span></span>
-<span class="line"><span style="color:#FFAB70">    Size8K</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> Size16K</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> 空间不足</span></span>
-<span class="line"><span style="color:#FFAB70">    Size16K</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> Size8K</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> 安全点且 used &#x3C; 1/4</span></span>
-<span class="line"><span style="color:#FFAB70">    Size8K</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> Size4K</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> 安全点且 used &#x3C; 1/4</span></span>
-<span class="line"><span style="color:#FFAB70">    Size4K</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> Size2K</span><span style="color:#F97583">:</span><span style="color:#9ECBFF"> 安全点且 used &#x3C; 1/4</span></span></code></pre>
-<p><strong>📝 深递归后的 stack 不会立即收缩</strong></p>
-<p>增长发生在函数序言，收缩依赖后续 GC/安全点及 1/4 条件。因此一次峰值可能在一段时间内继续体现在 stack in-use 上。</p>
+<img src="/images/go/09-九-栈缩容.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
+<div class="markdown-alert markdown-alert-note" dir="auto">
+<p class="markdown-alert-title" dir="auto"><svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>NOTE</p>
+<p> 深递归后的 stack 不会立即收缩
+增长发生在函数序言，收缩依赖后续 GC/安全点及 1/4 条件。因此一次峰值可能在一段时间内继续体现在 stack in-use 上。</p>
+</div>
 <h2 id="十gc-如何扫描栈">十、GC 如何扫描栈</h2>
 <p>编译器为 safe point 生成 stack map，描述 frame 中哪些 slot 是指针。GC 获取 G 的扫描所有权，unwind frame 并 shade 指向 heap 的指针；stack 内部对象还会形成自己的待扫描图。</p>
 <p><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mgcstack.go#L166-L198" rel="noopener noreferrer" target="_blank"><code>stackScanState</code></a> 同时维护：</p>
@@ -335,16 +287,10 @@
 <li>异步安全点最内层 frame 的 conservative pointer buffer；</li>
 <li>stack object 列表与按地址查找的树。</li>
 </ul>
-<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="mermaid"><code><span class="line"><span style="color:#F97583">flowchart</span><span style="color:#B392F0"> LR</span></span>
-<span class="line"><span style="color:#FFAB70">    G</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"stopped G"</span><span style="color:#F97583">]</span><span style="color:#F97583"> --></span><span style="color:#FFAB70"> U</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"unwind frames"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    U </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> PC</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"PC -> stack map"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    PC </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> SS</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"pointer slots"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    SS </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> HP</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"shade heap objects"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    SS </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> SO</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"scan stack objects"</span><span style="color:#F97583">]</span></span>
-<span class="line"><span style="color:#FFAB70">    HP </span><span style="color:#F97583">--></span><span style="color:#FFAB70"> GT</span><span style="color:#F97583">[</span><span style="color:#9ECBFF">"Green Tea span queue / object workbuf"</span><span style="color:#F97583">]</span></span></code></pre>
+<img src="/images/go/10-十-gc-如何扫描栈.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
 <p>这连接了 <a href="/gc/">垃圾收集器</a>：goroutine 数量、平均 stack 大小和 stack 中的指针密度都会增加 root scan 工作。大量 blocked goroutine 即使 CPU 为零，也可能持续占用 stack 并保留 heap 对象。</p>
 <h2 id="十一生产内存诊断">十一、生产内存诊断</h2>
-<h3 id="区分-stackheap-与-goroutine-retention">区分 stack、heap 与 goroutine retention</h3>
+<h2 id="区分-stackheap-与-goroutine-retention">区分 stack、heap 与 goroutine retention</h2>
 
 
 
@@ -381,15 +327,19 @@
 
 
 <table><thead><tr><th>现象</th><th>证据</th><th>可能原因</th></tr></thead><tbody><tr><td>goroutine 数持续涨</td><td>goroutine profile、<code>runtime.NumGoroutine</code></td><td>没有 cancel、阻塞 channel、锁等待、IO 卡住</td></tr><tr><td>stack in-use 持续涨</td><td><code>/memory/classes/heap/stacks:bytes</code></td><td>goroutine 增长、深递归、大 frame、峰值栈未缩</td></tr><tr><td>heap profile 某对象被 goroutine 保留</td><td><code>pprof -cum</code>、goroutine stack</td><td>closure/local 仍在阻塞 frame 中</td></tr><tr><td>stack overflow</td><td>fatal 栈与递归链</td><td>无界递归、超大 frame、间接递归</td></tr><tr><td>allocs/op 高</td><td><code>-benchmem</code>、escape output</td><td>意外逃逸或 slice backing store 上 heap</td></tr></tbody></table>
-<h3 id="常用命令">常用命令</h3>
-<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="bash"><code><span class="line"><span style="color:#6A737D">## 逃逸与内联go build -gcflags='all=-m=2' ./...</span></span>
+<h2 id="常用命令">常用命令</h2>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="bash"><code><span class="line"><span style="color:#6A737D"># 逃逸与内联</span></span>
+<span class="line"><span style="color:#B392F0">go</span><span style="color:#9ECBFF"> build</span><span style="color:#79B8FF"> -gcflags=</span><span style="color:#9ECBFF">'all=-m=2'</span><span style="color:#9ECBFF"> ./...</span></span>
 <span class="line"></span>
-<span class="line"><span style="color:#6A737D">## 汇编中确认 stack check / morestackgo tool compile -S demo.go > demo.s</span></span>
+<span class="line"><span style="color:#6A737D"># 汇编中确认 stack check / morestack</span></span>
+<span class="line"><span style="color:#B392F0">go</span><span style="color:#9ECBFF"> tool</span><span style="color:#9ECBFF"> compile</span><span style="color:#79B8FF"> -S</span><span style="color:#9ECBFF"> demo.go</span><span style="color:#F97583"> ></span><span style="color:#9ECBFF"> demo.s</span></span>
 <span class="line"><span style="color:#B392F0">rg</span><span style="color:#9ECBFF"> 'morestack|stackguard'</span><span style="color:#9ECBFF"> demo.s</span></span>
 <span class="line"></span>
-<span class="line"><span style="color:#6A737D">## goroutine profilecurl -s http://127.0.0.1:6060/debug/pprof/goroutine?debug=2</span></span>
+<span class="line"><span style="color:#6A737D"># goroutine profile</span></span>
+<span class="line"><span style="color:#B392F0">curl</span><span style="color:#79B8FF"> -s</span><span style="color:#9ECBFF"> http://127.0.0.1:6060/debug/pprof/goroutine?debug=</span><span style="color:#79B8FF">2</span></span>
 <span class="line"></span>
-<span class="line"><span style="color:#6A737D">## heap/profile 与 tracego test -run='^$' -bench=. -benchmem -memprofile=mem.out ./...</span></span>
+<span class="line"><span style="color:#6A737D"># heap/profile 与 trace</span></span>
+<span class="line"><span style="color:#B392F0">go</span><span style="color:#9ECBFF"> test</span><span style="color:#79B8FF"> -run=</span><span style="color:#9ECBFF">'^$'</span><span style="color:#79B8FF"> -bench=.</span><span style="color:#79B8FF"> -benchmem</span><span style="color:#79B8FF"> -memprofile=mem.out</span><span style="color:#9ECBFF"> ./...</span></span>
 <span class="line"><span style="color:#B392F0">go</span><span style="color:#9ECBFF"> tool</span><span style="color:#9ECBFF"> pprof</span><span style="color:#79B8FF"> -http=:0</span><span style="color:#9ECBFF"> mem.out</span></span>
 <span class="line"><span style="color:#B392F0">go</span><span style="color:#9ECBFF"> test</span><span style="color:#79B8FF"> -run</span><span style="color:#9ECBFF"> TestX</span><span style="color:#79B8FF"> -trace=trace.out</span><span style="color:#9ECBFF"> ./...</span></span>
 <span class="line"><span style="color:#B392F0">go</span><span style="color:#9ECBFF"> tool</span><span style="color:#9ECBFF"> trace</span><span style="color:#9ECBFF"> trace.out</span></span></code></pre>
@@ -398,7 +348,7 @@
 <span class="line"><span>/sched/goroutines:goroutines</span></span>
 <span class="line"><span>/gc/scan/stack:bytes</span></span></code></pre>
 <p>Go 1.26 还新增了更多 goroutine 状态与创建总数等 scheduler metrics，可将“总量增加”进一步拆成 runnable/waiting 等状态，见 <a href="https://go.dev/doc/go1.26" rel="noopener noreferrer" target="_blank">Go 1.26 Release Notes</a>。</p>
-<h3 id="大局部变量一定危险吗">大局部变量一定危险吗</h3>
+<h2 id="大局部变量一定危险吗">大局部变量一定危险吗</h2>
 <p>大局部对象有三种可能：</p>
 <ol>
 <li>优化后消失或进入寄存器；</li>
@@ -407,7 +357,7 @@
 </ol>
 <p>只看源码声明无法判断。必须结合 <code>-m=2</code>、汇编、benchmark 和 profile。</p>
 <h2 id="十二优化原则">十二、优化原则</h2>
-<h3 id="控制-goroutine-生命周期优先于微调初始栈">控制 goroutine 生命周期优先于微调初始栈</h3>
+<h2 id="控制-goroutine-生命周期优先于微调初始栈">控制 goroutine 生命周期优先于微调初始栈</h2>
 <p>高级工程实践关注：</p>
 <ul>
 <li>所有后台 goroutine 有明确 owner；</li>
@@ -417,14 +367,14 @@
 <li>shutdown 能等待 goroutine 收敛；</li>
 <li>goroutine 数、stack bytes、waiting reason 有监控。</li>
 </ul>
-<h3 id="避免无界递归与巨型-frame">避免无界递归与巨型 frame</h3>
+<h2 id="避免无界递归与巨型-frame">避免无界递归与巨型 frame</h2>
 <ul>
 <li>输入深度不可信时改为显式 heap worklist；</li>
 <li>大 buffer 评估复用或分块，但不要盲目全局缓存；</li>
 <li>大数组按 value 传递会复制整个对象，优先审查接口设计；</li>
 <li>benchmark 既看 <code>allocs/op</code>，也看延迟与 stack profile/metrics。</li>
 </ul>
-<h3 id="不要为了栈上分配破坏代码">不要为了“栈上分配”破坏代码</h3>
+<h2 id="不要为了栈上分配破坏代码">不要为了“栈上分配”破坏代码</h2>
 <p>让编译器做逃逸分析。只有 profile 证明 allocation 是瓶颈时，才尝试缩短生命周期、改善 API、减少接口装箱或帮助编译器内联；随后用目标版本复测。</p>
 <h2 id="十三常见误区">十三、常见误区</h2>
 
@@ -503,7 +453,7 @@
 <span class="line"><span>-> newstack/copy 调整全部指针</span></span>
 <span class="line"><span>-> GC safe point 扫描并择机 shrink</span></span></code></pre>
 <p>栈不是孤立机制：它连接 <a href="/memory-alloc/">内存分配器</a> 的 manual span 与 per-P cache，连接 <a href="/gc/">垃圾收集器</a> 的 root scan，也连接 <a href="/gmp/">GMP（Go 1.26.5 源码分析）</a> 的抢占与调度。理解这三条连接，才真正理解“goroutine 为什么轻量”。</p>
-<h3 id="参考资料">参考资料</h3>
+<h2 id="参考资料">参考资料</h2>
 <ul>
 <li><a href="https://go.dev/doc/go1.26" rel="noopener noreferrer" target="_blank">Go 1.26 Release Notes</a></li>
 <li><a href="https://go.dev/doc/diagnostics" rel="noopener noreferrer" target="_blank">Go Diagnostics</a></li>
@@ -511,4 +461,4 @@
 <li><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/proc.go" rel="noopener noreferrer" target="_blank">Go 1.26.5 runtime/proc.go</a></li>
 <li><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/cmd/compile/internal/escape/escape.go" rel="noopener noreferrer" target="_blank">Go 1.26.5 compiler escape analysis</a></li>
 <li><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/cmd/compile/internal/walk/builtin.go#L469-L500" rel="noopener noreferrer" target="_blank">Go 1.26.5 compiler variable make</a></li>
-</ul></main><aside class="toc"><p class="toc-title">本页目录</p><ul><li class="toc-d3"><a href="#go-1265-必须先知道的变化">Go 1.26.5 必须先知道的变化</a></li><li class="toc-d3"><a href="#源码地图">源码地图</a></li><li class="toc-d2"><a href="#一进程里不止一种栈">一、进程里不止一种栈</a></li><li class="toc-d3"><a href="#普通-g-stack">普通 G stack</a></li><li class="toc-d3"><a href="#g0每个-m-的调度栈">g0：每个 M 的调度栈</a></li><li class="toc-d3"><a href="#gsignal信号处理栈">gsignal：信号处理栈</a></li><li class="toc-d2"><a href="#二栈与堆的决定发生在哪里">二、栈与堆的决定发生在哪里</a></li><li class="toc-d3"><a href="#逃逸分析的两个不变量">逃逸分析的两个不变量</a></li><li class="toc-d3"><a href="#常见逃逸场景不是绝对规则">常见逃逸场景不是绝对规则</a></li><li class="toc-d2"><a href="#三go-126-的-variable-size-slice-栈上分配">三、Go 1.26 的 variable-size slice 栈上分配</a></li><li class="toc-d2"><a href="#四goroutine-创建与初始栈">四、goroutine 创建与初始栈</a></li><li class="toc-d2"><a href="#五小栈如何分配">五、小栈如何分配</a></li><li class="toc-d3"><a href="#per-p-stack-cache">per-P stack cache</a></li><li class="toc-d3"><a href="#为什么栈大小必须是-2-的幂">为什么栈大小必须是 2 的幂</a></li><li class="toc-d2"><a href="#六函数序言与-morestack">六、函数序言与 morestack</a></li><li class="toc-d3"><a href="#nosplit-不是更快注解">NOSPLIT 不是“更快”注解</a></li><li class="toc-d2"><a href="#七newstack扩容与同步抢占共用入口">七、newstack：扩容与同步抢占共用入口</a></li><li class="toc-d2"><a href="#八copystack复制的不只是字节">八、copystack：复制的不只是字节</a></li><li class="toc-d3"><a href="#为什么-channel-会让复制复杂">为什么 channel 会让复制复杂</a></li><li class="toc-d3"><a href="#为什么-unsafe-很容易与栈移动冲突">为什么 unsafe 很容易与栈移动冲突</a></li><li class="toc-d2"><a href="#九栈缩容">九、栈缩容</a></li><li class="toc-d2"><a href="#十gc-如何扫描栈">十、GC 如何扫描栈</a></li><li class="toc-d2"><a href="#十一生产内存诊断">十一、生产内存诊断</a></li><li class="toc-d3"><a href="#区分-stackheap-与-goroutine-retention">区分 stack、heap 与 goroutine retention</a></li><li class="toc-d3"><a href="#常用命令">常用命令</a></li><li class="toc-d3"><a href="#大局部变量一定危险吗">大局部变量一定危险吗</a></li><li class="toc-d2"><a href="#十二优化原则">十二、优化原则</a></li><li class="toc-d3"><a href="#控制-goroutine-生命周期优先于微调初始栈">控制 goroutine 生命周期优先于微调初始栈</a></li><li class="toc-d3"><a href="#避免无界递归与巨型-frame">避免无界递归与巨型 frame</a></li><li class="toc-d3"><a href="#不要为了栈上分配破坏代码">不要为了“栈上分配”破坏代码</a></li><li class="toc-d2"><a href="#十三常见误区">十三、常见误区</a></li><li class="toc-d2"><a href="#十四源码阅读主线与验收">十四、源码阅读主线与验收</a></li><li class="toc-d2"><a href="#总结">总结</a></li><li class="toc-d3"><a href="#参考资料">参考资料</a></li></ul></aside></div><div class="lightbox" id="lightbox" aria-hidden="true"><img alt=""></div><script type="module" src="/_astro/Base.astro_astro_type_script_index_0_lang.DKvZf7If.js"></script></body></html>
+</ul></main><aside class="toc"><p class="toc-title">本页目录</p><ul><li class="toc-d2"><a href="#go-1265-必须先知道的变化">Go 1.26.5 必须先知道的变化</a></li><li class="toc-d2"><a href="#源码地图">源码地图</a></li><li class="toc-d2"><a href="#一进程里不止一种栈">一、进程里不止一种栈</a></li><li class="toc-d2"><a href="#普通-g-stack">普通 G stack</a></li><li class="toc-d2"><a href="#g0每个-m-的调度栈">g0：每个 M 的调度栈</a></li><li class="toc-d2"><a href="#gsignal信号处理栈">gsignal：信号处理栈</a></li><li class="toc-d2"><a href="#二栈与堆的决定发生在哪里">二、栈与堆的决定发生在哪里</a></li><li class="toc-d2"><a href="#逃逸分析的两个不变量">逃逸分析的两个不变量</a></li><li class="toc-d2"><a href="#常见逃逸场景不是绝对规则">常见逃逸场景不是绝对规则</a></li><li class="toc-d2"><a href="#三go-126-的-variable-size-slice-栈上分配">三、Go 1.26 的 variable-size slice 栈上分配</a></li><li class="toc-d2"><a href="#四goroutine-创建与初始栈">四、goroutine 创建与初始栈</a></li><li class="toc-d2"><a href="#五小栈如何分配">五、小栈如何分配</a></li><li class="toc-d2"><a href="#per-p-stack-cache">per-P stack cache</a></li><li class="toc-d2"><a href="#为什么栈大小必须是-2-的幂">为什么栈大小必须是 2 的幂</a></li><li class="toc-d2"><a href="#六函数序言与-morestack">六、函数序言与 morestack</a></li><li class="toc-d2"><a href="#nosplit-不是更快注解">NOSPLIT 不是“更快”注解</a></li><li class="toc-d2"><a href="#七newstack扩容与同步抢占共用入口">七、newstack：扩容与同步抢占共用入口</a></li><li class="toc-d2"><a href="#八copystack复制的不只是字节">八、copystack：复制的不只是字节</a></li><li class="toc-d2"><a href="#为什么-channel-会让复制复杂">为什么 channel 会让复制复杂</a></li><li class="toc-d2"><a href="#为什么-unsafe-很容易与栈移动冲突">为什么 unsafe 很容易与栈移动冲突</a></li><li class="toc-d2"><a href="#九栈缩容">九、栈缩容</a></li><li class="toc-d2"><a href="#十gc-如何扫描栈">十、GC 如何扫描栈</a></li><li class="toc-d2"><a href="#十一生产内存诊断">十一、生产内存诊断</a></li><li class="toc-d2"><a href="#区分-stackheap-与-goroutine-retention">区分 stack、heap 与 goroutine retention</a></li><li class="toc-d2"><a href="#常用命令">常用命令</a></li><li class="toc-d2"><a href="#大局部变量一定危险吗">大局部变量一定危险吗</a></li><li class="toc-d2"><a href="#十二优化原则">十二、优化原则</a></li><li class="toc-d2"><a href="#控制-goroutine-生命周期优先于微调初始栈">控制 goroutine 生命周期优先于微调初始栈</a></li><li class="toc-d2"><a href="#避免无界递归与巨型-frame">避免无界递归与巨型 frame</a></li><li class="toc-d2"><a href="#不要为了栈上分配破坏代码">不要为了“栈上分配”破坏代码</a></li><li class="toc-d2"><a href="#十三常见误区">十三、常见误区</a></li><li class="toc-d2"><a href="#十四源码阅读主线与验收">十四、源码阅读主线与验收</a></li><li class="toc-d2"><a href="#总结">总结</a></li><li class="toc-d2"><a href="#参考资料">参考资料</a></li></ul></aside></div><div class="lightbox" id="lightbox" aria-hidden="true"><img alt=""></div><script type="module" src="/_astro/Base.astro_astro_type_script_index_0_lang.DKvZf7If.js"></script></body></html>

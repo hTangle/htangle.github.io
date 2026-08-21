@@ -5,8 +5,12 @@
           document.documentElement.setAttribute('data-theme', s);
         }
       })();
-    </script><link rel="stylesheet" href="/_astro/Base.C1_PNgav.css"></head><body><header class="topbar"><a href="/" class="brand">HLDay</a><nav><a href="/">专题</a><a href="/posts/">博客</a><a href="https://github.com/hTangle" class="nav-github" aria-label="GitHub">GitHub</a></nav><button class="theme-toggle" id="themeToggle" type="button" title="切换主题（自动/浅色/深色）" aria-label="切换主题">🖥️</button></header><div class="layout"><aside class="booknav"><ul class="nav-tree"><li><p class="nav-group">Go</p><ul><li><p class="nav-subgroup">并发编程</p><ul><li class="active"><a href="/gmp/">GMP 调度器</a></li><li class><a href="/sync-lock/">同步和锁</a></li><li class><a href="/channel/">Channel</a></li><li class><a href="/context/">Context</a></li></ul></li><li><p class="nav-subgroup">内存管理</p><ul><li class><a href="/memory-alloc/">内存分配器</a></li><li class><a href="/gc/">垃圾收集器</a></li><li class><a href="/stack/">栈空间管理</a></li></ul></li></ul></li><li><p class="nav-group">Agent 开发</p><ul><li><p class="nav-subgroup">核心协议与机制</p><ul><li class><a href="/mcp/">MCP</a></li><li class><a href="/skill/">Skill</a></li><li class><a href="/tool-call/">Tool Call</a></li></ul></li></ul></li></ul></aside><main class="prose"><h1>GMP 调度器：Go 1.26.5 源码分析</h1><p>Go 调度器解决的核心问题是：如何用较少的操作系统线程运行数量巨大的 goroutine，同时在阻塞、系统调用、网络 I/O、抢占和 GC 之间维持吞吐与延迟。G、M、P 不是三个抽象首字母，而是 runtime 中真实存在、长期复用的数据结构。</p>
+    </script><link rel="stylesheet" href="/_astro/Base.CYI339jz.css"></head><body><header class="topbar"><a href="/" class="brand">HLDay</a><nav><a href="/">专题</a><a href="/posts/">博客</a><a href="https://github.com/hTangle" class="nav-github" aria-label="GitHub">GitHub</a></nav><button class="theme-toggle" id="themeToggle" type="button" title="切换主题（自动/浅色/深色）" aria-label="切换主题">🖥️</button></header><div class="layout"><aside class="booknav"><ul class="nav-tree"><li><p class="nav-group">Go</p><ul><li><p class="nav-subgroup">并发编程</p><ul><li class="active"><a href="/gmp/">GMP 调度器</a></li><li class><a href="/sync-lock/">同步和锁</a></li><li class><a href="/channel/">Channel</a></li><li class><a href="/context/">Context</a></li></ul></li><li><p class="nav-subgroup">内存管理</p><ul><li class><a href="/memory-alloc/">内存分配器</a></li><li class><a href="/gc/">垃圾收集器</a></li><li class><a href="/stack/">栈空间管理</a></li></ul></li></ul></li><li><p class="nav-group">Agent 开发</p><ul><li><p class="nav-subgroup">核心协议与机制</p><ul><li class><a href="/mcp/">MCP</a></li><li class><a href="/skill/">Skill</a></li><li class><a href="/tool-call/">Tool Call</a></li></ul></li></ul></li></ul></aside><main class="prose"><h1>GMP 调度器：Go 1.26.5 源码分析</h1><p>Go 调度器解决的核心问题是：如何用较少的操作系统线程运行数量巨大的 goroutine，同时在阻塞、系统调用、网络 I/O、抢占和 GC 之间维持吞吐与延迟。G、M、P 不是三个抽象首字母，而是 runtime 中真实存在、长期复用的数据结构。</p>
 <img src="/images/go/01-gmp-调度器-go-1-26-5-源码分析.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
+<blockquote>
+<p>[!info] 版本与源码基线
+本文以 <strong>Go 1.26.5</strong> 为基准，源码链接固定到提交 <code>c19862e5f8415b4f24b189d065ed739517c548ba</code>。旧笔记 GMP 仅作历史参考，当前实现以 runtime 源码为准。</p>
+</blockquote>
 
 
 
@@ -37,9 +41,12 @@
 
 
 <table><thead><tr><th>版本</th><th>调度/runtime 相关变化</th></tr></thead><tbody><tr><td>Go 1.1</td><td>引入以 P 和 work stealing 为核心的新调度器</td></tr><tr><td>Go 1.14</td><td>基于信号的异步抢占投入使用，纯计算循环也能被抢占</td></tr><tr><td>Go 1.21</td><td>P 本地队列、netpoll、timer 等框架持续演进，GMP 基本模型保持稳定</td></tr><tr><td>Go 1.25</td><td>默认 <code>GOMAXPROCS</code> 具备容器 CPU 配额感知，并可由 sysmon 周期性更新</td></tr><tr><td>Go 1.26</td><td>Green Tea GC 默认启用；新增实验性 <code>goroutineleak</code> profile，可发现一类永久阻塞的 G</td></tr></tbody></table>
-<p><strong>📝 GC 不是调度器，但两者高度耦合</strong></p>
-<p>P 持有分配缓存与 GC worker 状态，调度循环会优先运行 GC worker；STW、抢占和栈扫描也都需要调度器配合。因此理解 GMP 时不能完全绕开 GC。</p>
-<h3 id="快速理解把-runtime-想成一个车间">快速理解：把 runtime 想成一个车间</h3>
+<div class="markdown-alert markdown-alert-note" dir="auto">
+<p class="markdown-alert-title" dir="auto"><svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>NOTE</p>
+<p> GC 不是调度器，但两者高度耦合
+P 持有分配缓存与 GC worker 状态，调度循环会优先运行 GC worker；STW、抢占和栈扫描也都需要调度器配合。因此理解 GMP 时不能完全绕开 GC。</p>
+</div>
+<h2 id="快速理解把-runtime-想成一个车间">快速理解：把 runtime 想成一个车间</h2>
 <p>第一次读源码容易被 G、M、P、g0、runnext、netpoll、sysmon 这堆名词淹没。先用一段话建立心智模型：</p>
 <p>把 Go runtime 想成工厂车间。<strong>G 是任务卡</strong>，写 <code>go f()</code> 就是往筐里扔一张卡，卡很轻（栈初始 2KB），能同时有几十万张。<strong>M 是工人</strong>，即 OS 线程，一个工人同一时刻只干一张卡。<strong>P 是工牌加工具台</strong>，没有工牌的工人不能执行普通 Go 代码；工具台上挂着本地任务筐（256 槽的本地队列）、内存分配缓存、timer 等。<code>GOMAXPROCS=N</code> 就是发 N 个工牌，工人数量按需增减——所以工牌可以比工人多（活少，工人睡觉了），工人也可以比工牌多（多个 M 堵在 syscall 上）。</p>
 <img src="/images/go/00-通俗解释-gmp-车间.png" alt="" loading="lazy" width="800" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
@@ -53,20 +60,20 @@
 <p>调度的核心循环是 <code>schedule() → findRunnable() → execute(g) → 跑用户代码</code>，跑累了再回 <code>schedule</code>。<code>schedule</code> 和 <code>findRunnable</code> 跑在 M 自带的 <strong>g0 系统栈</strong>上（一块固定的、不属于任何 G 的栈），不是普通函数互相递归。一个 G 不能无限霸占 P：函数序言有同步抢占检查，纯 <code>for{}</code> 死循环则由 sysmon 发 <code>SIGURG</code> 信号做异步抢占，10ms 是发起抢占请求的阈值，不是硬时间片。</p>
 <p>记住五个反直觉点：<code>GOMAXPROCS=1</code> 不是只有一个线程；goroutine 不保证按创建顺序跑；<code>go f()</code> 通常不创建新线程；G 退出后 <code>g</code> 结构会被复用；<code>LockOSThread</code> 把 G 和 M 焊死，是非默认逃生门。</p>
 <p>后面章节按这个顺序展开：核心模型 → 调度循环 → <strong>阻塞与 I/O（重点）</strong> → <strong>抢占（重点）</strong> → 配置与边界 → 诊断实践。</p>
-<h3 id="一核心模型gmp">一、核心模型：G、M、P</h3>
-<h4 id="ggoroutine-的运行时描述">G：goroutine 的运行时描述</h4>
+<h2 id="一核心模型gmp">一、核心模型：G、M、P</h2>
+<h3 id="ggoroutine-的运行时描述">G：goroutine 的运行时描述</h3>
 <p><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/runtime2.go#L473-L617" rel="noopener noreferrer" target="_blank"><code>g</code></a> 不等于”函数”。它保存一个 goroutine 从创建到退出所需的运行状态：</p>
 <img src="/images/go/02-g-goroutine-的运行时描述.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
 <p>G 对象会复用：goroutine 退出后，其 <code>g</code> 进入空闲池，未来可代表另一个 goroutine。G 的用户栈起始很小，按需增长或收缩；运行时还会扫描它来寻找 GC root。</p>
-<h4 id="m操作系统线程">M：操作系统线程</h4>
+<h3 id="m操作系统线程">M：操作系统线程</h3>
 <p><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/runtime2.go#L618-L771" rel="noopener noreferrer" target="_blank"><code>m</code></a> 是 machine，即 OS thread 的 runtime 表示：</p>
 <img src="/images/go/03-m-操作系统线程.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
 <p>M 可以没有 P，例如阻塞在系统调用、执行 cgo 或处于空闲线程池。M 的数量不等于 <code>GOMAXPROCS</code>；大量系统调用可以让 runtime 创建更多 M，但只有拿到 P 的 M 才能执行普通 Go 代码。M 总数有上限，由 <code>runtime/debug.SetMaxThreads</code> 控制（默认 10000）。</p>
-<h4 id="p执行权与每-p-资源">P：执行权与每 P 资源</h4>
+<h3 id="p执行权与每-p-资源">P：执行权与每 P 资源</h3>
 <p><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/runtime2.go#L772-L929" rel="noopener noreferrer" target="_blank"><code>p</code></a> 是 processor。它不是 CPU 核心，也不是线程，而是执行用户 Go 代码所需的许可和一组分片资源：</p>
 <img src="/images/go/04-p-执行权与每-p-资源.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
 <p>P 的数量等于当前 <code>GOMAXPROCS</code>。把常用调度、分配和 timer 状态放在 P 上，可以让多数操作使用本地分片，减少全局锁竞争。</p>
-<h4 id="三者如何组合">三者如何组合</h4>
+<h3 id="三者如何组合">三者如何组合</h3>
 <img src="/images/go/05-三者如何组合.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
 <ul>
 <li>G 提供”要运行什么”。</li>
@@ -74,21 +81,24 @@
 <li>P 提供”运行 Go 代码的权利和本地资源”。</li>
 <li>调度器持续匹配三者，而不是把 G 永久绑定给某个 M 或 P。</li>
 </ul>
-<p><strong>⚠️ 常见误解</strong></p>
-<p><code>GOMAXPROCS=1</code> 不是只有一个 M，也不是程序没有并发；它只限制同时执行普通 Go 代码的 P 数量为 1。阻塞系统调用、runtime 线程和 cgo 仍可能存在多个 M。</p>
-<h4 id="g-的状态机">G 的状态机</h4>
+<div class="markdown-alert markdown-alert-warning" dir="auto">
+<p class="markdown-alert-title" dir="auto"><svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>WARNING</p>
+<p> 常见误解
+<code>GOMAXPROCS=1</code> 不是只有一个 M，也不是程序没有并发；它只限制同时执行普通 Go 代码的 P 数量为 1。阻塞系统调用、runtime 线程和 cgo 仍可能存在多个 M。</p>
+</div>
+<h3 id="g-的状态机">G 的状态机</h3>
 <p>主要状态定义在 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/runtime2.go#L17-L120" rel="noopener noreferrer" target="_blank"><code>runtime2.go</code></a>：</p>
 <img src="/images/go/06-g-的状态机.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
 <p><code>_Gscan</code> 是叠加在基础状态上的 GC 扫描位，不是普通独立生命周期状态。状态迁移必须通过 runtime 的原子/CAS 辅助函数完成，调度器、GC 和栈复制都依赖这些不变量。</p>
-<h3 id="二调度循环从-go-f-到-g-被执行">二、调度循环：从 <code>go f()</code> 到 G 被执行</h3>
-<h4 id="启动与创建-goroutine">启动与创建 goroutine</h4>
+<h2 id="二调度循环从-go-f-到-g-被执行">二、调度循环：从 <code>go f()</code> 到 G 被执行</h2>
+<h3 id="启动与创建-goroutine">启动与创建 goroutine</h3>
 <p>程序启动先在系统栈执行 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/proc.go#L831-L970" rel="noopener noreferrer" target="_blank"><code>schedinit</code></a>，初始化锁、栈、内存分配器、GC、CPU 特征、随机数、P 等子系统。</p>
 <img src="/images/go/07-调度器初始化.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
 <p><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/proc.go#L6030-L6205" rel="noopener noreferrer" target="_blank"><code>procresize</code></a> 必须在 STW 下调整 P 数量，初始化新增 P 的本地资源，并把不再使用 P 上的 runnable G 迁移到可继续调度的位置。</p>
 <p>编译器把 <code>go f(args)</code> 变成对 runtime 创建入口的调用，主体是 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/proc.go#L5295-L5413" rel="noopener noreferrer" target="_blank"><code>newproc/newproc1</code></a>：</p>
 <img src="/images/go/08-创建-goroutine-从-go-f-到--grunnable.png" alt="" loading="lazy" width="500" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
 <p>新 G 的初始 PC 被安排到 <code>goexit</code> 包装后的入口，使用户函数返回后必然进入 runtime 的 goroutine 退出清理。创建 goroutine 不等于马上新建 OS 线程；通常只是分配/复用 G 并把它放入当前 P 的本地队列。</p>
-<h4 id="运行队列与-work-stealing">运行队列与 work stealing</h4>
+<h3 id="运行队列与-work-stealing">运行队列与 work stealing</h3>
 <img src="/images/go/09-队列层次.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
 <ul>
 <li><code>runnext</code> 适合刚刚被当前 G 唤醒、很可能共享缓存的 G；它继承当前时间片。</li>
@@ -100,11 +110,11 @@
 <p><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/proc.go#L7662-L7747" rel="noopener noreferrer" target="_blank"><code>runqsteal</code></a> 通常窃取 victim P 可运行队列的大约一半，把多数任务留在自己的本地队列并返回一个立即执行：</p>
 <img src="/images/go/10-work-stealing.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
 <p>窃取一半是在负载均衡开销与缓存局部性之间折中；如果每次只偷一个，空闲 P 会频繁扫描。</p>
-<h4 id="schedule--findrunnable--execute"><code>schedule → findRunnable → execute</code></h4>
+<h3 id="schedule--findrunnable--execute"><code>schedule → findRunnable → execute</code></h3>
 <p><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/proc.go#L4135-L4251" rel="noopener noreferrer" target="_blank"><code>schedule</code></a> 运行在 M 的 g0 系统栈上：</p>
 <img src="/images/go/11-调度循环-schedule-findrunnable-execute.png" alt="" loading="lazy" width="400" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
 <p><code>execute</code> 会把 G 绑定到 M、更新状态和时间片，再通过 <code>gogo</code> 恢复 <code>g.sched</code> 中保存的寄存器上下文。调度器不是普通 Go 函数之间递归调用，而是在用户栈和 g0 系统栈之间切换。</p>
-<h5 id="g0-系统栈为什么存在">g0 系统栈为什么存在</h5>
+<h4 id="g0-系统栈为什么存在">g0 系统栈为什么存在</h4>
 <p>每个 M 自带两块栈：</p>
 <ul>
 <li><strong>用户 G 的栈</strong>：goroutine 跑业务代码用，初始 2KB，按需扩缩，GC 扫栈时可能被整体复制到新地址。</li>
@@ -118,19 +128,22 @@
 <li><strong>信号必须落在已知安全的栈上</strong>。SIGSEGV、SIGURG 这类信号可能在用户栈任意指令处打断，信号处理函数落在 <code>gsignal</code> 上，必要时再切到 g0 进调度。</li>
 </ol>
 <p>切换由两段汇编完成：<code>mcall</code> 从用户 G 栈切到 g0 栈，<code>gogo</code> 从 g0 切回某个用户 G 的栈和寄存器。字段在 <code>runtime2.go</code> 的 <code>m</code> 结构体里，汇编函数在 <code>runtime/asm_amd64.s</code>（其他架构对应 <code>asm_*.s</code>）。</p>
-<h3 id="三阻塞系统调用与网络-io">三、阻塞、系统调用与网络 I/O</h3>
-<p><strong>⭐ 这是 GMP 最关键的一章</strong></p>
-<p>用户写 Go 代码碰到的 90% 调度困惑——为什么 IO 密集服务没几个线程、为什么磁盘 IO 会卡 P、为什么一个 <code>for{}</code> 以前能把整个程序搞挂——答案都在这三种阻塞的区别里。它们在 runtime 里走完全不同的路径。</p>
-<h4 id="runtime-可感知阻塞只-park-gm-不停">runtime 可感知阻塞：只 park G，M 不停</h4>
+<h2 id="三阻塞系统调用与网络-io">三、阻塞、系统调用与网络 I/O</h2>
+<div class="markdown-alert markdown-alert-important" dir="auto">
+<p class="markdown-alert-title" dir="auto"><svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M0 1.75C0 .784.784 0 1.75 0h12.5C15.216 0 16 .784 16 1.75v9.5A1.75 1.75 0 0 1 14.25 13H8.06l-2.573 2.573A1.458 1.458 0 0 1 3 14.543V13H1.75A1.75 1.75 0 0 1 0 11.25Zm1.75-.25a.25.25 0 0 0-.25.25v9.5c0 .138.112.25.25.25h2a.75.75 0 0 1 .75.75v2.19l2.72-2.72a.749.749 0 0 1 .53-.22h6.5a.25.25 0 0 0 .25-.25v-9.5a.25.25 0 0 0-.25-.25Zm7 2.25v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 9a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>IMPORTANT</p>
+<p> 这是 GMP 最关键的一章
+用户写 Go 代码碰到的 90% 调度困惑——为什么 IO 密集服务没几个线程、为什么磁盘 IO 会卡 P、为什么一个 <code>for{}</code> 以前能把整个程序搞挂——答案都在这三种阻塞的区别里。它们在 runtime 里走完全不同的路径。</p>
+</div>
+<h3 id="runtime-可感知阻塞只-park-gm-不停">runtime 可感知阻塞：只 park G，M 不停</h3>
 <p>Channel、Mutex、Cond、timer、select 等 runtime 原生同步原语走 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/proc.go#L445-L469" rel="noopener noreferrer" target="_blank"><code>gopark</code></a>：</p>
 <img src="/images/go/12-阻塞与唤醒-为什么-g-阻塞不等于线程阻塞.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
 <p><code>gopark</code> 把当前 G 从 M 手里摘下来、状态改为 <code>_Gwaiting</code>、挂到那个 channel/锁/timer 的等待队列上，然后 M 立刻回调度器找下一张卡。整个过程没有任何系统线程阻塞。</p>
 <p><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/proc.go#L1120-L1165" rel="noopener noreferrer" target="_blank"><code>ready</code></a> 是反向操作：把 waiting G 改为 runnable 并入队（优先放 <code>runnext</code>），它不是直接让目标 G 在当前线程上继续执行。Channel 的完整阻塞链见 <a href="/channel/">Channel（Go 1.26.5 源码分析）</a>。</p>
-<h4 id="系统调用m-被占住p-必须流动">系统调用：M 被占住，P 必须流动</h4>
+<h3 id="系统调用m-被占住p-必须流动">系统调用：M 被占住，P 必须流动</h3>
 <p>系统调用可能让 OS thread 长时间阻塞，runtime 喊不醒。runtime 用 <code>_Gsyscall</code> / <code>_Psyscall</code> 记录它，并允许 P 被其他 M 接管：</p>
 <img src="/images/go/13-系统调用-m-可以被占住-p-必须继续流动.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
 <p>入口和返回路径见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/proc.go#L4737-L5100" rel="noopener noreferrer" target="_blank"><code>entersyscall/exitsyscall</code></a>。进 syscall 前 M 把 P 交回 idle 链表，exitsyscall 时 M 试图拿回自己原来的 P，拿不到就从 idle 链表取一个，再拿不到就把 G 塞进全局队列、M 自己睡觉。这解释了为什么 M 数量可能超过 P：被系统调用占住的 M 暂时不能执行其他 G，但它原来的 P 可以继续服务。</p>
-<h4 id="网络轮询器几个线程扛几十万连接">网络轮询器：几个线程扛几十万连接</h4>
+<h3 id="网络轮询器几个线程扛几十万连接">网络轮询器：几个线程扛几十万连接</h3>
 <p>网络 I/O 不会为每个连接长期占一条线程。runtime netpoller 把等待 fd 的 G 停在 poll descriptor 上，OS 多路复用器报告就绪后再把 G 变为 runnable：</p>
 <img src="/images/go/14-网络轮询器-少量线程等待大量-fd.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
 <p>公共逻辑位于 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/netpoll.go#L218-L700" rel="noopener noreferrer" target="_blank"><code>runtime/netpoll.go</code></a>，平台文件负责具体 OS 接口。</p>
@@ -143,6 +156,13 @@
 <li><strong>G 被重新调度，Read 返回数据</strong>。某个 M+P 取到这个 G，从它被 park 的位置继续，重新 <code>read(fd, buf)</code>；这次数据已在内核缓冲，直接返回。用户代码视角就是 <code>conn.Read</code> 阻塞了一段时间后返回，感知不到中间被切走。</li>
 </ol>
 <p><code>findRunnable</code> 和 netpoll 有两个关键交互：每次找活开头先调一次非阻塞 <code>netpoll(0)</code> 顺手收割就绪 G（延迟极低）；当本地/全局队列、偷任务、GC、timer 都没活时，P 休眠前再做一次非阻塞 netpoll；整个系统都没活就让一个 M 阻塞在 <code>epoll_wait</code> 上，避免空转烧 CPU。</p>
+<p>展开说，这是”绝不浪费一次调度，也绝不空转”的设计：</p>
+<ol>
+<li><strong>每次开头顺手 <code>netpoll(0)</code></strong>：<code>netpoll(0)</code> 里的 <code>0</code> 表示非阻塞——有就绪的网络事件就立刻返回那批 G，没有也马上返回，不会让 P 等。反正正要找活，顺便查一下网络有没有已经准备好的 G，有就直接拿来跑，省去专门唤醒的延迟。</li>
+<li><strong>真没活了，P 睡觉前再查一次</strong>：本地队列、全局队列、work stealing、GC worker、timer 全找过一遍都没活，P 准备 park 了，最后再非阻塞 netpoll 一次，防止这期间刚好有网络事件就绪。有就不用睡了。</li>
+<li><strong>全系统空闲 → 一个 M 阻塞在 <code>epoll_wait</code></strong>：不能让所有线程 <code>while(true)</code> 空转烧 CPU。让唯一一个不绑 P 的 M 阻塞在 <code>epoll_wait</code> 上（这是系统调用，没事件时线程完全睡眠不占 CPU），其余 M/P 都休眠；网络数据到来时 <code>epoll_wait</code> 返回，这个 M 把就绪 G 注入调度队列并唤醒空闲 P 来跑。</li>
+</ol>
+<p>所以两次非阻塞轮询保证<strong>低延迟</strong>（就绪 G 被顺手发现，不用等唤醒），最终阻塞在 <code>epoll_wait</code> 保证<strong>空闲时零 CPU 消耗</strong>。</p>
 <p><strong>为什么能扛几十万连接</strong>：每个等待中的连接只占一个 parked 的 G（初始栈 2KB 且等待期间不增长），不占 M、不占 P、不参与调度；真正需要 M 的只有活跃连接；epoll 一个线程能等百万级 fd。典型 Go 服务的 M 数约等于 <code>GOMAXPROCS</code> 加几个 runtime 后台线程（sysmon、netpoller），再加少量被 syscall/cgo 堵住的 M。</p>
 <p><strong>几个边界</strong>：</p>
 <ul>
@@ -152,10 +172,13 @@
 <li><strong>deadline</strong>（<code>SetReadDeadline</code>）是把 timer 和 pollDesc 联动，超时由 runtime 唤醒 G 并让 Read 返回 <code>timeout</code> 错误，不是真的中断 syscall。</li>
 <li><strong>Windows IOCP</strong> 模型不同（overlapped 读写、完成后返回完成项），runtime 把它适配成同样的”G park → 完成后唤醒”抽象，用户代码不用区分。</li>
 </ul>
-<h3 id="四抢占怎么打断一个死循环">四、抢占：怎么打断一个死循环</h3>
-<p><strong>⭐ 这是 GMP 的第二个重点</strong></p>
-<p>Go 调度器是协作式还是抢占式？答案是”两者都有”。理解这一章就理解了为什么现代 Go 里 <code>for{}</code> 不会把调度器饿死。
-Go 1.26 的抢占设计在 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/preempt.go#L5-L51" rel="noopener noreferrer" target="_blank"><code>preempt.go#L5-L51</code></a> 明确区分三类安全点：</p>
+<h2 id="四抢占怎么打断一个死循环">四、抢占：怎么打断一个死循环</h2>
+<div class="markdown-alert markdown-alert-important" dir="auto">
+<p class="markdown-alert-title" dir="auto"><svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M0 1.75C0 .784.784 0 1.75 0h12.5C15.216 0 16 .784 16 1.75v9.5A1.75 1.75 0 0 1 14.25 13H8.06l-2.573 2.573A1.458 1.458 0 0 1 3 14.543V13H1.75A1.75 1.75 0 0 1 0 11.25Zm1.75-.25a.25.25 0 0 0-.25.25v9.5c0 .138.112.25.25.25h2a.75.75 0 0 1 .75.75v2.19l2.72-2.72a.749.749 0 0 1 .53-.22h6.5a.25.25 0 0 0 .25-.25v-9.5a.25.25 0 0 0-.25-.25Zm7 2.25v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 9a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>IMPORTANT</p>
+<p> 这是 GMP 的第二个重点
+Go 调度器是协作式还是抢占式？答案是”两者都有”。理解这一章就理解了为什么现代 Go 里 <code>for{}</code> 不会把调度器饿死。</p>
+</div>
+<p>Go 1.26 的抢占设计在 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/preempt.go#L5-L51" rel="noopener noreferrer" target="_blank"><code>preempt.go#L5-L51</code></a> 明确区分三类安全点：</p>
 
 
 
@@ -183,7 +206,7 @@ Go 1.26 的抢占设计在 <a href="https://github.com/golang/go/blob/c19862e5f8
 
 <table><thead><tr><th>安全点</th><th>场景</th><th>做法</th></tr></thead><tbody><tr><td>blocked safe-point</td><td>G 已阻塞、在同步原语或系统调用中</td><td>本来就不在执行用户代码</td></tr><tr><td>synchronous safe-point</td><td>函数序言检查栈边界</td><td>把 <code>stackguard0</code> 设为 <code>stackPreempt</code>，下次检查转入抢占</td></tr><tr><td>asynchronous safe-point</td><td>用户代码中的可安全暂停指令</td><td>向 M 发 OS 信号，修改上下文进入 <code>asyncPreempt</code></td></tr></tbody></table>
 <img src="/images/go/15-抢占-协作安全点与异步安全点.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
-<h4 id="同步抢占与异步抢占">同步抢占与异步抢占</h4>
+<h3 id="同步抢占与异步抢占">同步抢占与异步抢占</h3>
 <p>抢占只针对<strong>此刻正跑在 M 上</strong>的 G（<code>_Grunning</code>）。G 在等 channel、锁、timer、网络、syscall 时早就让出 M 了，谈不上抢。真正的难题是：一个 G 正在 CPU 上死循环，runtime 怎么把它拽下来。</p>
 <p><strong>同步抢占</strong>：编译器在每个函数序言插栈边界检查，大致是 <code>CMP SP, g.stackguard0</code>。<code>stackguard0</code> 平时存栈增长阈值；runtime 想抢占时把它改成特殊值 <code>stackPreempt</code>。下次函数调用执行到序言的 CMP 时必然命中，跳进 <code>runtime.morestack</code>，判断是抢占请求而非真的栈溢出，就转到 <code>runtime.gopreempt</code> → <code>mcall(gosched)</code> 主动挂起。问题在于：<strong>检查只在函数被调用的瞬间发生一次</strong>。<code>for {}</code> 里没有任何函数调用，序言代码根本不执行，哨兵永远检测不到。Go 1.14 以前这就是著名的调度器饿死问题，一个死循环能把一个 P 永久占住，连 GC STW 都过不去。</p>
 <p><strong>异步抢占（Go 1.14+）</strong> 靠 OS 信号解决：</p>
@@ -196,7 +219,7 @@ Go 1.26 的抢占设计在 <a href="https://github.com/golang/go/blob/c19862e5f8
 <li>等这个 G 下次被调度回来，<code>gogo</code> 恢复寄存器和栈，PC 回到被信号打断的位置继续，就像什么都没发生。</li>
 </ol>
 <p>编译器还在可能长时间循环的**回边（back edge）**通过 PCDATA 表标记异步安全点。所以即便 <code>for {}</code> 一个函数都不调，回边也会被打标，SIGURG 落在那里就能被识别为安全点并抢走。</p>
-<h4 id="10ms-不是硬上限">10ms 不是硬上限</h4>
+<h3 id="10ms-不是硬上限">10ms 不是硬上限</h3>
 <p>容易误以为”每个 G 至多跑 10ms 就一定被切走”。实际不是，延迟来自：</p>
 <ol>
 <li><strong>sysmon 不是精确 10ms 定时器</strong>。它在循环里动态 sleep：闲置时可睡到 ~10s，发现有 P 在跑 G 时才缩短到 ~10ms 粒度。判断是 <code>pd.schedwhen + forcePreemptNS &#x3C;= now</code>，所以从 G 开跑到被发现超时，实际是 10ms 加 sysmon 下一轮唤醒延迟；机器忙、被宿主机调度拖慢时更大。</li>
@@ -206,13 +229,13 @@ Go 1.26 的抢占设计在 <a href="https://github.com/golang/go/blob/c19862e5f8
 <p>用 trace 观察 CPU 密集型 goroutine，单次连续运行时间一般分布在：几十微秒到几毫秒（撞到同步安全点或主动阻塞）；~10ms 附近（纯循环被异步信号抢走）；偶尔明显超过 10ms（runtime 临界区、安全点未命中、sysmon 被拖慢）。</p>
 <p>Go 调度器<strong>不是</strong>按 vruntime 公平分配 CPU 的轮转调度器（不像 CFS）：G 主动阻塞时立刻让出，远早于 10ms；取哪个 runnable G 有自己的偏好（<code>runnext</code>、本地队列优先、work stealing 偷一半），不保证轮转公平；G 被抢占后重回队列，理论上可能马上又被同一个 P 取走继续跑。</p>
 <p>更准确的说法：<strong>在用户代码、非 runtime 临界区、且能找到异步安全点的前提下，一个持续占用 CPU 的 goroutine 通常会在约 10ms 量级收到抢占请求，但这不是硬 SLA。单次运行可能更短（撞到同步安全点），也可能更长（临界区/安全点未命中/sysmon 延迟）。</strong></p>
-<h4 id="sysmon-与-spinning-m">sysmon 与 spinning M</h4>
+<h3 id="sysmon-与-spinning-m">sysmon 与 spinning M</h3>
 <p><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/proc.go#L6486-L6617" rel="noopener noreferrer" target="_blank"><code>sysmon</code></a> 是不绑定 P 的后台 M，不执行用户代码，因此在所有 P 忙碌或陷入系统调用时仍能工作。它负责：检查网络轮询器和长时间阻塞的系统调用；<code>retake</code> 长时间处于 syscall 的 P；请求抢占运行过久的 G；触发周期 GC、调度 trace 等后台动作；Go 1.25+ 周期性检查默认 <code>GOMAXPROCS</code> 是否应随容器 CPU 配额变化。它睡眠间隔动态调整，不是持续忙轮询。</p>
 <p>当有 P 找不到工作时，runtime 允许少量 M 处于 spinning 状态继续寻找工作；如果全部立刻休眠，新 G 到来需要更昂贵的线程唤醒。反之，过多 spinning M 会浪费 CPU 并争抢同一批 P。</p>
 <img src="/images/go/16-spinning-m-避免频繁休眠与惊群.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
 <p>这套协议避免”先发布任务、后让最后一个搜索者休眠”之间的丢失唤醒，相关代码分散在 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/proc.go#L2992-L3259" rel="noopener noreferrer" target="_blank"><code>wakep/startm/stopm</code></a> 和 <code>findRunnable</code> 中。</p>
-<h3 id="五配置与边界">五、配置与边界</h3>
-<h4 id="gomaxprocs-与容器-cpu-配额"><code>GOMAXPROCS</code> 与容器 CPU 配额</h4>
+<h2 id="五配置与边界">五、配置与边界</h2>
+<h3 id="gomaxprocs-与容器-cpu-配额"><code>GOMAXPROCS</code> 与容器 CPU 配额</h3>
 <p>P 的数量决定同一时刻最多有多少执行普通 Go 代码的执行上下文。Go 1.25 起，未被用户显式设置时，默认值会考虑逻辑 CPU、CPU affinity 和 Linux cgroup CPU 配额，并可动态更新。</p>
 <p><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/proc.go#L7122-L7150" rel="noopener noreferrer" target="_blank"><code>sysmonUpdateGOMAXPROCS</code></a> 的关键约束：</p>
 <ul>
@@ -220,12 +243,15 @@ Go 1.26 的抢占设计在 <a href="https://github.com/golang/go/blob/c19862e5f8
 <li>sysmon 读取外部限制后不能自己直接 STW；它唤醒辅助 G 完成 P 数量调整。</li>
 <li>修改 P 数量需要 <code>procresize</code>，会影响运行队列、timer、mcache 等 per-P 状态。</li>
 </ul>
-<p><strong>💡 性能调优</strong></p>
-<p>不要机械地把 <code>GOMAXPROCS</code> 设为宿主机核数。容器中应优先验证默认行为，再结合 CPU 配额、节流指标、延迟和吞吐测量决定是否显式覆盖。</p>
-<h4 id="lockosthreadg-与-m-的例外绑定"><code>LockOSThread</code>：G 与 M 的例外绑定</h4>
+<div class="markdown-alert markdown-alert-tip" dir="auto">
+<p class="markdown-alert-title" dir="auto"><svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8 1.5c-2.363 0-4 1.69-4 3.75 0 .984.424 1.625.984 2.304l.214.253c.223.264.47.556.673.848.284.411.537.896.621 1.49a.75.75 0 0 1-1.484.211c-.04-.282-.163-.547-.37-.847a8.456 8.456 0 0 0-.542-.68c-.084-.1-.173-.205-.268-.32C3.201 7.75 2.5 6.766 2.5 5.25 2.5 2.31 4.863 0 8 0s5.5 2.31 5.5 5.25c0 1.516-.701 2.5-1.328 3.259-.095.115-.184.22-.268.319-.207.245-.383.453-.541.681-.208.3-.33.565-.37.847a.751.751 0 0 1-1.485-.212c.084-.593.337-1.078.621-1.489.203-.292.45-.584.673-.848.075-.088.147-.173.213-.253.561-.679.985-1.32.985-2.304 0-2.06-1.637-3.75-4-3.75ZM5.75 12h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1 0-1.5ZM6 15.25a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1-.75-.75Z"></path></svg>TIP</p>
+<p> 性能调优
+不要机械地把 <code>GOMAXPROCS</code> 设为宿主机核数。容器中应优先验证默认行为，再结合 CPU 配额、节流指标、延迟和吞吐测量决定是否显式覆盖。</p>
+</div>
+<h3 id="lockosthreadg-与-m-的例外绑定"><code>LockOSThread</code>：G 与 M 的例外绑定</h3>
 <p>普通 G 可在不同 M 之间迁移。<code>runtime.LockOSThread</code> 会建立 <code>lockedg/lockedm</code> 双向关系，使当前 G 后续继续在同一 OS thread 上运行，适用于线程局部状态、GUI 主线程或特定系统 API。</p>
 <p>代价是降低调度自由度；锁定的 G 阻塞时，runtime 可能需要额外 M 承载其他 P。每次 <code>LockOSThread</code> 必须匹配 <code>UnlockOSThread</code>，除非 goroutine 设计上永久占用该线程。</p>
-<h4 id="调度器不保证什么">调度器不保证什么</h4>
+<h3 id="调度器不保证什么">调度器不保证什么</h3>
 <ol>
 <li>不保证 goroutine 按创建顺序运行。</li>
 <li>不保证 <code>runnext</code> 或 <code>select</code> 的严格公平性。</li>
@@ -234,18 +260,20 @@ Go 1.26 的抢占设计在 <a href="https://github.com/golang/go/blob/c19862e5f8
 <li>不保证 goroutine 退出时自动 join；需要显式 WaitGroup/Channel/Context 生命周期。</li>
 <li>不保证增加 goroutine 或增大 <code>GOMAXPROCS</code> 就一定提升吞吐。</li>
 </ol>
-<h3 id="六诊断与实践">六、诊断与实践</h3>
-<h4 id="schedtrace"><code>schedtrace</code></h4>
+<h2 id="六诊断与实践">六、诊断与实践</h2>
+<h3 id="schedtrace"><code>schedtrace</code></h3>
 <pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="bash"><code><span class="line"><span style="color:#E1E4E8">GODEBUG</span><span style="color:#F97583">=</span><span style="color:#E1E4E8">schedtrace</span><span style="color:#F97583">=</span><span style="color:#9ECBFF">1000,</span><span style="color:#E1E4E8">scheddetail</span><span style="color:#F97583">=</span><span style="color:#9ECBFF">1</span><span style="color:#B392F0"> ./app</span></span></code></pre>
 <p>重点观察 <code>gomaxprocs</code>、idle P、线程数、spinning threads、全局 runqueue 和各 P runqueue。它适合快速看整体失衡，但输出本身会有开销。</p>
-<h4 id="执行-trace">执行 trace</h4>
+<h3 id="执行-trace">执行 trace</h3>
 <pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="bash"><code><span class="line"><span style="color:#B392F0">go</span><span style="color:#9ECBFF"> test</span><span style="color:#79B8FF"> -trace=trace.out</span><span style="color:#9ECBFF"> ./...</span></span>
 <span class="line"><span style="color:#B392F0">go</span><span style="color:#9ECBFF"> tool</span><span style="color:#9ECBFF"> trace</span><span style="color:#9ECBFF"> trace.out</span></span></code></pre>
 <p>trace 可以回答：G 在哪个 P 上运行、何时被抢占/阻塞、系统调用持续多久、netpoll 何时唤醒、并行度为什么下降。</p>
-<h4 id="pprof">pprof</h4>
-<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="bash"><code><span class="line"><span style="color:#6A737D">## goroutine 堆栈curl -o goroutine.pb.gz http://127.0.0.1:6060/debug/pprof/goroutine</span></span>
+<h3 id="pprof">pprof</h3>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="bash"><code><span class="line"><span style="color:#6A737D"># goroutine 堆栈</span></span>
+<span class="line"><span style="color:#B392F0">curl</span><span style="color:#79B8FF"> -o</span><span style="color:#9ECBFF"> goroutine.pb.gz</span><span style="color:#9ECBFF"> http://127.0.0.1:6060/debug/pprof/goroutine</span></span>
 <span class="line"></span>
-<span class="line"><span style="color:#6A737D">## 阻塞与锁竞争curl -o block.pb.gz http://127.0.0.1:6060/debug/pprof/block</span></span>
+<span class="line"><span style="color:#6A737D"># 阻塞与锁竞争</span></span>
+<span class="line"><span style="color:#B392F0">curl</span><span style="color:#79B8FF"> -o</span><span style="color:#9ECBFF"> block.pb.gz</span><span style="color:#9ECBFF"> http://127.0.0.1:6060/debug/pprof/block</span></span>
 <span class="line"><span style="color:#B392F0">curl</span><span style="color:#79B8FF"> -o</span><span style="color:#9ECBFF"> mutex.pb.gz</span><span style="color:#9ECBFF"> http://127.0.0.1:6060/debug/pprof/mutex</span></span></code></pre>
 <p>Go 1.26 还提供实验性 goroutine 泄漏 profile：</p>
 <pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="bash"><code><span class="line"><span style="color:#E1E4E8">GOEXPERIMENT</span><span style="color:#F97583">=</span><span style="color:#9ECBFF">goroutineleakprofile</span><span style="color:#B392F0"> go</span><span style="color:#9ECBFF"> build</span><span style="color:#9ECBFF"> ./cmd/app</span></span>
@@ -253,8 +281,8 @@ Go 1.26 的抢占设计在 <a href="https://github.com/golang/go/blob/c19862e5f8
 <p>它利用 GC 可达性识别一类永远无法解除的 Channel、Mutex、Cond 等等待；全局变量仍可达、或逻辑上”很久但可能恢复”的泄漏不一定能被判定。</p>
 <img src="/images/go/17-从业务代码看调度器.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
 <p>调度器源码解释现象，但优化应从测量开始。大多数业务性能问题首先是工作量、锁竞争、I/O、分配或并行度设计问题，不应直接归因于”GMP 调度慢”。</p>
-<h3 id="附录">附录</h3>
-<h4 id="源码地图">源码地图</h4>
+<h2 id="附录">附录</h2>
+<h3 id="源码地图">源码地图</h3>
 
 
 
@@ -325,7 +353,7 @@ Go 1.26 的抢占设计在 <a href="https://github.com/golang/go/blob/c19862e5f8
 
 
 <table><thead><tr><th>内容</th><th>Go 1.26.5 源码</th></tr></thead><tbody><tr><td>runtime 对 G/M/P 的官方说明</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/HACKING.md#L6-L42" rel="noopener noreferrer" target="_blank"><code>runtime/HACKING.md#L6-L42</code></a></td></tr><tr><td>G、M、P 状态常量</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/runtime2.go#L17-L170" rel="noopener noreferrer" target="_blank"><code>runtime2.go#L17-L170</code></a></td></tr><tr><td><code>g</code></td><td><a href="https://github.com/golang/go/blob/c19862e5%3C%5BPLHD72_never_used_51bce0c785ca2f68081bfa7d91973934%5D%3E415b4f24b189d065ed739517c548ba/src/runtime/runtime2.go#L473-L617" rel="noopener noreferrer" target="_blank"><code>runtime2.go#L473-L617</code></a></td></tr><tr><td><code>m</code></td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/runtime2.go#L618-L771" rel="noopener noreferrer" target="_blank"><code>runtime2.go#L618-L771</code></a></td></tr><tr><td><code>p</code></td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/runtime2.go#L772-L929" rel="noopener noreferrer" target="_blank"><code>runtime2.go#L772-L929</code></a></td></tr><tr><td>全局调度状态 <code>schedt</code></td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/runtime2.go#L930-L1054" rel="noopener noreferrer" target="_blank"><code>runtime2.go#L930-L1054</code></a></td></tr><tr><td>调度器初始化</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/proc.go#L831-L970" rel="noopener noreferrer" target="_blank"><code>schedinit</code></a>、<a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/proc.go#L6030-L6205" rel="noopener noreferrer" target="_blank"><code>procresize</code></a></td></tr><tr><td>创建 goroutine</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/proc.go#L5295-L5413" rel="noopener noreferrer" target="_blank"><code>newproc/newproc1</code></a></td></tr><tr><td>调度循环</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/proc.go#L4135-L4251" rel="noopener noreferrer" target="_blank"><code>schedule</code></a></td></tr><tr><td>寻找可运行 G</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/proc.go#L3389-L4019" rel="noopener noreferrer" target="_blank"><code>findRunnable</code></a></td></tr><tr><td>切换并执行 G</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/proc.go#L3331-L3387" rel="noopener noreferrer" target="_blank"><code>execute</code></a></td></tr><tr><td>本地/全局运行队列</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/proc.go#L7244-L7747" rel="noopener noreferrer" target="_blank"><code>proc.go#L7244-L7747</code></a></td></tr><tr><td>sysmon 与抢占/回收 P</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/proc.go#L6486-L6725" rel="noopener noreferrer" target="_blank"><code>sysmon/retake</code></a></td></tr><tr><td>抢占设计</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/preempt.go#L5-L51" rel="noopener noreferrer" target="_blank"><code>preempt.go#L5-L51</code></a></td></tr><tr><td>系统调用进出</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/proc.go#L4737-L5100" rel="noopener noreferrer" target="_blank"><code>proc.go#L4737-L5100</code></a></td></tr></tbody></table>
-<h4 id="总结">总结</h4>
+<h3 id="总结">总结</h3>
 <ol>
 <li>G 保存 goroutine 的栈、寄存器上下文和生命周期状态；M 是 OS thread；P 是执行 Go 代码的许可与本地资源。</li>
 <li><code>GOMAXPROCS</code> 决定 P 数，不限制 M 总数；Go 1.25+ 默认值可感知并动态适应容器 CPU 配额。</li>
@@ -335,7 +363,7 @@ Go 1.26 的抢占设计在 <a href="https://github.com/golang/go/blob/c19862e5f8
 <li>抢占同时使用同步安全点和基于信号的异步安全点；约 10ms 是 sysmon 请求抢占的阈值，不是严格时间片保证。</li>
 <li>调度问题应使用 trace、schedtrace 和 pprof 建立证据，再决定是否调整并发结构或 <code>GOMAXPROCS</code>。</li>
 </ol>
-<h4 id="参考资料">参考资料</h4>
+<h3 id="参考资料">参考资料</h3>
 <ul>
 <li><a href="https://github.com/golang/go/tree/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime" rel="noopener noreferrer" target="_blank">Go 1.26.5 runtime 源码树</a></li>
 <li><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/HACKING.md" rel="noopener noreferrer" target="_blank">runtime/HACKING.md</a></li>
@@ -344,4 +372,4 @@ Go 1.26 的抢占设计在 <a href="https://github.com/golang/go/blob/c19862e5f8
 <li><a href="https://go.dev/doc/go1.25#container-aware-gomaxprocs" rel="noopener noreferrer" target="_blank">Go 1.25 发布说明：container-aware GOMAXPROCS</a></li>
 <li><a href="https://go.dev/doc/diagnostics" rel="noopener noreferrer" target="_blank">Go diagnostics</a></li>
 <li><a href="https://go.dev/doc/diagnostics#execution-tracer" rel="noopener noreferrer" target="_blank">Go execution tracer</a></li>
-</ul></main><aside class="toc"><p class="toc-title">本页目录</p><ul><li class="toc-d3"><a href="#快速理解把-runtime-想成一个车间">快速理解：把 runtime 想成一个车间</a></li><li class="toc-d3"><a href="#一核心模型gmp">一、核心模型：G、M、P</a></li><li class="toc-d3"><a href="#二调度循环从-go-f-到-g-被执行">二、调度循环：从 go f() 到 G 被执行</a></li><li class="toc-d3"><a href="#三阻塞系统调用与网络-io">三、阻塞、系统调用与网络 I/O</a></li><li class="toc-d3"><a href="#四抢占怎么打断一个死循环">四、抢占：怎么打断一个死循环</a></li><li class="toc-d3"><a href="#五配置与边界">五、配置与边界</a></li><li class="toc-d3"><a href="#六诊断与实践">六、诊断与实践</a></li><li class="toc-d3"><a href="#附录">附录</a></li></ul></aside></div><div class="lightbox" id="lightbox" aria-hidden="true"><img alt=""></div><script type="module" src="/_astro/Base.astro_astro_type_script_index_0_lang.DKvZf7If.js"></script></body></html>
+</ul></main><aside class="toc"><p class="toc-title">本页目录</p><ul><li class="toc-d2"><a href="#快速理解把-runtime-想成一个车间">快速理解：把 runtime 想成一个车间</a></li><li class="toc-d2"><a href="#一核心模型gmp">一、核心模型：G、M、P</a></li><li class="toc-d3"><a href="#ggoroutine-的运行时描述">G：goroutine 的运行时描述</a></li><li class="toc-d3"><a href="#m操作系统线程">M：操作系统线程</a></li><li class="toc-d3"><a href="#p执行权与每-p-资源">P：执行权与每 P 资源</a></li><li class="toc-d3"><a href="#三者如何组合">三者如何组合</a></li><li class="toc-d3"><a href="#g-的状态机">G 的状态机</a></li><li class="toc-d2"><a href="#二调度循环从-go-f-到-g-被执行">二、调度循环：从 go f() 到 G 被执行</a></li><li class="toc-d3"><a href="#启动与创建-goroutine">启动与创建 goroutine</a></li><li class="toc-d3"><a href="#运行队列与-work-stealing">运行队列与 work stealing</a></li><li class="toc-d3"><a href="#schedule--findrunnable--execute">schedule → findRunnable → execute</a></li><li class="toc-d2"><a href="#三阻塞系统调用与网络-io">三、阻塞、系统调用与网络 I/O</a></li><li class="toc-d3"><a href="#runtime-可感知阻塞只-park-gm-不停">runtime 可感知阻塞：只 park G，M 不停</a></li><li class="toc-d3"><a href="#系统调用m-被占住p-必须流动">系统调用：M 被占住，P 必须流动</a></li><li class="toc-d3"><a href="#网络轮询器几个线程扛几十万连接">网络轮询器：几个线程扛几十万连接</a></li><li class="toc-d2"><a href="#四抢占怎么打断一个死循环">四、抢占：怎么打断一个死循环</a></li><li class="toc-d3"><a href="#同步抢占与异步抢占">同步抢占与异步抢占</a></li><li class="toc-d3"><a href="#10ms-不是硬上限">10ms 不是硬上限</a></li><li class="toc-d3"><a href="#sysmon-与-spinning-m">sysmon 与 spinning M</a></li><li class="toc-d2"><a href="#五配置与边界">五、配置与边界</a></li><li class="toc-d3"><a href="#gomaxprocs-与容器-cpu-配额">GOMAXPROCS 与容器 CPU 配额</a></li><li class="toc-d3"><a href="#lockosthreadg-与-m-的例外绑定">LockOSThread：G 与 M 的例外绑定</a></li><li class="toc-d3"><a href="#调度器不保证什么">调度器不保证什么</a></li><li class="toc-d2"><a href="#六诊断与实践">六、诊断与实践</a></li><li class="toc-d3"><a href="#schedtrace">schedtrace</a></li><li class="toc-d3"><a href="#执行-trace">执行 trace</a></li><li class="toc-d3"><a href="#pprof">pprof</a></li><li class="toc-d2"><a href="#附录">附录</a></li><li class="toc-d3"><a href="#源码地图">源码地图</a></li><li class="toc-d3"><a href="#总结">总结</a></li><li class="toc-d3"><a href="#参考资料">参考资料</a></li></ul></aside></div><div class="lightbox" id="lightbox" aria-hidden="true"><img alt=""></div><script type="module" src="/_astro/Base.astro_astro_type_script_index_0_lang.DKvZf7If.js"></script></body></html>

@@ -5,13 +5,25 @@
           document.documentElement.setAttribute('data-theme', s);
         }
       })();
-    </script><link rel="stylesheet" href="/_astro/Base.C1_PNgav.css"></head><body><header class="topbar"><a href="/" class="brand">HLDay</a><nav><a href="/">专题</a><a href="/posts/">博客</a><a href="https://github.com/hTangle" class="nav-github" aria-label="GitHub">GitHub</a></nav><button class="theme-toggle" id="themeToggle" type="button" title="切换主题（自动/浅色/深色）" aria-label="切换主题">🖥️</button></header><div class="layout"><aside class="booknav"><ul class="nav-tree"><li><p class="nav-group">Go</p><ul><li><p class="nav-subgroup">并发编程</p><ul><li class><a href="/gmp/">GMP 调度器</a></li><li class><a href="/sync-lock/">同步和锁</a></li><li class><a href="/channel/">Channel</a></li><li class><a href="/context/">Context</a></li></ul></li><li><p class="nav-subgroup">内存管理</p><ul><li class><a href="/memory-alloc/">内存分配器</a></li><li class><a href="/gc/">垃圾收集器</a></li><li class><a href="/stack/">栈空间管理</a></li></ul></li></ul></li><li><p class="nav-group">Agent 开发</p><ul><li><p class="nav-subgroup">核心协议与机制</p><ul><li class><a href="/mcp/">MCP</a></li><li class><a href="/skill/">Skill</a></li><li class><a href="/tool-call/">Tool Call</a></li></ul></li></ul></li></ul></aside><main class="prose"><h1>定时器：Go 1.26.5 源码分析</h1><p>Go 的定时器不是一个独立线程在”数时间”，而是把到期事件<strong>分散挂在每个 P 自己的最小堆上</strong>，由调度器在找活时顺手检查、由 netpoller 的超时来兜底唤醒。这样既没有全局锁竞争，也不会为了等定时器空烧 CPU。</p>
+    </script><link rel="stylesheet" href="/_astro/Base.CYI339jz.css"></head><body><header class="topbar"><a href="/" class="brand">HLDay</a><nav><a href="/">专题</a><a href="/posts/">博客</a><a href="https://github.com/hTangle" class="nav-github" aria-label="GitHub">GitHub</a></nav><button class="theme-toggle" id="themeToggle" type="button" title="切换主题（自动/浅色/深色）" aria-label="切换主题">🖥️</button></header><div class="layout"><aside class="booknav"><ul class="nav-tree"><li><p class="nav-group">Go</p><ul><li><p class="nav-subgroup">并发编程</p><ul><li class><a href="/gmp/">GMP 调度器</a></li><li class><a href="/sync-lock/">同步和锁</a></li><li class><a href="/channel/">Channel</a></li><li class><a href="/context/">Context</a></li></ul></li><li><p class="nav-subgroup">内存管理</p><ul><li class><a href="/memory-alloc/">内存分配器</a></li><li class><a href="/gc/">垃圾收集器</a></li><li class><a href="/stack/">栈空间管理</a></li></ul></li></ul></li><li><p class="nav-group">Agent 开发</p><ul><li><p class="nav-subgroup">核心协议与机制</p><ul><li class><a href="/mcp/">MCP</a></li><li class><a href="/skill/">Skill</a></li><li class><a href="/tool-call/">Tool Call</a></li></ul></li></ul></li></ul></aside><main class="prose"><h1>定时器：Go 1.26.5 源码分析</h1><p>Go 的定时器不是一个独立线程在”数时间”，而是把到期事件<strong>分散挂在每个 P 自己的最小堆上</strong>，由调度器在找活时顺手检查、由 netpoller 的超时来兜底唤醒。这样既没有全局锁竞争，也不会为了等定时器空烧 CPU。</p>
 <img src="/images/go/01-定时器-go-1-26-5-源码分析.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
-<p><strong>💡 先建立心智模型</strong></p>
+<div class="markdown-alert markdown-alert-tip" dir="auto">
+<p class="markdown-alert-title" dir="auto"><svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8 1.5c-2.363 0-4 1.69-4 3.75 0 .984.424 1.625.984 2.304l.214.253c.223.264.47.556.673.848.284.411.537.896.621 1.49a.75.75 0 0 1-1.484.211c-.04-.282-.163-.547-.37-.847a8.456 8.456 0 0 0-.542-.68c-.084-.1-.173-.205-.268-.32C3.201 7.75 2.5 6.766 2.5 5.25 2.5 2.31 4.863 0 8 0s5.5 2.31 5.5 5.25c0 1.516-.701 2.5-1.328 3.259-.095.115-.184.22-.268.319-.207.245-.383.453-.541.681-.208.3-.33.565-.37.847a.751.751 0 0 1-1.485-.212c.084-.593.337-1.078.621-1.489.203-.292.45-.584.673-.848.075-.088.147-.173.213-.253.561-.679.985-1.32.985-2.304 0-2.06-1.637-3.75-4-3.75ZM5.75 12h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1 0-1.5ZM6 15.25a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1-.75-.75Z"></path></svg>TIP</p>
+<p></p>
 <ol>
-<li>每个 P 有一个 <code>runtime.timers</code>，内部是按 <code>when</code>（到期时间）排序的<strong>四叉最小堆</strong>，堆顶是最近要触发的那个。2. <code>time.After</code>、<code>time.Tick</code>、<code>Timer</code>、<code>Ticker</code>、<code>time.Sleep</code>、context 超时，底层都是同一个 <code>runtime.timer</code>。3. 定时器不靠专门的计时线程到点触发，而是靠两处驱动：   - <strong>调度器</strong>在 <code>findRunnable</code> 里调 <code>checkTimers</code>/<code>runTimer</code>，有活干时顺手把到期的跑了；   - <strong>netpoller</strong> 阻塞 <code>epoll_wait</code> 时，把”最近一个定时器的到期时间”作为超时传进去，没人唤醒它时时间到了也会自己醒。4. <code>time.Timer.C</code> / <code>Ticker.C</code> 从 Go 1.23 起对用户表现为<strong>同步、无缓冲 channel</strong>：<code>Stop</code>/<code>Reset</code> 之后不会再收到旧配置的过期值，且没引用的定时器可以被 GC 回收。一句话：<strong>定时器是挂在 P 堆上的到期回调，调度器和 netpoll 各负责一种唤醒路径。</strong>
-<strong>结论先行</strong></li>
+<li>每个 P 有一个 <code>runtime.timers</code>，内部是按 <code>when</code>（到期时间）排序的<strong>四叉最小堆</strong>，堆顶是最近要触发的那个。</li>
+<li><code>time.After</code>、<code>time.Tick</code>、<code>Timer</code>、<code>Ticker</code>、<code>time.Sleep</code>、context 超时，底层都是同一个 <code>runtime.timer</code>。</li>
+<li>定时器不靠专门的计时线程到点触发，而是靠两处驱动：
+<ul>
+<li><strong>调度器</strong>在 <code>findRunnable</code> 里调 <code>checkTimers</code>/<code>runTimer</code>，有活干时顺手把到期的跑了；</li>
+<li><strong>netpoller</strong> 阻塞 <code>epoll_wait</code> 时，把”最近一个定时器的到期时间”作为超时传进去，没人唤醒它时时间到了也会自己醒。</li>
+</ul>
+</li>
+<li><code>time.Timer.C</code> / <code>Ticker.C</code> 从 Go 1.23 起对用户表现为<strong>同步、无缓冲 channel</strong>：<code>Stop</code>/<code>Reset</code> 之后不会再收到旧配置的过期值，且没引用的定时器可以被 GC 回收。</li>
 </ol>
+<p>一句话：<strong>定时器是挂在 P 堆上的到期回调，调度器和 netpoll 各负责一种唤醒路径。</strong></p>
+</div>
+<p><strong>结论先行</strong></p>
 <ul>
 <li>运行时架构主线没变：每 P 一个四叉最小堆，与调度器、netpoll 协同触发。</li>
 <li>内部状态从 Go 1.14 的 10 个枚举状态，精简为 Go 1.26.5 的 3 个可组合位（<code>timerHeaped</code>/<code>timerModified</code>/<code>timerZombie</code>）。</li>
@@ -114,8 +126,11 @@
 <li><strong>Zombie</strong>：<code>Stop</code> 之后，逻辑上已死，但仍占着堆位置，等待清理或被惰性摘除。</li>
 </ul>
 <p>位可组合，例如”在堆里且被改过”就是 <code>timerHeaped|timerModified</code>。状态变迁由 <code>timerModifiedEarlier</code>、<code>timerModifiedLater</code>、<code>timerDeleted</code> 等内部函数完成。判断一个定时器是否还有效、要不要触发，都是对这几个位的组合检查，而不是 switch 十个状态。</p>
-<p><strong>📝 为什么不用旧的 10 态</strong></p>
-<p>旧实现把”在堆里、正在跑、被修改、被删除、正在删除”等都编码成互斥枚举，代码里到处是状态转换表，边界 case 多。用 3 个独立位后，状态语义正交，删除/改期/触发并发交错时更容易推理正确性。</p>
+<div class="markdown-alert markdown-alert-note" dir="auto">
+<p class="markdown-alert-title" dir="auto"><svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>NOTE</p>
+<p> 为什么不用旧的 10 态
+旧实现把”在堆里、正在跑、被修改、被删除、正在删除”等都编码成互斥枚举，代码里到处是状态转换表，边界 case 多。用 3 个独立位后，状态语义正交，删除/改期/触发并发交错时更容易推理正确性。</p>
+</div>
 <h2 id="timetimer-与-timeticker-的当前语义"><code>time.Timer</code> 与 <code>time.Ticker</code> 的当前语义</h2>
 <h3 id="go-123-之后同步无缓冲-channel">Go 1.23 之后：同步、无缓冲 channel</h3>
 

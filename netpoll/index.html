@@ -5,11 +5,22 @@
           document.documentElement.setAttribute('data-theme', s);
         }
       })();
-    </script><link rel="stylesheet" href="/_astro/Base.C1_PNgav.css"></head><body><header class="topbar"><a href="/" class="brand">HLDay</a><nav><a href="/">专题</a><a href="/posts/">博客</a><a href="https://github.com/hTangle" class="nav-github" aria-label="GitHub">GitHub</a></nav><button class="theme-toggle" id="themeToggle" type="button" title="切换主题（自动/浅色/深色）" aria-label="切换主题">🖥️</button></header><div class="layout"><aside class="booknav"><ul class="nav-tree"><li><p class="nav-group">Go</p><ul><li><p class="nav-subgroup">并发编程</p><ul><li class><a href="/gmp/">GMP 调度器</a></li><li class><a href="/sync-lock/">同步和锁</a></li><li class><a href="/channel/">Channel</a></li><li class><a href="/context/">Context</a></li></ul></li><li><p class="nav-subgroup">内存管理</p><ul><li class><a href="/memory-alloc/">内存分配器</a></li><li class><a href="/gc/">垃圾收集器</a></li><li class><a href="/stack/">栈空间管理</a></li></ul></li></ul></li><li><p class="nav-group">Agent 开发</p><ul><li><p class="nav-subgroup">核心协议与机制</p><ul><li class><a href="/mcp/">MCP</a></li><li class><a href="/skill/">Skill</a></li><li class><a href="/tool-call/">Tool Call</a></li></ul></li></ul></li></ul></aside><main class="prose"><h1>网络轮询器：Go 1.26.5 源码分析</h1><p>Go 网络程序能用少数几个操作系统线程扛住几十万长连接，靠的是 runtime 内置的网络轮询器（netpoller）。它把”连接没数据时阻塞谁”这件事从<strong>阻塞 OS 线程</strong>改成了<strong>park 住 goroutine</strong>：连接就绪后再把 G 唤醒、交回调度器。理解 netpoller，也就理解了为什么 Go 的网络 I/O 看起来是同步写法、却有异步的伸缩性。</p>
+    </script><link rel="stylesheet" href="/_astro/Base.CYI339jz.css"></head><body><header class="topbar"><a href="/" class="brand">HLDay</a><nav><a href="/">专题</a><a href="/posts/">博客</a><a href="https://github.com/hTangle" class="nav-github" aria-label="GitHub">GitHub</a></nav><button class="theme-toggle" id="themeToggle" type="button" title="切换主题（自动/浅色/深色）" aria-label="切换主题">🖥️</button></header><div class="layout"><aside class="booknav"><ul class="nav-tree"><li><p class="nav-group">Go</p><ul><li><p class="nav-subgroup">并发编程</p><ul><li class><a href="/gmp/">GMP 调度器</a></li><li class><a href="/sync-lock/">同步和锁</a></li><li class><a href="/channel/">Channel</a></li><li class><a href="/context/">Context</a></li></ul></li><li><p class="nav-subgroup">内存管理</p><ul><li class><a href="/memory-alloc/">内存分配器</a></li><li class><a href="/gc/">垃圾收集器</a></li><li class><a href="/stack/">栈空间管理</a></li></ul></li></ul></li><li><p class="nav-group">Agent 开发</p><ul><li><p class="nav-subgroup">核心协议与机制</p><ul><li class><a href="/mcp/">MCP</a></li><li class><a href="/skill/">Skill</a></li><li class><a href="/tool-call/">Tool Call</a></li></ul></li></ul></li></ul></aside><main class="prose"><h1>网络轮询器：Go 1.26.5 源码分析</h1><p>Go 网络程序能用少数几个操作系统线程扛住几十万长连接，靠的是 runtime 内置的网络轮询器（netpoller）。它把”连接没数据时阻塞谁”这件事从<strong>阻塞 OS 线程</strong>改成了<strong>park 住 goroutine</strong>：连接就绪后再把 G 唤醒、交回调度器。理解 netpoller，也就理解了为什么 Go 的网络 I/O 看起来是同步写法、却有异步的伸缩性。</p>
 <img src="/images/go/01-网络轮询器-go-1-26-5-源码分析.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
-<p><strong>💡 先抓住主干</strong></p>
-<p>netpoller 不是一个独立线程在”轮询”，而是 runtime 与调度器协作的一套机制：1. 每个网络 fd 绑一个 <code>pollDesc</code>，记录”谁在读、谁在写”。2. goroutine 对一个暂不可读/写的 fd 调用 Read/Write 时，内部 <code>gopark</code> 把自己挂起，M 拿着 P 去跑别的 G，<strong>不阻塞 OS 线程</strong>。3. 后台一个不绑 P 的 M 阻塞在 OS 多路复用器（Linux epoll / macOS kqueue / Windows IOCP）上。4. fd 就绪后，多路复用器返回一批事件，netpoller 把对应 <code>pollDesc</code> 上挂着的 G 改成 runnable，塞进调度队列。5. 调度器在 <code>findRunnable</code> 里<strong>每次开头顺手非阻塞查一次</strong> netpoll，没活干、要休眠前再查一次；全系统空闲时才让那个 M 阻塞在 <code>epoll_wait</code>。记住一句话：<strong>netpoller 负责把”fd 就绪”翻译成”G 可运行”，调度器负责把可运行的 G 跑到 M 上。</strong> 两者通过 <code>findRunnable</code> 的两次非阻塞轮询和一个阻塞 M 协作。
-<strong>版本与源码基线</strong></p>
+<div class="markdown-alert markdown-alert-tip" dir="auto">
+<p class="markdown-alert-title" dir="auto"><svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8 1.5c-2.363 0-4 1.69-4 3.75 0 .984.424 1.625.984 2.304l.214.253c.223.264.47.556.673.848.284.411.537.896.621 1.49a.75.75 0 0 1-1.484.211c-.04-.282-.163-.547-.37-.847a8.456 8.456 0 0 0-.542-.68c-.084-.1-.173-.205-.268-.32C3.201 7.75 2.5 6.766 2.5 5.25 2.5 2.31 4.863 0 8 0s5.5 2.31 5.5 5.25c0 1.516-.701 2.5-1.328 3.259-.095.115-.184.22-.268.319-.207.245-.383.453-.541.681-.208.3-.33.565-.37.847a.751.751 0 0 1-1.485-.212c.084-.593.337-1.078.621-1.489.203-.292.45-.584.673-.848.075-.088.147-.173.213-.253.561-.679.985-1.32.985-2.304 0-2.06-1.637-3.75-4-3.75ZM5.75 12h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1 0-1.5ZM6 15.25a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1-.75-.75Z"></path></svg>TIP</p>
+<p> 先抓住主干
+netpoller 不是一个独立线程在”轮询”，而是 runtime 与调度器协作的一套机制：</p>
+<ol>
+<li>每个网络 fd 绑一个 <code>pollDesc</code>，记录”谁在读、谁在写”。</li>
+<li>goroutine 对一个暂不可读/写的 fd 调用 Read/Write 时，内部 <code>gopark</code> 把自己挂起，M 拿着 P 去跑别的 G，<strong>不阻塞 OS 线程</strong>。</li>
+<li>后台一个不绑 P 的 M 阻塞在 OS 多路复用器（Linux epoll / macOS kqueue / Windows IOCP）上。</li>
+<li>fd 就绪后，多路复用器返回一批事件，netpoller 把对应 <code>pollDesc</code> 上挂着的 G 改成 runnable，塞进调度队列。</li>
+<li>调度器在 <code>findRunnable</code> 里<strong>每次开头顺手非阻塞查一次</strong> netpoll，没活干、要休眠前再查一次；全系统空闲时才让那个 M 阻塞在 <code>epoll_wait</code>。</li>
+</ol>
+<p>记住一句话：<strong>netpoller 负责把”fd 就绪”翻译成”G 可运行”，调度器负责把可运行的 G 跑到 M 上。</strong> 两者通过 <code>findRunnable</code> 的两次非阻塞轮询和一个阻塞 M 协作。</p>
+</div>
+<p><strong>版本与源码基线</strong></p>
 
 
 
@@ -138,8 +149,11 @@
 <li>没活干时，只有一个 M 阻塞在 epoll，空闲时 CPU 占用接近零；</li>
 <li>从空闲到有连接数据，最多一次 <code>epoll_wait</code> 唤醒就能拉起工作。</li>
 </ul>
-<p><strong>📝 为什么不是每个 P 一个 epoll 线程</strong></p>
-<p>一个阻塞的 <code>epoll_wait</code> 足以监控所有已注册 fd，epoll 本身就是事件多路复用。多个 M 阻塞在同一个 epoll 上只会增加惊群和无意义竞争。Go 选择”全系统空闲时一个 M 阻塞”，用非阻塞轮询覆盖有活干的场景，是延迟和 CPU 之间的折中。</p>
+<div class="markdown-alert markdown-alert-note" dir="auto">
+<p class="markdown-alert-title" dir="auto"><svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>NOTE</p>
+<p> 为什么不是每个 P 一个 epoll 线程
+一个阻塞的 <code>epoll_wait</code> 足以监控所有已注册 fd，epoll 本身就是事件多路复用。多个 M 阻塞在同一个 epoll 上只会增加惊群和无意义竞争。Go 选择”全系统空闲时一个 M 阻塞”，用非阻塞轮询覆盖有活干的场景，是延迟和 CPU 之间的折中。</p>
+</div>
 <h2 id="为什么能扛几十万连接">为什么能扛几十万连接</h2>
 <p>每个等待网络的连接背后只是一个 parked 的 G：</p>
 <ul>
