@@ -1,0 +1,174 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>网络轮询器：Go 1.26.5 源码分析</title><script>
+      (function () {
+        var s = localStorage.getItem('theme');
+        if (s === 'light' || s === 'dark') {
+          document.documentElement.setAttribute('data-theme', s);
+        }
+      })();
+    </script><link rel="stylesheet" href="/_astro/Base.C1_PNgav.css"></head><body><header class="topbar"><a href="/" class="brand">HLDay</a><nav><a href="/">专题</a><a href="/posts/">博客</a><a href="https://github.com/hTangle" class="nav-github" aria-label="GitHub">GitHub</a></nav><button class="theme-toggle" id="themeToggle" type="button" title="切换主题（自动/浅色/深色）" aria-label="切换主题">🖥️</button></header><div class="layout"><aside class="booknav"><ul class="nav-tree"><li><p class="nav-group">Go</p><ul><li><p class="nav-subgroup">并发编程</p><ul><li class><a href="/gmp/">GMP 调度器</a></li><li class><a href="/sync-lock/">同步和锁</a></li><li class><a href="/channel/">Channel</a></li><li class><a href="/context/">Context</a></li></ul></li><li><p class="nav-subgroup">内存管理</p><ul><li class><a href="/memory-alloc/">内存分配器</a></li><li class><a href="/gc/">垃圾收集器</a></li><li class><a href="/stack/">栈空间管理</a></li></ul></li></ul></li><li><p class="nav-group">Agent 开发</p><ul><li><p class="nav-subgroup">核心协议与机制</p><ul><li class><a href="/mcp/">MCP</a></li><li class><a href="/skill/">Skill</a></li><li class><a href="/tool-call/">Tool Call</a></li></ul></li></ul></li></ul></aside><main class="prose"><h1>网络轮询器：Go 1.26.5 源码分析</h1><p>Go 网络程序能用少数几个操作系统线程扛住几十万长连接，靠的是 runtime 内置的网络轮询器（netpoller）。它把”连接没数据时阻塞谁”这件事从<strong>阻塞 OS 线程</strong>改成了<strong>park 住 goroutine</strong>：连接就绪后再把 G 唤醒、交回调度器。理解 netpoller，也就理解了为什么 Go 的网络 I/O 看起来是同步写法、却有异步的伸缩性。</p>
+<img src="/images/go/01-网络轮询器-go-1-26-5-源码分析.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
+<p><strong>💡 先抓住主干</strong></p>
+<p>netpoller 不是一个独立线程在”轮询”，而是 runtime 与调度器协作的一套机制：1. 每个网络 fd 绑一个 <code>pollDesc</code>，记录”谁在读、谁在写”。2. goroutine 对一个暂不可读/写的 fd 调用 Read/Write 时，内部 <code>gopark</code> 把自己挂起，M 拿着 P 去跑别的 G，<strong>不阻塞 OS 线程</strong>。3. 后台一个不绑 P 的 M 阻塞在 OS 多路复用器（Linux epoll / macOS kqueue / Windows IOCP）上。4. fd 就绪后，多路复用器返回一批事件，netpoller 把对应 <code>pollDesc</code> 上挂着的 G 改成 runnable，塞进调度队列。5. 调度器在 <code>findRunnable</code> 里<strong>每次开头顺手非阻塞查一次</strong> netpoll，没活干、要休眠前再查一次；全系统空闲时才让那个 M 阻塞在 <code>epoll_wait</code>。记住一句话：<strong>netpoller 负责把”fd 就绪”翻译成”G 可运行”，调度器负责把可运行的 G 跑到 M 上。</strong> 两者通过 <code>findRunnable</code> 的两次非阻塞轮询和一个阻塞 M 协作。
+<strong>版本与源码基线</strong></p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>主题</th><th>位置</th></tr></thead><tbody><tr><td>netpoll 公共逻辑</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/netpoll.go" rel="noopener noreferrer" target="_blank"><code>runtime/netpoll.go</code></a></td></tr><tr><td><code>pollDesc</code></td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/netpoll.go#L88-L201" rel="noopener noreferrer" target="_blank"><code>runtime/netpoll.go#L88-L201</code></a></td></tr><tr><td><code>netpollblock</code> / <code>netpollgoready</code></td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/netpoll.go#L422-L519" rel="noopener noreferrer" target="_blank"><code>runtime/netpoll.go#L422-L519</code></a></td></tr><tr><td>Linux epoll 后端</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/netpoll_epoll.go" rel="noopener noreferrer" target="_blank"><code>runtime/netpoll_epoll.go</code></a></td></tr><tr><td>调度器集成</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/proc.go" rel="noopener noreferrer" target="_blank"><code>runtime/proc.go</code></a> 的 <code>findRunnable</code>、<code>startTheWorldWithSema</code></td></tr><tr><td><code>internal/poll</code> 文件描述符封装</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/internal/poll/fd_unix.go" rel="noopener noreferrer" target="_blank"><code>internal/poll/fd_unix.go</code></a></td></tr></tbody></table>
+<p>平台差异主要在多路复用器后端：Linux 用 epoll，BSD/macOS 用 kqueue，Windows 用 IOCP，AIX/Solaris 用 ports/event ports。下面以 Linux epoll 为主线讲清机制，其他平台只是”事件怎么取”的差别。</p>
+<h2 id="核心模型从阻塞线程到park-g">核心模型：从”阻塞线程”到”park G”</h2>
+<p>传统阻塞 I/O 模型里，一个连接对应一个线程，<code>read</code> 没数据时线程进睡眠：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="plaintext"><code><span class="line"><span>连接数 10 万 → 需要 10 万线程 → 内存爆、调度开销巨大</span></span></code></pre>
+<p>Go 的做法是让<strong>连接和 goroutine 绑定，而不是和线程绑定</strong>：</p>
+<img src="/images/go/02-阻塞线程对比park-g.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
+<p>一次读操作在 runtime 内部的路径大致是：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#6A737D">// 简化自 internal/poll/fd_unix.go</span></span>
+<span class="line"><span style="color:#F97583">func</span><span style="color:#E1E4E8"> (</span><span style="color:#FFAB70">fd </span><span style="color:#F97583">*</span><span style="color:#B392F0">FD</span><span style="color:#E1E4E8">) </span><span style="color:#B392F0">Read</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">p</span><span style="color:#E1E4E8"> []</span><span style="color:#F97583">byte</span><span style="color:#E1E4E8">) (</span><span style="color:#F97583">int</span><span style="color:#E1E4E8">, </span><span style="color:#F97583">error</span><span style="color:#E1E4E8">) {</span></span>
+<span class="line"><span style="color:#F97583">    for</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">        n, err </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> syscall.</span><span style="color:#B392F0">Read</span><span style="color:#E1E4E8">(fd.Sysfd, p)</span></span>
+<span class="line"><span style="color:#F97583">        if</span><span style="color:#E1E4E8"> err </span><span style="color:#F97583">==</span><span style="color:#E1E4E8"> syscall.EAGAIN {</span></span>
+<span class="line"><span style="color:#6A737D">            // fd 暂不可读 → 把当前 G 挂在这个 fd 的 pollDesc 上</span></span>
+<span class="line"><span style="color:#F97583">            if</span><span style="color:#E1E4E8"> err </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> fd.pd.</span><span style="color:#B392F0">waitRead</span><span style="color:#E1E4E8">(fd.isFile); err </span><span style="color:#F97583">!=</span><span style="color:#79B8FF"> nil</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">                return</span><span style="color:#79B8FF"> 0</span><span style="color:#E1E4E8">, err</span></span>
+<span class="line"><span style="color:#E1E4E8">            }</span></span>
+<span class="line"><span style="color:#F97583">            continue</span><span style="color:#6A737D"> // 被唤醒后重试 Read</span></span>
+<span class="line"><span style="color:#E1E4E8">        }</span></span>
+<span class="line"><span style="color:#F97583">        return</span><span style="color:#E1E4E8"> n, err</span></span>
+<span class="line"><span style="color:#E1E4E8">    }</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>关键点：返回 <code>EAGAIN</code>（fd 设了非阻塞，现在没数据）时，不是自旋重试，也不是阻塞线程，而是调 <code>runtime_pollWait</code> → <code>netpollblock</code> → <code>gopark</code>。当前 G 从 M 上摘下来、状态改成 <code>_Gwaiting</code>，M 立刻回调度器跑别的 G。等数据到了，netpoller 再把这个 G 唤醒，它从 <code>waitRead</code> 返回、重试 <code>Read</code>，这次就能读到。</p>
+<h2 id="polldesc每个-fd-的等待记录"><code>pollDesc</code>：每个 fd 的等待记录</h2>
+<p><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/netpoll.go#L88-L120" rel="noopener noreferrer" target="_blank"><code>pollDesc</code></a> 把一个 fd 和”谁在等它”绑在一起，核心是两个指针：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">type</span><span style="color:#B392F0"> pollDesc</span><span style="color:#F97583"> struct</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">    fd      </span><span style="color:#F97583">*</span><span style="color:#B392F0">FD</span><span style="color:#6A737D">              // 关联的文件描述符</span></span>
+<span class="line"><span style="color:#E1E4E8">    rg      </span><span style="color:#F97583">uintptr</span><span style="color:#6A737D">          // 等待读的 G（或状态常量）</span></span>
+<span class="line"><span style="color:#E1E4E8">    wg      </span><span style="color:#F97583">uintptr</span><span style="color:#6A737D">          // 等待写的 G（或状态掩码）</span></span>
+<span class="line"><span style="color:#F97583">    ...</span></span>
+<span class="line"><span style="color:#E1E4E8">    self    </span><span style="color:#F97583">*</span><span style="color:#B392F0">pollDesc</span><span style="color:#6A737D">        // 用于在 epoll event 里找回自己</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<ul>
+<li><code>rg</code>/<code>wg</code> 用一个字存两类信息：要么是一个 G 指针（有人在等），要么是状态常量 <code>pdReady</code>/<code>pdWait</code>。</li>
+<li>初始化时 <code>rg=wg=pdReady</code>，表示 fd 立即可用（还没有人在等）。</li>
+<li>当 G 要等读时，用 CAS 把 <code>rg</code> 从 <code>pdReady</code> 改成自己的 G 指针，然后 park。</li>
+<li>fd 就绪/关闭时，<code>netpollready</code> 把 <code>rg</code>/<code>wg</code> 设回 <code>pdReady</code>，并调用 <code>goready</code> 唤醒挂着的 G。</li>
+</ul>
+<img src="/images/go/03-pollDesc-结构.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
+<p>一个 fd 只分配一个 <code>pollDesc</code>，读写各一个等待槽。这也解释了为什么<strong>一个 fd 同时只有一个等待读的 G 和一个等待写的 G</strong>：<code>conn.Read</code>/<code>conn.Write</code> 在 runtime 层不会有多个 G 同时读同一个 fd（上层 <code>net.TCPConn</code> 的读本来就要求串行）。</p>
+<h2 id="阻塞与唤醒netpollblock-与-netpollgoready">阻塞与唤醒：<code>netpollblock</code> 与 <code>netpollgoready</code></h2>
+<p><code>netpollblock</code> 是”把当前 G 挂到 pollDesc 上并休眠”的核心：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#6A737D">// 简化</span></span>
+<span class="line"><span style="color:#F97583">func</span><span style="color:#B392F0"> netpollblock</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">pd</span><span style="color:#F97583"> *</span><span style="color:#B392F0">pollDesc</span><span style="color:#E1E4E8">, </span><span style="color:#FFAB70">mode</span><span style="color:#F97583"> int32</span><span style="color:#E1E4E8">, </span><span style="color:#FFAB70">waitio</span><span style="color:#F97583"> bool</span><span style="color:#E1E4E8">) </span><span style="color:#F97583">bool</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">    gpp </span><span style="color:#F97583">:=</span><span style="color:#F97583"> &#x26;</span><span style="color:#E1E4E8">pd.rg</span></span>
+<span class="line"><span style="color:#F97583">    if</span><span style="color:#E1E4E8"> mode </span><span style="color:#F97583">==</span><span style="color:#9ECBFF"> '</span><span style="color:#79B8FF">w</span><span style="color:#9ECBFF">'</span><span style="color:#E1E4E8"> { gpp </span><span style="color:#F97583">=</span><span style="color:#F97583"> &#x26;</span><span style="color:#E1E4E8">pd.wg }</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">    for</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">        old </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> atomic.</span><span style="color:#B392F0">Loaduintptr</span><span style="color:#E1E4E8">(gpp)</span></span>
+<span class="line"><span style="color:#F97583">        if</span><span style="color:#E1E4E8"> old </span><span style="color:#F97583">==</span><span style="color:#E1E4E8"> pdReady {   </span><span style="color:#6A737D">// 已经就绪</span></span>
+<span class="line"><span style="color:#E1E4E8">            atomic.</span><span style="color:#B392F0">Casuintptr</span><span style="color:#E1E4E8">(gpp, pdReady, </span><span style="color:#79B8FF">0</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"><span style="color:#F97583">            return</span><span style="color:#79B8FF"> true</span></span>
+<span class="line"><span style="color:#E1E4E8">        }        </span><span style="color:#6A737D">// CAS 把 gpp 改成当前 G</span></span>
+<span class="line"><span style="color:#F97583">        if</span><span style="color:#E1E4E8"> atomic.</span><span style="color:#B392F0">Casuintptr</span><span style="color:#E1E4E8">(gpp, </span><span style="color:#79B8FF">0</span><span style="color:#E1E4E8">, </span><span style="color:#F97583">uintptr</span><span style="color:#E1E4E8">(mp.curg)) {</span></span>
+<span class="line"><span style="color:#F97583">            break</span></span>
+<span class="line"><span style="color:#E1E4E8">        }</span></span>
+<span class="line"><span style="color:#E1E4E8">    }</span></span>
+<span class="line"><span style="color:#6A737D">    // 挂起当前 G，等被 goready 唤醒</span></span>
+<span class="line"><span style="color:#B392F0">    gopark</span><span style="color:#E1E4E8">(netpollblockcommit, unsafe.</span><span style="color:#B392F0">Pointer</span><span style="color:#E1E4E8">(gpp), waitReasonIO, </span><span style="color:#F97583">...</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"><span style="color:#F97583">    return</span><span style="color:#F97583"> ...</span><span style="color:#6A737D"> // 被唤醒后检查是否真的就绪</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>注意几个细节：</p>
+<ul>
+<li><strong>用 CAS 而不是直接赋值</strong>：挂 G 的同时可能有事件到达、要把它改成 <code>pdReady</code>，CAS 保证二者不丢。</li>
+<li><strong>挂起前要能失败回滚</strong>：<code>gopark</code> 的 commit 回调会在真正停住前把 G 指针写入等待槽；如果这期间 fd 已经就绪，提交失败，G 不 park。</li>
+<li><strong>被唤醒不等于 I/O 一定可用</strong>：唤醒可能来自 close、超时或用户取消，醒来后要重新检查 <code>rg</code>/<code>wg</code> 状态，不可用就重新等。</li>
+</ul>
+<p>唤醒侧 <code>netpollready</code> 反过来：把 <code>rg</code>/<code>wg</code> 原子地设成 <code>pdReady</code>，再对之前挂着的 G 调 <code>goready</code>，把它从 <code>_Gwaiting</code> 改成 <code>_Grunnable</code>。</p>
+<h2 id="epoll-后端注册等待卸货">epoll 后端：注册、等待、卸货</h2>
+<p>Linux 后端（<code>netpoll_epoll.go</code>）维护一个全局 epoll 实例 <code>epfd</code>：</p>
+<ul>
+<li><code>netpollopen</code>：fd 初始化时调 <code>epoll_ctl(EPOLL_CTL_ADD)</code> 注册关注读/写事件，把 <code>pollDesc</code> 的地址通过 <code>event.data</code> 带进去，这样事件返回时能直接找到对应的 <code>pollDesc</code>。</li>
+<li><code>netpoll(delay int64)</code>：核心轮询函数，分两种用法：
+<ul>
+<li><code>delay &#x3C; 0</code>：阻塞调 <code>epoll_wait</code>，等够或有事件才返回；</li>
+<li><code>delay == 0</code>：非阻塞（<code>epoll_wait</code> timeout=0），有事件立刻返回，没有也立刻返回；</li>
+<li><code>delay > 0</code>：带超时阻塞。</li>
+</ul>
+</li>
+<li>取到事件后，对每个就绪 fd 的 <code>pollDesc</code> 调 <code>netpollready</code>，把读/写对应的 G 摘下来收集到一个链表。</li>
+</ul>
+<img src="/images/go/04-epoll-事件循环.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
+<p>返回的 G 链表叫 <strong>netpoll 就绪队列</strong>。调度器拿到后优先塞给空闲 P 的本地队列，没有空闲 P 就放全局队列，再用 <code>wakep</code> 唤醒一个闲着的 M 来跑。</p>
+<h2 id="与调度器的三次握手">与调度器的三次握手</h2>
+<p>netpoller 真正省 CPU 的关键在 <code>findRunnable</code> 里对它的三次调用。这部分在 GMP 笔记里有详细背景，这里聚焦和 netpoll 直接相关的协作：</p>
+<img src="/images/go/05-调度器三次握手.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
+<p><strong>1. 找活开头，非阻塞 <code>netpoll(0)</code></strong>：每次 <code>findRunnable</code> 第一件事就是调一次非阻塞 netpoll。这时若有网络事件，直接拿到就绪 G 来跑，省去专门唤醒一个 M 的延迟。代价极低，只是一次 <code>epoll_wait(timeout=0)</code> 系统调用。</p>
+<p><strong>2. 实在没活、P 要 park 前，再来一次 <code>netpoll(0)</code></strong>：本地队列、全局队列、work stealing、GC worker、timer 全找过一遍都没活，P 准备休眠前再查一次。防止”刚查完没事件，事件就到了，结果 P 睡死过去”。</p>
+<p><strong>3. 全系统空闲时，让一个 M 阻塞在 <code>netpoll(-1)</code></strong>：如果所有 P 都没活，不能让一堆 M 忙等。startTheWorld 时起的 <code>sysmon</code> 外，还有一个机制：调度器让<strong>唯一的一个 M</strong> 去跑阻塞的 <code>netpoll(-1)</code>，其他 M/P 都休眠。这个 M 一直睡在 <code>epoll_wait</code> 上，不占 CPU；网络事件到来时它醒来，把就绪 G 注入调度队列并唤醒空闲 P。</p>
+<p>于是整体效果是：</p>
+<ul>
+<li>有活干时，P 顺手在两次非阻塞查询里把网络就绪 G 带走，低延迟；</li>
+<li>没活干时，只有一个 M 阻塞在 epoll，空闲时 CPU 占用接近零；</li>
+<li>从空闲到有连接数据，最多一次 <code>epoll_wait</code> 唤醒就能拉起工作。</li>
+</ul>
+<p><strong>📝 为什么不是每个 P 一个 epoll 线程</strong></p>
+<p>一个阻塞的 <code>epoll_wait</code> 足以监控所有已注册 fd，epoll 本身就是事件多路复用。多个 M 阻塞在同一个 epoll 上只会增加惊群和无意义竞争。Go 选择”全系统空闲时一个 M 阻塞”，用非阻塞轮询覆盖有活干的场景，是延迟和 CPU 之间的折中。</p>
+<h2 id="为什么能扛几十万连接">为什么能扛几十万连接</h2>
+<p>每个等待网络的连接背后只是一个 parked 的 G：</p>
+<ul>
+<li>栈初始 2KB，等待期间不增长；</li>
+<li>不占 M、不占 P、不参与调度（状态是 <code>_Gwaiting</code>）；</li>
+<li>只在 <code>pollDesc</code> 里留一个指针和 epoll 里注册一个事件。</li>
+</ul>
+<p>OS 视角，真正”活着”的线程数大约是：</p>
+<ul>
+<li><code>GOMAXPROCS</code> 个执行用户代码的 M；</li>
+<li>sysmon 等少数后台 M；</li>
+<li>一个阻塞在 <code>epoll_wait</code> 的 netpoll M；</li>
+<li>若干被 syscall/cgo 堵住的 M。</li>
+</ul>
+<p>而 <code>epoll_wait</code> 一个线程就能监听上百万 fd。因此几十万连接只对应几十万 parked G，常驻 M 数与连接数无关。</p>
+<h2 id="边界与误区">边界与误区</h2>
+<ul>
+<li><strong>只有网络 fd 走 netpoller</strong>。Linux 上 epoll 对 regular file（普通磁盘文件）永远报”就绪”，但磁盘读本身可能在内核里阻塞。这种 read 走 <code>entersyscall</code> 路径：M 与 P 解绑、让 P 去找别的 M 跑，等 I/O 完成再回来，<strong>不是 park G</strong>。所以磁盘 IO 重的服务 M 数会明显多于 <code>GOMAXPROCS</code>。</li>
+<li><strong>cgo 调用</strong>同理，会占住一个 M，不经过 netpoller。</li>
+<li><strong><code>netpoll(0)</code> 也不是零成本</strong>：它是一次系统调用。调度器只在”本来就要找活”和”要休眠”这两个点查，不在每个调度间隙都查，避免 syscall 过密。</li>
+<li><strong>被唤醒的 G 不保证立刻跑到</strong>：它只是变成 runnable 进队列，前面可能还有别的 G；想理解它何时被选中执行，看 GMP 笔记的调度循环。</li>
+<li><strong>Close 也会唤醒等待者</strong>：fd 被关闭时对应 <code>pollDesc</code> 被标记，等在上面的 G 会被唤醒并收到错误，不会永远挂住。</li>
+<li><strong>Windows IOCP 模型不同</strong>：IOCP 是”操作完成后通知”，不是”fd 就绪后通知”，runtime 在 <code>netpoll_windows.go</code> 里把它适配成同样的 <code>pollDesc</code> 抽象，上层 <code>conn.Read</code> 写法不变。</li>
+</ul>
+<h2 id="参考资料">参考资料</h2>
+<ul>
+<li><a href="https://github.com/golang/go/tree/c19862e5f8415b4f24b189d065ed739517c548ba/src" rel="noopener noreferrer" target="_blank">Go 1.26.5 源码树</a></li>
+<li><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/netpoll.go" rel="noopener noreferrer" target="_blank"><code>runtime/netpoll.go</code></a></li>
+<li><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/netpoll_epoll.go" rel="noopener noreferrer" target="_blank"><code>runtime/netpoll_epoll.go</code></a></li>
+<li><a href="https://github.com/golang/go/tree/c19862e5f8415b4f24b189d065ed739517c548ba/src/internal/poll" rel="noopener noreferrer" target="_blank"><code>internal/poll</code></a></li>
+<li>Go 网络编程与 netpoller 设计文档</li>
+</ul></main><aside class="toc"><p class="toc-title">本页目录</p><ul><li class="toc-d2"><a href="#核心模型从阻塞线程到park-g">核心模型：从”阻塞线程”到”park G”</a></li><li class="toc-d2"><a href="#polldesc每个-fd-的等待记录">pollDesc：每个 fd 的等待记录</a></li><li class="toc-d2"><a href="#阻塞与唤醒netpollblock-与-netpollgoready">阻塞与唤醒：netpollblock 与 netpollgoready</a></li><li class="toc-d2"><a href="#epoll-后端注册等待卸货">epoll 后端：注册、等待、卸货</a></li><li class="toc-d2"><a href="#与调度器的三次握手">与调度器的三次握手</a></li><li class="toc-d2"><a href="#为什么能扛几十万连接">为什么能扛几十万连接</a></li><li class="toc-d2"><a href="#边界与误区">边界与误区</a></li><li class="toc-d2"><a href="#参考资料">参考资料</a></li></ul></aside></div><div class="lightbox" id="lightbox" aria-hidden="true"><img alt=""></div><script type="module" src="/_astro/Base.astro_astro_type_script_index_0_lang.DKvZf7If.js"></script></body></html>
