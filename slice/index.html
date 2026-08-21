@@ -36,16 +36,16 @@
 </ul>
 <p>切片只能与 <code>nil</code> 比较，不能直接比较两个切片。内容比较使用 <code>slices.Equal</code> 或业务自定义规则。</p>
 <h2 id="3-创建字面量make-与切片表达式">3. 创建：字面量、make 与切片表达式</h2>
-<h3 id="31-字面量">3.1 字面量</h3>
+<p><strong>3.1 字面量</strong></p>
 <pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#E1E4E8">s </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> []</span><span style="color:#F97583">int</span><span style="color:#E1E4E8">{</span><span style="color:#79B8FF">10</span><span style="color:#E1E4E8">, </span><span style="color:#79B8FF">20</span><span style="color:#E1E4E8">, </span><span style="color:#79B8FF">30</span><span style="color:#E1E4E8">}</span></span></code></pre>
 <p>编译器先准备一个数组，再构造指向该数组的切片。对应降级入口见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/cmd/compile/internal/walk/complit.go#L290-L414" rel="noopener noreferrer" target="_blank"><code>slicelit#L290-L414</code></a>。底层数组可能在静态区、栈或堆，取决于上下文和逃逸分析。</p>
-<h3 id="32-make">3.2 make</h3>
+<p><strong>3.2 make</strong></p>
 <pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#E1E4E8">a </span><span style="color:#F97583">:=</span><span style="color:#B392F0"> make</span><span style="color:#E1E4E8">([]</span><span style="color:#F97583">int</span><span style="color:#E1E4E8">, </span><span style="color:#79B8FF">5</span><span style="color:#E1E4E8">)      </span><span style="color:#6A737D">// len=5 cap=5</span></span>
 <span class="line"><span style="color:#E1E4E8">b </span><span style="color:#F97583">:=</span><span style="color:#B392F0"> make</span><span style="color:#E1E4E8">([]</span><span style="color:#F97583">int</span><span style="color:#E1E4E8">, </span><span style="color:#79B8FF">5</span><span style="color:#E1E4E8">, </span><span style="color:#79B8FF">10</span><span style="color:#E1E4E8">)  </span><span style="color:#6A737D">// len=5 cap=10</span></span></code></pre>
 <p>语义要求 <code>0 &#x3C;= len &#x3C;= cap</code>。运行时 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/slice.go#L101-L118" rel="noopener noreferrer" target="_blank"><code>makeslice#L101-L118</code></a> 计算 <code>cap * sizeof(T)</code>、检查溢出并调用分配器：</p>
 <img src="/images/go/02-make.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
 <p>Go 1.26.5 编译器还会尝试把部分变量容量的 <code>make</code> 转换为“阈值内走栈上数组，否则调用 <code>makeslice</code>”，源码见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/cmd/compile/internal/walk/builtin.go#L423-L540" rel="noopener noreferrer" target="_blank"><code>walkMakeSlice#L423-L540</code></a>。是否成功仍以编译结果为准。</p>
-<h3 id="33-切片表达式">3.3 切片表达式</h3>
+<p><strong>3.3 切片表达式</strong></p>
 <p>对 <code>a[low:high]</code>：</p>
 <pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="text"><code><span class="line"><span>new.Data = &#x26;a[low]</span></span>
 <span class="line"><span>new.Len  = high - low</span></span>
@@ -94,7 +94,7 @@
 <li>分配新底层数组；</li>
 <li>将 <code>[0:oldLen]</code> 搬到新数组，并正确清零、执行写屏障。</li>
 </ol>
-<h3 id="61-逻辑容量-nextslicecap">6.1 逻辑容量 nextslicecap</h3>
+<p><strong>6.1 逻辑容量 nextslicecap</strong></p>
 <p>源码见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/slice.go#L325-L358" rel="noopener noreferrer" target="_blank"><code>nextslicecap#L325-L358</code></a>：</p>
 <pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">if</span><span style="color:#E1E4E8"> newLen </span><span style="color:#F97583">></span><span style="color:#79B8FF"> 2</span><span style="color:#F97583">*</span><span style="color:#E1E4E8">oldCap {</span></span>
 <span class="line"><span style="color:#F97583">    return</span><span style="color:#E1E4E8"> newLen</span></span>
@@ -147,7 +147,7 @@
 <p> 实际 cap 还会变化
 <code>growslice</code> 会按元素宽度和内存分配器的 size class 调整字节数，所以最终 <code>cap</code> 可能大于 <code>nextslicecap</code> 的逻辑结果。不要把容量序列当作稳定 API。</p>
 </div>
-<h3 id="62-指针元素与无指针元素">6.2 指针元素与无指针元素</h3>
+<p><strong>6.2 指针元素与无指针元素</strong></p>
 <p>源码在 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/slice.go#L203-L284" rel="noopener noreferrer" target="_blank"><code>growslice#L203-L284</code></a> 分开处理：</p>
 <ul>
 <li>无指针元素使用 noscan 分配，append 即将覆盖的区域可以不先清零；</li>
@@ -157,15 +157,15 @@
 </ul>
 <p>零大小元素使用全局 <code>zerobase</code>，见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/slice.go#L195-L199" rel="noopener noreferrer" target="_blank"><code>slice.go#L195-L199</code></a>。</p>
 <h2 id="7-copyclear-与-slices">7. copy、clear 与 slices</h2>
-<h3 id="71-copy-支持重叠">7.1 copy 支持重叠</h3>
+<p><strong>7.1 copy 支持重叠</strong></p>
 <p><code>copy(dst, src)</code> 返回 <code>min(len(dst), len(src))</code>，语义允许源和目标重叠。运行时最终使用支持重叠的 <code>memmove</code>，相关代码见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/slice.go#L391-L430" rel="noopener noreferrer" target="_blank"><code>slicecopy#L391-L430</code></a>。</p>
 <pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#E1E4E8">s </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> []</span><span style="color:#F97583">int</span><span style="color:#E1E4E8">{</span><span style="color:#79B8FF">1</span><span style="color:#E1E4E8">, </span><span style="color:#79B8FF">2</span><span style="color:#E1E4E8">, </span><span style="color:#79B8FF">3</span><span style="color:#E1E4E8">, </span><span style="color:#79B8FF">4</span><span style="color:#E1E4E8">}</span></span>
 <span class="line"><span style="color:#B392F0">copy</span><span style="color:#E1E4E8">(s[</span><span style="color:#79B8FF">1</span><span style="color:#E1E4E8">:], s[:</span><span style="color:#79B8FF">3</span><span style="color:#E1E4E8">])</span></span>
 <span class="line"><span style="color:#E1E4E8">fmt.</span><span style="color:#B392F0">Println</span><span style="color:#E1E4E8">(s) </span><span style="color:#6A737D">// [1 1 2 3]</span></span></code></pre>
-<h3 id="72-clear-只清可见长度">7.2 clear 只清可见长度</h3>
+<p><strong>7.2 clear 只清可见长度</strong></p>
 <pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#B392F0">clear</span><span style="color:#E1E4E8">(s) </span><span style="color:#6A737D">// 将 s[:len(s)] 的元素设为零值，不改变 len/cap</span></span></code></pre>
 <p>删除含指针元素后应清理尾部，避免无用对象继续被底层数组引用。标准库 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/slices/slices.go#L218-L233" rel="noopener noreferrer" target="_blank"><code>slices.Delete</code></a> 已负责清零被移出的尾部。</p>
-<h3 id="73-growclipclone">7.3 Grow、Clip、Clone</h3>
+<p><strong>7.3 Grow、Clip、Clone</strong></p>
 <ul>
 <li><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/slices/slices.go#L415-L429" rel="noopener noreferrer" target="_blank"><code>slices.Grow</code></a>：保证还能 append <code>n</code> 个元素；</li>
 <li><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/slices/slices.go#L431-L435" rel="noopener noreferrer" target="_blank"><code>slices.Clip</code></a>：返回 <code>s[:len(s):len(s)]</code>，只限制容量，本身不复制；</li>
@@ -185,20 +185,20 @@
 </ul>
 <pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="bash"><code><span class="line"><span style="color:#B392F0">go</span><span style="color:#9ECBFF"> test</span><span style="color:#79B8FF"> -race</span><span style="color:#9ECBFF"> ./...</span></span></code></pre>
 <p>API 设计上优先明确所有权：只读借用、调用方保留、被调用方接管，或返回新切片。模糊的别名关系比扩容算法更容易制造生产事故。</p>
-<h2 id="9-性能与容量治理">9. 性能与容量治理</h2>
-<h3 id="91-已知数量就预分配">9.1 已知数量就预分配</h3>
+<p><strong>9. 性能与容量治理</strong></p>
+<p><strong>9.1 已知数量就预分配</strong></p>
 <pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#E1E4E8">out </span><span style="color:#F97583">:=</span><span style="color:#B392F0"> make</span><span style="color:#E1E4E8">([]</span><span style="color:#B392F0">Item</span><span style="color:#E1E4E8">, </span><span style="color:#79B8FF">0</span><span style="color:#E1E4E8">, </span><span style="color:#B392F0">len</span><span style="color:#E1E4E8">(input))</span></span>
 <span class="line"><span style="color:#F97583">for</span><span style="color:#E1E4E8"> _, x </span><span style="color:#F97583">:=</span><span style="color:#F97583"> range</span><span style="color:#E1E4E8"> input {</span></span>
 <span class="line"><span style="color:#E1E4E8">    out </span><span style="color:#F97583">=</span><span style="color:#B392F0"> append</span><span style="color:#E1E4E8">(out, </span><span style="color:#B392F0">transform</span><span style="color:#E1E4E8">(x))</span></span>
 <span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
 <p>预分配减少扩容、复制和 GC 压力；不要无依据给出极大 cap，否则只是把峰值内存提前并长期保留。</p>
-<h3 id="92-观察真实分配">9.2 观察真实分配</h3>
+<p><strong>9.2 观察真实分配</strong></p>
 <pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="bash"><code><span class="line"><span style="color:#B392F0">go</span><span style="color:#9ECBFF"> test</span><span style="color:#79B8FF"> -bench=.</span><span style="color:#79B8FF"> -benchmem</span><span style="color:#9ECBFF"> ./...</span></span>
 <span class="line"><span style="color:#B392F0">go</span><span style="color:#9ECBFF"> test</span><span style="color:#79B8FF"> -run=</span><span style="color:#9ECBFF">'^$'</span><span style="color:#79B8FF"> -bench=BenchmarkBuild</span><span style="color:#79B8FF"> -memprofile=mem.out</span></span>
 <span class="line"><span style="color:#B392F0">go</span><span style="color:#9ECBFF"> tool</span><span style="color:#9ECBFF"> pprof</span><span style="color:#79B8FF"> -alloc_space</span><span style="color:#9ECBFF"> mem.out</span></span>
 <span class="line"><span style="color:#B392F0">go</span><span style="color:#9ECBFF"> build</span><span style="color:#79B8FF"> -gcflags=</span><span style="color:#9ECBFF">'-m=2'</span><span style="color:#9ECBFF"> ./...</span></span></code></pre>
 <p>生产指标建议关注：请求对象大小分布、批次元素数、分配速率、堆峰值、GC CPU、P99 延迟和 OOM 前的 RSS。</p>
-<h2 id="10-常见误区">10. 常见误区</h2>
+<p><strong>10. 常见误区</strong></p>
 <blockquote>
 <p>[!failure] append 一定修改原切片
 append 可能复用原数组，也可能换数组；必须接收返回值。</p>
@@ -215,7 +215,7 @@ cap 只是允许切片扩展的上界；合法索引仍必须小于 len。</p>
 <p>[!failure] 只要最终 len 很小就不会占大内存
 小子切片可能保留大底层数组；应结合所有权和生命周期主动复制。</p>
 </blockquote>
-<h2 id="11-源码导航">11. 源码导航</h2>
+<p><strong>11. 源码导航</strong></p>
 
 
 
@@ -254,7 +254,7 @@ cap 只是允许切片扩展的上界；合法索引仍必须小于 len。</p>
 
 
 <table><thead><tr><th>主题</th><th>Go 1.26.5 源码</th></tr></thead><tbody><tr><td>运行时切片头</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/slice.go#L16-L20" rel="noopener noreferrer" target="_blank"><code>runtime.slice</code></a></td></tr><tr><td>make 分配</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/slice.go#L101-L118" rel="noopener noreferrer" target="_blank"><code>makeslice</code></a></td></tr><tr><td>append 扩容</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/slice.go#L134-L287" rel="noopener noreferrer" target="_blank"><code>growslice</code></a></td></tr><tr><td>下一容量</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/slice.go#L325-L358" rel="noopener noreferrer" target="_blank"><code>nextslicecap</code></a></td></tr><tr><td>copy</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/slice.go#L391-L430" rel="noopener noreferrer" target="_blank"><code>slicecopy</code></a></td></tr><tr><td>编译器 make 降级</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/cmd/compile/internal/walk/builtin.go#L423-L540" rel="noopener noreferrer" target="_blank"><code>walkMakeSlice</code></a></td></tr><tr><td>编译器 append 降级</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/cmd/compile/internal/walk/builtin.go#L22-L127" rel="noopener noreferrer" target="_blank"><code>walkAppend</code></a></td></tr></tbody></table>
-<h2 id="12-自测题">12. 自测题</h2>
+<p><strong>12. 自测题</strong></p>
 <ol>
 <li>为什么 <code>append</code> 必须接收返回值？</li>
 <li><code>s[:0]</code>、<code>s[:0:0]</code> 与 <code>nil</code> 分别保留了什么？</li>
@@ -262,4 +262,4 @@ cap 只是允许切片扩展的上界；合法索引仍必须小于 len。</p>
 <li><code>slices.Clip</code> 为什么不能保证大数组立即可回收？</li>
 <li>含指针元素的扩容为什么需要清零和写屏障？</li>
 </ol>
-<p>能够沿着“描述符 → 别名 → append 分支 → growslice → 分配器与 GC”解释一次切片操作，才算掌握了切片的实现。</p></main><aside class="toc"><p class="toc-title">本页目录</p><ul><li class="toc-d2"><a href="#1-运行时表示">1. 运行时表示</a></li><li class="toc-d2"><a href="#2-nil空切片与零值">2. nil、空切片与零值</a></li><li class="toc-d2"><a href="#3-创建字面量make-与切片表达式">3. 创建：字面量、make 与切片表达式</a></li><li class="toc-d3"><a href="#31-字面量">3.1 字面量</a></li><li class="toc-d3"><a href="#32-make">3.2 make</a></li><li class="toc-d3"><a href="#33-切片表达式">3.3 切片表达式</a></li><li class="toc-d2"><a href="#4-共享底层数组与别名">4. 共享底层数组与别名</a></li><li class="toc-d2"><a href="#5-append-的两条路径">5. append 的两条路径</a></li><li class="toc-d2"><a href="#6-growslice-与容量算法">6. growslice 与容量算法</a></li><li class="toc-d3"><a href="#61-逻辑容量-nextslicecap">6.1 逻辑容量 nextslicecap</a></li><li class="toc-d3"><a href="#62-指针元素与无指针元素">6.2 指针元素与无指针元素</a></li><li class="toc-d2"><a href="#7-copyclear-与-slices">7. copy、clear 与 slices</a></li><li class="toc-d3"><a href="#71-copy-支持重叠">7.1 copy 支持重叠</a></li><li class="toc-d3"><a href="#72-clear-只清可见长度">7.2 clear 只清可见长度</a></li><li class="toc-d3"><a href="#73-growclipclone">7.3 Grow、Clip、Clone</a></li><li class="toc-d2"><a href="#8-并发与内存模型">8. 并发与内存模型</a></li><li class="toc-d2"><a href="#9-性能与容量治理">9. 性能与容量治理</a></li><li class="toc-d3"><a href="#91-已知数量就预分配">9.1 已知数量就预分配</a></li><li class="toc-d3"><a href="#92-观察真实分配">9.2 观察真实分配</a></li><li class="toc-d2"><a href="#10-常见误区">10. 常见误区</a></li><li class="toc-d2"><a href="#11-源码导航">11. 源码导航</a></li><li class="toc-d2"><a href="#12-自测题">12. 自测题</a></li></ul></aside></div><div class="lightbox" id="lightbox" aria-hidden="true"><img alt=""></div><script type="module" src="/_astro/Base.astro_astro_type_script_index_0_lang.DKvZf7If.js"></script></body></html>
+<p>能够沿着“描述符 → 别名 → append 分支 → growslice → 分配器与 GC”解释一次切片操作，才算掌握了切片的实现。</p></main><aside class="toc"><p class="toc-title">本页目录</p><ul><li class="toc-d2"><a href="#1-运行时表示">1. 运行时表示</a></li><li class="toc-d2"><a href="#2-nil空切片与零值">2. nil、空切片与零值</a></li><li class="toc-d2"><a href="#3-创建字面量make-与切片表达式">3. 创建：字面量、make 与切片表达式</a></li><li class="toc-d2"><a href="#4-共享底层数组与别名">4. 共享底层数组与别名</a></li><li class="toc-d2"><a href="#5-append-的两条路径">5. append 的两条路径</a></li><li class="toc-d2"><a href="#6-growslice-与容量算法">6. growslice 与容量算法</a></li><li class="toc-d2"><a href="#7-copyclear-与-slices">7. copy、clear 与 slices</a></li><li class="toc-d2"><a href="#8-并发与内存模型">8. 并发与内存模型</a></li></ul></aside></div><div class="lightbox" id="lightbox" aria-hidden="true"><img alt=""></div><script type="module" src="/_astro/Base.astro_astro_type_script_index_0_lang.DKvZf7If.js"></script></body></html>

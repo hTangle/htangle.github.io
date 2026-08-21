@@ -37,7 +37,7 @@ Go 数组是“长度属于类型、元素连续存放、赋值会复制”的�
 <span class="line"><span style="color:#E1E4E8">    Len   </span><span style="color:#F97583">uintptr</span></span>
 <span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
 <p>这里的 <code>Slice</code> 是对应的 <code>[]T</code> 类型元数据，不是某个数组值附带的切片。数组值自身没有 <code>Data/Len/Cap</code> 头部。</p>
-<h3 id="21-长度为什么属于类型">2.1 长度为什么属于类型</h3>
+<p><strong>2.1 长度为什么属于类型</strong></p>
 <p>长度进入类型后，编译器可以在运行前完成：</p>
 <ul>
 <li>占用空间计算：<code>N * sizeof(T)</code>，同时检查溢出；</li>
@@ -102,13 +102,13 @@ Go 数组是“长度属于类型、元素连续存放、赋值会复制”的�
 <span class="line"><span style="color:#E1E4E8">a </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> [</span><span style="color:#79B8FF">3</span><span style="color:#E1E4E8">]</span><span style="color:#F97583">byte</span><span style="color:#E1E4E8">(s)       </span><span style="color:#6A737D">// 复制成数组值</span></span>
 <span class="line"><span style="color:#E1E4E8">p </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> (</span><span style="color:#F97583">*</span><span style="color:#E1E4E8">[</span><span style="color:#79B8FF">3</span><span style="color:#E1E4E8">]</span><span style="color:#F97583">byte</span><span style="color:#E1E4E8">)(s)    </span><span style="color:#6A737D">// 指向同一底层存储</span></span></code></pre>
 <h2 id="6-复制传参与-range">6. 复制、传参与 range</h2>
-<h3 id="61-赋值和传参">6.1 赋值和传参</h3>
+<p><strong>6.1 赋值和传参</strong></p>
 <pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">func</span><span style="color:#B392F0"> mutateValue</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">a</span><span style="color:#E1E4E8"> [</span><span style="color:#79B8FF">1024</span><span style="color:#E1E4E8">]</span><span style="color:#F97583">int</span><span style="color:#E1E4E8">) { a[</span><span style="color:#79B8FF">0</span><span style="color:#E1E4E8">] </span><span style="color:#F97583">=</span><span style="color:#79B8FF"> 1</span><span style="color:#E1E4E8"> }   </span><span style="color:#6A737D">// 接收副本</span></span>
 <span class="line"><span style="color:#F97583">func</span><span style="color:#B392F0"> mutatePtr</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">a</span><span style="color:#F97583"> *</span><span style="color:#E1E4E8">[</span><span style="color:#79B8FF">1024</span><span style="color:#E1E4E8">]</span><span style="color:#F97583">int</span><span style="color:#E1E4E8">) { a[</span><span style="color:#79B8FF">0</span><span style="color:#E1E4E8">] </span><span style="color:#F97583">=</span><span style="color:#79B8FF"> 1</span><span style="color:#E1E4E8"> }    </span><span style="color:#6A737D">// 修改原数组</span></span>
 <span class="line"><span style="color:#F97583">func</span><span style="color:#B392F0"> mutateSlice</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">a</span><span style="color:#E1E4E8"> []</span><span style="color:#F97583">int</span><span style="color:#E1E4E8">)    { a[</span><span style="color:#79B8FF">0</span><span style="color:#E1E4E8">] </span><span style="color:#F97583">=</span><span style="color:#79B8FF"> 1</span><span style="color:#E1E4E8"> }    </span><span style="color:#6A737D">// 共享底层数组</span></span></code></pre>
 <p>大数组按值跨函数边界会增加复制成本，也会扩大栈帧。API 通常使用 <code>[]T</code> 表达序列；只有长度是协议的一部分时使用数组，例如 <code>[16]byte</code> UUID、<code>[32]byte</code> 摘要。</p>
 <p>编译器不一定真的调用逐元素复制：根据类型和大小，它可能内联若干 load/store，或降为 <code>memmove</code>。语义始终是完整值复制。</p>
-<h3 id="62-range-的求值语义">6.2 range 的求值语义</h3>
+<p><strong>6.2 range 的求值语义</strong></p>
 <p><code>range</code> 表达式只求值一次。遍历数组值时，range 保存的是数组值，因此对源数组的后续修改未必影响迭代值；遍历数组指针或切片则继续引用原存储。</p>
 <pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#E1E4E8">a </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> [</span><span style="color:#79B8FF">3</span><span style="color:#E1E4E8">]</span><span style="color:#F97583">int</span><span style="color:#E1E4E8">{</span><span style="color:#79B8FF">1</span><span style="color:#E1E4E8">, </span><span style="color:#79B8FF">2</span><span style="color:#E1E4E8">, </span><span style="color:#79B8FF">3</span><span style="color:#E1E4E8">}</span></span>
 <span class="line"><span style="color:#F97583">for</span><span style="color:#E1E4E8"> i, v </span><span style="color:#F97583">:=</span><span style="color:#F97583"> range</span><span style="color:#E1E4E8"> a {</span></span>
@@ -128,27 +128,27 @@ Go 数组是“长度属于类型、元素连续存放、赋值会复制”的�
 <p> 大数组局部变量
 “声明在函数里”不等于一定在栈上。大对象、被闭包捕获、地址逸出或生命周期跨越调用边界时都可能进入堆。以 <code>-gcflags='-m=2'</code> 的实际结果为准。</p>
 </div>
-<h2 id="8-生产实践">8. 生产实践</h2>
-<h3 id="81-适合使用数组">8.1 适合使用数组</h3>
+<p><strong>8. 生产实践</strong></p>
+<p><strong>8.1 适合使用数组</strong></p>
 <ul>
 <li>固定宽度协议字段、哈希、密钥和 nonce；</li>
 <li>需要数组作为 map key；</li>
 <li>小型查表和固定维度数学数据；</li>
 <li>API 需要编译期表达“必须恰好 N 个元素”。</li>
 </ul>
-<h3 id="82-更适合使用切片">8.2 更适合使用切片</h3>
+<p><strong>8.2 更适合使用切片</strong></p>
 <ul>
 <li>长度由输入决定；</li>
 <li>需要 append、截取、共享窗口；</li>
 <li>大序列需要避免按值复制；</li>
 <li>API 希望接收多种长度。</li>
 </ul>
-<h3 id="83-基准和诊断">8.3 基准和诊断</h3>
+<p><strong>8.3 基准和诊断</strong></p>
 <pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="bash"><code><span class="line"><span style="color:#B392F0">go</span><span style="color:#9ECBFF"> test</span><span style="color:#79B8FF"> -bench=.</span><span style="color:#79B8FF"> -benchmem</span><span style="color:#9ECBFF"> ./...</span></span>
 <span class="line"><span style="color:#B392F0">go</span><span style="color:#9ECBFF"> test</span><span style="color:#79B8FF"> -gcflags=</span><span style="color:#9ECBFF">'-m=2'</span><span style="color:#9ECBFF"> ./...</span></span>
 <span class="line"><span style="color:#B392F0">go</span><span style="color:#9ECBFF"> tool</span><span style="color:#9ECBFF"> objdump</span><span style="color:#79B8FF"> -s</span><span style="color:#9ECBFF"> 'pkg\.Function'</span><span style="color:#9ECBFF"> ./binary</span></span></code></pre>
 <p>重点观察：<code>ns/op</code>、<code>B/op</code>、<code>allocs/op</code>、栈帧大小、逃逸原因以及是否出现不必要的数组复制。</p>
-<h2 id="9-常见误区">9. 常见误区</h2>
+<p><strong>9. 常见误区</strong></p>
 <blockquote>
 <p>[!failure] 数组变量只是一个指针
 错。数组变量保存整个数组值；只有 <code>*[N]T</code> 才是数组指针。</p>
@@ -165,7 +165,7 @@ Go 数组是“长度属于类型、元素连续存放、赋值会复制”的�
 <p>[!failure] 固定长度就一定更快
 不一定。数组可能触发大块复制；切片多一次间接访问，但能避免复制。以真实基准为准。</p>
 </blockquote>
-<h2 id="10-源码导航">10. 源码导航</h2>
+<p><strong>10. 源码导航</strong></p>
 
 
 
@@ -200,7 +200,7 @@ Go 数组是“长度属于类型、元素连续存放、赋值会复制”的�
 
 
 <table><thead><tr><th>主题</th><th>Go 1.26.5 源码</th></tr></thead><tbody><tr><td>编译器数组类型</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/cmd/compile/internal/types/type.go#L391-L400" rel="noopener noreferrer" target="_blank"><code>types.Array</code></a></td></tr><tr><td>创建数组类型</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/cmd/compile/internal/types/type.go#L520-L534" rel="noopener noreferrer" target="_blank"><code>NewArray</code></a></td></tr><tr><td>运行时类型元数据</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/internal/abi/type.go#L268-L280" rel="noopener noreferrer" target="_blank"><code>abi.ArrayType</code></a></td></tr><tr><td>数组/切片字面量</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/cmd/compile/internal/walk/complit.go#L195-L280" rel="noopener noreferrer" target="_blank"><code>fixedlit</code></a></td></tr><tr><td>range 降级</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/cmd/compile/internal/walk/range.go#L100-L239" rel="noopener noreferrer" target="_blank"><code>walkRange</code></a></td></tr><tr><td>切片字面量构造底层数组</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/cmd/compile/internal/walk/complit.go#L290-L414" rel="noopener noreferrer" target="_blank"><code>slicelit</code></a></td></tr></tbody></table>
-<h2 id="11-自测题">11. 自测题</h2>
+<p><strong>11. 自测题</strong></p>
 <ol>
 <li>为什么 <code>[16]byte</code> 和 <code>[32]byte</code> 不能直接赋值？</li>
 <li><code>b := a</code> 后修改 <code>b</code> 为什么不影响数组 <code>a</code>？</li>
@@ -208,4 +208,4 @@ Go 数组是“长度属于类型、元素连续存放、赋值会复制”的�
 <li>为什么 <code>[0][]byte</code> 仍不可比较？</li>
 <li>大数组 API 应该选择值、指针还是切片？依据是什么？</li>
 </ol>
-<p>能够从“类型元数据 → 内存布局 → 编译器降级 → 逃逸与复制成本”回答这些问题，才算真正掌握 Go 数组。</p></main><aside class="toc"><p class="toc-title">本页目录</p><ul><li class="toc-d2"><a href="#1-先建立完整模型">1. 先建立完整模型</a></li><li class="toc-d2"><a href="#2-类型系统中的数组">2. 类型系统中的数组</a></li><li class="toc-d3"><a href="#21-长度为什么属于类型">2.1 长度为什么属于类型</a></li><li class="toc-d2"><a href="#3-初始化与复合字面量">3. 初始化与复合字面量</a></li><li class="toc-d2"><a href="#4-内存布局">4. 内存布局</a></li><li class="toc-d2"><a href="#5-索引切片与边界检查">5. 索引、切片与边界检查</a></li><li class="toc-d2"><a href="#6-复制传参与-range">6. 复制、传参与 range</a></li><li class="toc-d3"><a href="#61-赋值和传参">6.1 赋值和传参</a></li><li class="toc-d3"><a href="#62-range-的求值语义">6.2 range 的求值语义</a></li><li class="toc-d2"><a href="#7-gc-与逃逸">7. GC 与逃逸</a></li><li class="toc-d2"><a href="#8-生产实践">8. 生产实践</a></li><li class="toc-d3"><a href="#81-适合使用数组">8.1 适合使用数组</a></li><li class="toc-d3"><a href="#82-更适合使用切片">8.2 更适合使用切片</a></li><li class="toc-d3"><a href="#83-基准和诊断">8.3 基准和诊断</a></li><li class="toc-d2"><a href="#9-常见误区">9. 常见误区</a></li><li class="toc-d2"><a href="#10-源码导航">10. 源码导航</a></li><li class="toc-d2"><a href="#11-自测题">11. 自测题</a></li></ul></aside></div><div class="lightbox" id="lightbox" aria-hidden="true"><img alt=""></div><script type="module" src="/_astro/Base.astro_astro_type_script_index_0_lang.DKvZf7If.js"></script></body></html>
+<p>能够从“类型元数据 → 内存布局 → 编译器降级 → 逃逸与复制成本”回答这些问题，才算真正掌握 Go 数组。</p></main><aside class="toc"><p class="toc-title">本页目录</p><ul><li class="toc-d2"><a href="#1-先建立完整模型">1. 先建立完整模型</a></li><li class="toc-d2"><a href="#2-类型系统中的数组">2. 类型系统中的数组</a></li><li class="toc-d2"><a href="#3-初始化与复合字面量">3. 初始化与复合字面量</a></li><li class="toc-d2"><a href="#4-内存布局">4. 内存布局</a></li><li class="toc-d2"><a href="#5-索引切片与边界检查">5. 索引、切片与边界检查</a></li><li class="toc-d2"><a href="#6-复制传参与-range">6. 复制、传参与 range</a></li><li class="toc-d2"><a href="#7-gc-与逃逸">7. GC 与逃逸</a></li></ul></aside></div><div class="lightbox" id="lightbox" aria-hidden="true"><img alt=""></div><script type="module" src="/_astro/Base.astro_astro_type_script_index_0_lang.DKvZf7If.js"></script></body></html>
