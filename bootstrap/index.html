@@ -1,0 +1,220 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Go 程序启动流程：Go 1.26.5 源码分析</title><script>
+      (function () {
+        var s = localStorage.getItem('theme');
+        if (s === 'light' || s === 'dark') {
+          document.documentElement.setAttribute('data-theme', s);
+        }
+      })();
+    </script><link rel="stylesheet" href="/_astro/Base.h73xs6F0.css"></head><body><header class="topbar"><a href="/" class="brand">HLDay</a><nav><a href="/">专题</a><a href="/posts/">博客</a><a href="https://github.com/hTangle" class="nav-github" aria-label="GitHub">GitHub</a></nav><button class="theme-toggle" id="themeToggle" type="button" title="切换主题（自动/浅色/深色）" aria-label="切换主题">🖥️</button></header><div class="layout"><aside class="booknav"><ul class="nav-tree"><li><p class="nav-group">Go</p><ul><li><p class="nav-subgroup">运行时基础</p><ul><li class><a href="/source-map/">源码环境与目录地图</a></li><li class="active"><a href="/bootstrap/">程序启动流程</a></li></ul></li><li><p class="nav-subgroup">并发编程</p><ul><li class><a href="/gmp/">GMP 调度器</a></li><li class><a href="/netpoll/">网络轮询器</a></li><li class><a href="/timer/">定时器</a></li><li class><a href="/sync-lock/">同步和锁</a></li><li class><a href="/channel/">Channel</a></li><li class><a href="/context/">Context</a></li><li class><a href="/defer-panic/">defer/panic/recover</a></li></ul></li><li><p class="nav-subgroup">内存管理</p><ul><li class><a href="/memory-alloc/">内存分配器</a></li><li class><a href="/gc/">垃圾收集器</a></li><li class><a href="/stack/">栈空间管理</a></li></ul></li><li><p class="nav-subgroup">数据结构</p><ul><li class><a href="/type-metadata/">类型元数据与对象布局</a></li><li class><a href="/iface/">Interface 与动态调用</a></li><li class><a href="/array/">数组</a></li><li class><a href="/slice/">切片</a></li><li class><a href="/swiss-map/">哈希表 (Swiss Table)</a></li><li class><a href="/string/">字符串</a></li></ul></li></ul></li><li><p class="nav-group">Agent 开发</p><ul><li><p class="nav-subgroup">核心协议与机制</p><ul><li class><a href="/mcp/">MCP</a></li><li class><a href="/skill/">Skill</a></li><li class><a href="/tool-call/">Tool Call</a></li></ul></li></ul></li></ul></aside><main class="prose"><h1>Go 程序启动流程：Go 1.26.5 源码分析</h1><div class="markdown-alert markdown-alert-tip" dir="auto">
+<p class="markdown-alert-title" dir="auto"><svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8 1.5c-2.363 0-4 1.69-4 3.75 0 .984.424 1.625.984 2.304l.214.253c.223.264.47.556.673.848.284.411.537.896.621 1.49a.75.75 0 0 1-1.484.211c-.04-.282-.163-.547-.37-.847a8.456 8.456 0 0 0-.542-.68c-.084-.1-.173-.205-.268-.32C3.201 7.75 2.5 6.766 2.5 5.25 2.5 2.31 4.863 0 8 0s5.5 2.31 5.5 5.25c0 1.516-.701 2.5-1.328 3.259-.095.115-.184.22-.268.319-.207.245-.383.453-.541.681-.208.3-.33.565-.37.847a.751.751 0 0 1-1.485-.212c.084-.593.337-1.078.621-1.489.203-.292.45-.584.673-.848.075-.088.147-.173.213-.253.561-.679.985-1.32.985-2.304 0-2.06-1.637-3.75-4-3.75ZM5.75 12h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1 0-1.5ZM6 15.25a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1-.75-.75Z"></path></svg>TIP</p>
+<p> 先抓住主干
+一个 Go 程序从内核 <code>exec</code> 到你的 <code>main.main</code> 被调用，中间只有四个关键动作：</p>
+<ol>
+<li><strong>汇编入口 <code>rt0_go</code></strong>：在 g0 栈上搭好 m0、TLS、CPU 特征，这是 runtime 能跑起来的最小地基。</li>
+<li><strong><code>schedinit</code></strong>：在 m0/g0 上顺序初始化栈、内存分配器、GC、P、调度器等所有子系统——此时还<strong>没有用户 G</strong>。</li>
+<li><strong><code>newproc</code> 创建 main goroutine</strong>：把真正要跑的 Go 代码变成一个 G，排进 P 的本地队列。</li>
+<li><strong><code>mstart</code> → <code>schedule</code> → <code>runtime.main</code></strong>：m0 开始调度，main G 被跑起来，先执行所有包级 <code>init</code>，再调 <code>main.main</code>。</li>
+</ol>
+<p>记住：<strong>前两步只有一个 M（m0）和一个栈（g0），main 函数本身也是一个 goroutine</strong>，不是什么特殊线程。</p>
+</div>
+<p><strong>版本与源码基线</strong></p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>主题</th><th>位置</th></tr></thead><tbody><tr><td>汇编入口（amd64）</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/asm_amd64.s" rel="noopener noreferrer" target="_blank"><code>runtime/asm_amd64.s</code></a> 的 <code>_rt0_amd64_linux</code> → <code>rt0_go</code></td></tr><tr><td><code>schedinit</code></td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/proc.go#L983-L1101" rel="noopener noreferrer" target="_blank"><code>runtime/proc.go#L983-L1101</code></a></td></tr><tr><td><code>runtime.main</code></td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/proc.go#L118-L289" rel="noopener noreferrer" target="_blank"><code>runtime/proc.go#L118-L289</code></a></td></tr><tr><td><code>newproc</code> / <code>newproc1</code></td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/proc.go" rel="noopener noreferrer" target="_blank"><code>runtime/proc.go</code></a></td></tr><tr><td><code>mstart</code> / <code>schedule</code></td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/proc.go" rel="noopener noreferrer" target="_blank"><code>runtime/proc.go</code></a></td></tr></tbody></table>
+<p>平台入口按架构/OS 各有一份（<code>asm_amd64.s</code>、<code>asm_arm64.s</code>、<code>sys_linux_amd64.s</code> 等），但汇编层之后全部汇入同一份 Go 代码。下面以 linux/amd64 为主线。</p>
+<div class="bm-diagram"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300.53099999999995 1016.1999999999999" width="300.53099999999995" height="1016.1999999999999" style="--bg:var(--bm-bg);--fg:var(--bm-fg);--line:var(--bm-border);--accent:var(--bm-accent);--muted:var(--bm-muted);--surface:var(--bm-surface);--border:var(--bm-border)">
+<style>
+  text { font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif; }
+  svg {
+    /* Derived from --bg and --fg (overridable via --line, --accent, etc.) */
+    --_text:          var(--fg);
+    --_text-sec:      var(--muted, color-mix(in srgb, var(--fg) 60%, var(--bg)));
+    --_text-muted:    var(--muted, color-mix(in srgb, var(--fg) 40%, var(--bg)));
+    --_text-faint:    color-mix(in srgb, var(--fg) 25%, var(--bg));
+    --_line:          var(--line, color-mix(in srgb, var(--fg) 50%, var(--bg)));
+    --_arrow:         var(--accent, color-mix(in srgb, var(--fg) 85%, var(--bg)));
+    --_node-fill:     var(--surface, color-mix(in srgb, var(--fg) 3%, var(--bg)));
+    --_node-stroke:   var(--border, color-mix(in srgb, var(--fg) 20%, var(--bg)));
+    --_group-fill:    var(--bg);
+    --_group-hdr:     color-mix(in srgb, var(--fg) 5%, var(--bg));
+    --_inner-stroke:  color-mix(in srgb, var(--fg) 12%, var(--bg));
+    --_key-badge:     color-mix(in srgb, var(--fg) 10%, var(--bg));
+  }
+</style>
+<defs>
+  <marker id="arrowhead" markerWidth="8" markerHeight="5" refX="7" refY="2.5" orient="auto">
+    <polygon points="0 0, 8 2.5, 0 5" fill="var(--_arrow)" stroke="var(--_arrow)" stroke-width="0.75" stroke-linejoin="round"></polygon>
+  </marker>
+  <marker id="arrowhead-start" markerWidth="8" markerHeight="5" refX="1" refY="2.5" orient="auto-start-reverse">
+    <polygon points="8 0, 0 2.5, 8 5" fill="var(--_arrow)" stroke="var(--_arrow)" stroke-width="0.75" stroke-linejoin="round"></polygon>
+  </marker>
+</defs>
+<polyline class="edge" data-from="K" data-to="RT" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="150.26549999999997,93.80000000000001 150.26549999999997,141.8" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)"></polyline>
+<polyline class="edge" data-from="RT" data-to="SI" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="150.26549999999997,212.5 150.26549999999997,260.5" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)"></polyline>
+<polyline class="edge" data-from="SI" data-to="NP" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="150.26549999999997,314.3 150.26549999999997,362.3" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)"></polyline>
+<polyline class="edge" data-from="NP" data-to="MS" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="150.26549999999997,416.1 150.26549999999997,464.1" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)"></polyline>
+<polyline class="edge" data-from="MS" data-to="SCH" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="150.26549999999997,517.9000000000001 150.26549999999997,565.9000000000001" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)"></polyline>
+<polyline class="edge" data-from="SCH" data-to="RM" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="150.26549999999997,602.8000000000001 150.26549999999997,650.8000000000001" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)"></polyline>
+<polyline class="edge" data-from="RM" data-to="INIT" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="150.26549999999997,687.7 150.26549999999997,735.7" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)"></polyline>
+<polyline class="edge" data-from="INIT" data-to="MM" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="150.26549999999997,789.5 150.26549999999997,837.5" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)"></polyline>
+<polyline class="edge" data-from="MM" data-to="EXIT" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="150.26549999999997,891.3 150.26549999999997,939.3" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)"></polyline>
+<g class="node" data-id="K" data-label="内核 exec 加载 ELF
+PC 跳到 _rt0_amd64_linux" data-shape="rectangle">
+  <rect x="50.744500000000016" y="40" width="199.04199999999994" height="53.800000000000004" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></rect>
+  <text x="150.26549999999997" y="66.9" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)"><tspan x="150.26549999999997" dy="-3.9000000000000012">内核 exec 加载 ELF</tspan><tspan x="150.26549999999997" dy="16.900000000000002">PC 跳到 _rt0_amd64_linux</tspan></text>
+</g>
+<g class="node" data-id="RT" data-label="rt0_go（汇编）
+建 g0/m0、TLS、CPU 特征
+argc/argv 入栈" data-shape="rectangle">
+  <rect x="45.92800000000001" y="141.8" width="208.67499999999995" height="70.7" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></rect>
+  <text x="150.26549999999997" y="177.15" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)"><tspan x="150.26549999999997" dy="-12.350000000000001">rt0_go（汇编）</tspan><tspan x="150.26549999999997" dy="16.900000000000002">建 g0/m0、TLS、CPU 特征</tspan><tspan x="150.26549999999997" dy="16.900000000000002">argc/argv 入栈</tspan></text>
+</g>
+<g class="node" data-id="SI" data-label="schedinit（在 m0/g0 上）
+栈·分配器·GC·P·调度器" data-shape="rectangle">
+  <rect x="49.26250000000002" y="260.5" width="202.00599999999994" height="53.800000000000004" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></rect>
+  <text x="150.26549999999997" y="287.4" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)"><tspan x="150.26549999999997" dy="-3.9000000000000012">schedinit（在 m0/g0 上）</tspan><tspan x="150.26549999999997" dy="16.900000000000002">栈·分配器·GC·P·调度器</tspan></text>
+</g>
+<g class="node" data-id="NP" data-label="newproc(main·fn)
+创建 main goroutine 排入队列" data-shape="rectangle">
+  <rect x="40" y="362.3" width="220.53099999999998" height="53.800000000000004" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></rect>
+  <text x="150.26549999999997" y="389.2" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)"><tspan x="150.26549999999997" dy="-3.9000000000000012">newproc(main·fn)</tspan><tspan x="150.26549999999997" dy="16.900000000000002">创建 main goroutine 排入队列</tspan></text>
+</g>
+<g class="node" data-id="MS" data-label="mstart
+m0 进入调度循环" data-shape="rectangle">
+  <rect x="75.568" y="464.1" width="149.39499999999998" height="53.800000000000004" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></rect>
+  <text x="150.26549999999997" y="491" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)"><tspan x="150.26549999999997" dy="-3.9000000000000012">mstart</tspan><tspan x="150.26549999999997" dy="16.900000000000002">m0 进入调度循环</tspan></text>
+</g>
+<g class="node" data-id="SCH" data-label="schedule 取出 main G" data-shape="rectangle">
+  <rect x="65.93499999999999" y="565.9000000000001" width="168.661" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></rect>
+  <text x="150.26549999999997" y="584.3500000000001" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">schedule 取出 main G</text>
+</g>
+<g class="node" data-id="RM" data-label="runtime.main（在 main G 上）" data-shape="rectangle">
+  <rect x="42.223" y="650.8000000000001" width="216.08499999999998" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></rect>
+  <text x="150.26549999999997" y="669.2500000000001" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">runtime.main（在 main G 上）</text>
+</g>
+<g class="node" data-id="INIT" data-label="doInit：runtime 包 init
+按依赖顺序跑所有包 init" data-shape="rectangle">
+  <rect x="53.33800000000002" y="735.7" width="193.85499999999993" height="53.800000000000004" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></rect>
+  <text x="150.26549999999997" y="762.6" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)"><tspan x="150.26549999999997" dy="-3.9000000000000012">doInit：runtime 包 init</tspan><tspan x="150.26549999999997" dy="16.900000000000002">按依赖顺序跑所有包 init</tspan></text>
+</g>
+<g class="node" data-id="MM" data-label="main_main
+你的 main()" data-shape="rectangle">
+  <rect x="96.31599999999999" y="837.5" width="107.899" height="53.800000000000004" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></rect>
+  <text x="150.26549999999997" y="864.4" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)"><tspan x="150.26549999999997" dy="-3.9000000000000012">main_main</tspan><tspan x="150.26549999999997" dy="16.900000000000002">你的 main()</tspan></text>
+</g>
+<g class="node" data-id="EXIT" data-label="exit(0)" data-shape="rectangle">
+  <rect x="111.50649999999999" y="939.3" width="77.518" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></rect>
+  <text x="150.26549999999997" y="957.75" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">exit(0)</text>
+</g>
+</svg></div>
+<h2 id="汇编入口从-_rt0_amd64_linux-到-rt0_go">汇编入口：从 <code>_rt0_amd64_linux</code> 到 <code>rt0_go</code></h2>
+<p>内核 <code>execve</code> 加载可执行文件后，把控制权交给 ELF 入口点。Go 用自己的链接器生成该入口，对 amd64 Linux 是 <code>_rt0_amd64_linux</code>，它几乎只有一条跳转指令，进入跨平台的 <code>rt0_go</code>。</p>
+<p><code>rt0_go</code> 是一段汇编，做的全是”在还没有任何 Go 代码能跑之前必须先有的东西”：</p>
+<ul>
+<li><strong>初始化 g0 和 m0</strong>：m0 是程序启动时就存在的那个 OS 线程，g0 是它的系统栈（带栈保护页）。通过 <code>TLS</code>（Thread-Local Storage）把当前 M 的指针挂到寄存器/段上，之后 <code>getg()</code> 才能工作。</li>
+<li><strong>运行 <code>_cgo_init</code>（如果启用 cgo）、检查 CPU 特征</strong>：用 CPUID 填 <code>runtime.support_*</code> 标志（如 AVX、ERMS），后续内存拷贝等会据此选实现。</li>
+<li><strong>设置参数</strong>：把 <code>argc/argv</code> 从调用约定位置搬到 runtime 约定的寄存器，NOP 栈对齐，然后 <code>CALL runtime·schedinit(SB)</code>。</li>
+</ul>
+<p>这一步<strong>不能写 Go 代码</strong>，因为栈、调度器、堆都还没就绪。它唯一调用的”高层”函数就是 <code>schedinit</code>。</p>
+<h2 id="schedinit把-runtime-世界搭起来"><code>schedinit</code>：把 runtime 世界搭起来</h2>
+<p><code>schedinit</code> 在 m0 的 g0 栈上顺序执行，是整个 runtime 的初始化主函数。关键顺序（Go 1.26.5）：</p>
+<ol>
+<li><strong>锁与调度骨架</strong>：初始化 <code>sched</code> 上的一堆锁（sched、defer、sudog、panic、allglock、allp 等），设置 <code>sched.maxmcount = 10000</code>（M 数量硬上限），标记 <code>worldStopped()</code>。</li>
+<li><strong><code>stackinit()</code></strong>：初始化栈池，后续 G 的栈才有着落。</li>
+<li><strong><code>mallocinit()</code></strong>：建立 mheap、page allocator、arena、size class——内存分配器就绪。</li>
+<li><strong><code>cpuinit</code>、<code>alginit</code>、<code>mcommoninit(m0)</code></strong>：CPU 配置、哈希算法表、把 m0 登记进 allm。</li>
+<li><strong><code>modulesinit</code>、<code>typelinksinit</code>、<code>itabsinit</code></strong>：加载 moduledata 表（链接器生成）、建立类型/itab 索引——interface 和反射的基础。</li>
+<li><strong><code>goargs</code>、<code>goenvs</code>、<code>secure</code>、<code>checkfds</code></strong>：解析命令行参数、环境变量、安全/文件描述符检查。</li>
+<li><strong><code>gcinit()</code></strong>：初始化 GC 状态、写屏障、后台 worker（worker 此刻还不会真的跑，因为没开始调度）。</li>
+<li><strong>设置 <code>GOMAXPROCS</code></strong>：读 <code>GOMAXPROCS</code> 环境变量，否则用 CPU 数，<code>procresize(nprocs)</code> 创建 nprocs 个 P。</li>
+</ol>
+<p>执行完 <code>schedinit</code>，堆、GC、P、类型系统都可用了，但<strong>用户代码一行都还没跑</strong>——此时仍在 m0/g0 上。理解这一点很重要：很多子系统（分配器、map、channel）的”零值即可用”前提，正是 <code>schedinit</code> 在这里铺好的。</p>
+<h2 id="创建-main-goroutine-并进入调度">创建 main goroutine 并进入调度</h2>
+<p><code>rt0_go</code> 接着调用 <code>newproc</code>，把一个函数值（链接器填的 <code>runtime.main</code>）包装成一个新的 G：</p>
+<ul>
+<li><code>newproc1</code> 从 gfree 链表或新建一个 G，分配栈，设置入口 PC 为 <code>runtime.main</code>；</li>
+<li>把这个 G 放进当前 P 的本地运行队列；</li>
+<li>返回汇编，调用 <code>mstart</code>。</li>
+</ul>
+<p><code>mstart</code> 是 m0 的起点。它初始化自己的栈边界、信号处理，然后进入<strong>永不返回</strong>的 <code>schedule()</code> 循环。<code>schedule</code> 从 P 的本地队列、全局队列、netpoll、work stealing 中挑一个可运行 G——第一个被挑到的就是刚才入队的 main G。m0 从 g0 栈切到 main G 的栈，开始执行 <code>runtime.main</code>。</p>
+<p>至此，“一个 M + 一个 g0”引导出了”一个 M 调度多个 G”的 GMP 世界。后续更多 M 是因为阻塞、cgo、sysmon 等需要才被创建的。</p>
+<h2 id="runtimemaininit-与-main"><code>runtime.main</code>：init 与 main</h2>
+<p><code>runtime.main</code> 跑在 main G 上，是用户看到的”程序开始”：</p>
+<ol>
+<li><strong>启动 sysmon</strong>：<code>newm(sysmon, nil, -1)</code> 起一个<strong>不绑 P</strong>的后台 M，负责抢占、抢占式调度、netpoll、force gc（详见 GMP 笔记）。</li>
+<li><strong><code>doInit(runtime_inittasks)</code></strong>：先执行 runtime 包自己的 init。</li>
+<li><strong><code>gcenable()</code></strong>：允许 GC 后台 worker 真正开始工作。</li>
+<li><strong>按依赖顺序跑用户包 init</strong>：链接器把每个包的 init 函数组织成 <code>inittasks</code> 依赖图，<code>runtime.main</code> 遍历所有 moduledata，对每个调 <code>doInit(m.inittasks)</code>。<strong>同一个包内多个 init 按源文件字典序执行；包之间按导入依赖拓扑序</strong>。<code>sync.Once</code> 式的去重由依赖图本身保证。</li>
+<li><strong><code>main_init_done</code> 关闭</strong>：标志 init 阶段结束。</li>
+<li><strong><code>fn := main_main; fn()</code></strong>：<code>main_main</code> 是链接器生成的跳板，直接调用用户的 <code>main.main</code>。</li>
+<li>main 返回后做 exit hook、race 收尾，最后 <code>exit(0)</code>。若有其他 goroutine 还活着，也随进程一起结束——<strong><code>main</code> 返回不会等其他 goroutine</strong>。</li>
+</ol>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#6A737D">// 简化自 runtime/proc.go</span></span>
+<span class="line"><span style="color:#F97583">func</span><span style="color:#E1E4E8"> runtime.</span><span style="color:#B392F0">main</span><span style="color:#E1E4E8">() {</span></span>
+<span class="line"><span style="color:#E1E4E8">    mp </span><span style="color:#F97583">:=</span><span style="color:#B392F0"> getg</span><span style="color:#E1E4E8">().m</span></span>
+<span class="line"><span style="color:#F97583">    if</span><span style="color:#E1E4E8"> haveSysmon {</span></span>
+<span class="line"><span style="color:#B392F0">        systemstack</span><span style="color:#E1E4E8">(</span><span style="color:#F97583">func</span><span style="color:#E1E4E8">() { </span><span style="color:#B392F0">newm</span><span style="color:#E1E4E8">(sysmon, </span><span style="color:#79B8FF">nil</span><span style="color:#E1E4E8">, </span><span style="color:#F97583">-</span><span style="color:#79B8FF">1</span><span style="color:#E1E4E8">) })</span></span>
+<span class="line"><span style="color:#E1E4E8">    }</span></span>
+<span class="line"><span style="color:#B392F0">    doInit</span><span style="color:#E1E4E8">(runtime_inittasks) </span><span style="color:#6A737D">// runtime 包 init</span></span>
+<span class="line"><span style="color:#B392F0">    gcenable</span><span style="color:#E1E4E8">()</span></span>
+<span class="line"><span style="color:#F97583">    for</span><span style="color:#E1E4E8"> _, md </span><span style="color:#F97583">:=</span><span style="color:#F97583"> range</span><span style="color:#E1E4E8"> moduledata {</span></span>
+<span class="line"><span style="color:#B392F0">        doInit</span><span style="color:#E1E4E8">(md.inittasks) </span><span style="color:#6A737D">// 各用户包 init，按依赖顺序</span></span>
+<span class="line"><span style="color:#E1E4E8">    }</span></span>
+<span class="line"><span style="color:#B392F0">    close</span><span style="color:#E1E4E8">(main_init_done)</span></span>
+<span class="line"><span style="color:#E1E4E8">    fn </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> main_main </span><span style="color:#6A737D">// == 你的 main()</span></span>
+<span class="line"><span style="color:#B392F0">    fn</span><span style="color:#E1E4E8">()</span></span>
+<span class="line"><span style="color:#B392F0">    runExitHooks</span><span style="color:#E1E4E8">(</span><span style="color:#79B8FF">0</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"><span style="color:#B392F0">    exit</span><span style="color:#E1E4E8">(</span><span style="color:#79B8FF">0</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<h2 id="abi栈与调用约定为什么入口是汇编">ABI、栈与调用约定：为什么入口是汇编</h2>
+<p>启动流程之所以必须有一层汇编，是因为 Go 的调用约定和平台 ABI 不一样：</p>
+<ul>
+<li><strong>平台 ABI（ABI0）</strong>：参数主要走栈，遵循 C 调用约定。内核把 <code>argc/argv</code> 按这个约定交给入口。</li>
+<li><strong>Go 内部 ABI（ABIInternal）</strong>：Go 1.17 起寄存器传参（amd64 用 AX/BX/CX… 一组整数寄存器、X0… 浮点寄存器），栈只放溢出参数。<code>funcval</code>（闭包/方法值）通过上下文寄存器传环境指针。</li>
+<li><code>rt0_go</code> 负责把 ABI0 的状态搬到 ABIInternal 要求的位置，再 CALL 进 Go 函数。</li>
+<li>栈上还布有 <code>FUNCDATA</code>/<code>PCDATA</code> 和栈图（stack map），让 GC 能在调用点准确找到指针；这些表由编译器生成，汇编手写的入口要自己遵守。</li>
+</ul>
+<p>理解这层边界，后面看 <code>//go:nosplit</code>、<code>systemstack</code>、<code>mcall</code>、<code>getg().m.curg</code> 就有了落点：它们都是在”Go 调度世界”和”裸 OS 线程/g0 世界”之间切换的工具。</p>
+<h2 id="边界与误区">边界与误区</h2>
+<ul>
+<li><strong>main 不是”主线程”</strong>：在 Go 里它就是一个普通 goroutine，跑在某个 M 上。<code>m0</code> 是引导线程，但 runtime.main 之后它和其他 M 没有特权差异（除了初始栈、信号等）。</li>
+<li><strong>init 顺序是确定的</strong>：依赖图保证被依赖包先初始化；但同包多文件按文件名字典序，<strong>不要让 init 之间依赖隐式顺序</strong>。</li>
+<li><strong><code>init</code> 里可以起 goroutine，但它可能在整个 init 完成后才真正跑</strong>：不要假设 init 期间启动的 G 能在 <code>main</code> 之前完成。</li>
+<li><strong><code>schedinit</code> 里没有 G</strong>：它跑在 g0 上，不能调用会阻塞/调度的函数，否则没有 P 和调度循环接住它。</li>
+<li><strong>cgo 程序略有不同</strong>：如果用了 cgo，Go runtime 可能不是从 C 的 <code>main</code> 直接启动，而是跑在线程上通过交叉调用进入；但核心 <code>schedinit</code>/<code>runtime.main</code> 路径一致。</li>
+<li><strong>返回即退出</strong>：<code>main.main</code> 返回会直接 <code>exit(0)</code>，不会等待其他 goroutine。需要等后台工作请用 <code>sync.WaitGroup</code>、channel 或 <code>signal.NotifyContext</code> 显式同步。</li>
+</ul>
+<h2 id="参考资料">参考资料</h2>
+<ul>
+<li><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/proc.go" rel="noopener noreferrer" target="_blank"><code>runtime/proc.go</code>（schedinit / runtime.main / mstart / schedule）</a></li>
+<li><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/asm_amd64.s" rel="noopener noreferrer" target="_blank"><code>runtime/asm_amd64.s</code>（rt0_go）</a></li>
+<li>Go 官方博客 <a href="https://go.dev/ref/mem" rel="noopener noreferrer" target="_blank">The Go Memory Model</a> 与 <a href="https://go.dev/doc/asm" rel="noopener noreferrer" target="_blank">Go Assembler</a></li>
+<li>配套阅读：<a href="/gmp/">GMP（Go 1.26.5 源码分析）</a>、<a href="/stack/">栈空间管理</a>、<a href="/type-metadata/">Go 类型元数据与对象布局（Go 1.26.5）</a></li>
+</ul></main><aside class="toc"><p class="toc-title">本页目录</p><ul><li class="toc-d2"><a href="#汇编入口从-_rt0_amd64_linux-到-rt0_go">汇编入口：从 _rt0_amd64_linux 到 rt0_go</a></li><li class="toc-d2"><a href="#schedinit把-runtime-世界搭起来">schedinit：把 runtime 世界搭起来</a></li><li class="toc-d2"><a href="#创建-main-goroutine-并进入调度">创建 main goroutine 并进入调度</a></li><li class="toc-d2"><a href="#runtimemaininit-与-main">runtime.main：init 与 main</a></li><li class="toc-d2"><a href="#abi栈与调用约定为什么入口是汇编">ABI、栈与调用约定：为什么入口是汇编</a></li><li class="toc-d2"><a href="#边界与误区">边界与误区</a></li><li class="toc-d2"><a href="#参考资料">参考资料</a></li></ul></aside></div><div class="lightbox" id="lightbox" aria-hidden="true"><img alt=""></div><script type="module">var e=document.documentElement,t=document.getElementById(`themeToggle`),n={auto:`🖥️`,light:`☀️`,dark:`🌙`};function r(){var e=localStorage.getItem(`theme`);return e===`light`||e===`dark`?e:`auto`}function i(){var i=r();i===`auto`?e.removeAttribute(`data-theme`):e.setAttribute(`data-theme`,i),t.textContent=n[i]}i(),t.addEventListener(`click`,()=>{var e=[`auto`,`light`,`dark`],t=e[(e.indexOf(r())+1)%3];t===`auto`?localStorage.removeItem(`theme`):localStorage.setItem(`theme`,t),i()}),window.matchMedia(`(prefers-color-scheme: dark)`).addEventListener(`change`,()=>{r()===`auto`&&i()});var a=document.getElementById(`lightbox`),o=a.querySelector(`img`);document.querySelectorAll(`.prose img`).forEach(e=>{e.style.cursor=`zoom-in`,e.addEventListener(`click`,()=>{o.src=e.currentSrc||e.src,o.alt=e.alt,a.classList.add(`open`),a.setAttribute(`aria-hidden`,`false`)})}),a.addEventListener(`click`,()=>{a.classList.remove(`open`),a.setAttribute(`aria-hidden`,`true`)}),document.addEventListener(`keydown`,e=>{e.key===`Escape`&&a.click()});</script></body></html>

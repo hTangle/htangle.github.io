@@ -1,0 +1,200 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Interface 与动态调用：Go 1.26.5 源码分析</title><script>
+      (function () {
+        var s = localStorage.getItem('theme');
+        if (s === 'light' || s === 'dark') {
+          document.documentElement.setAttribute('data-theme', s);
+        }
+      })();
+    </script><link rel="stylesheet" href="/_astro/Base.h73xs6F0.css"></head><body><header class="topbar"><a href="/" class="brand">HLDay</a><nav><a href="/">专题</a><a href="/posts/">博客</a><a href="https://github.com/hTangle" class="nav-github" aria-label="GitHub">GitHub</a></nav><button class="theme-toggle" id="themeToggle" type="button" title="切换主题（自动/浅色/深色）" aria-label="切换主题">🖥️</button></header><div class="layout"><aside class="booknav"><ul class="nav-tree"><li><p class="nav-group">Go</p><ul><li><p class="nav-subgroup">运行时基础</p><ul><li class><a href="/source-map/">源码环境与目录地图</a></li><li class><a href="/bootstrap/">程序启动流程</a></li></ul></li><li><p class="nav-subgroup">并发编程</p><ul><li class><a href="/gmp/">GMP 调度器</a></li><li class><a href="/netpoll/">网络轮询器</a></li><li class><a href="/timer/">定时器</a></li><li class><a href="/sync-lock/">同步和锁</a></li><li class><a href="/channel/">Channel</a></li><li class><a href="/context/">Context</a></li><li class><a href="/defer-panic/">defer/panic/recover</a></li></ul></li><li><p class="nav-subgroup">内存管理</p><ul><li class><a href="/memory-alloc/">内存分配器</a></li><li class><a href="/gc/">垃圾收集器</a></li><li class><a href="/stack/">栈空间管理</a></li></ul></li><li><p class="nav-subgroup">数据结构</p><ul><li class><a href="/type-metadata/">类型元数据与对象布局</a></li><li class="active"><a href="/iface/">Interface 与动态调用</a></li><li class><a href="/array/">数组</a></li><li class><a href="/slice/">切片</a></li><li class><a href="/swiss-map/">哈希表 (Swiss Table)</a></li><li class><a href="/string/">字符串</a></li></ul></li></ul></li><li><p class="nav-group">Agent 开发</p><ul><li><p class="nav-subgroup">核心协议与机制</p><ul><li class><a href="/mcp/">MCP</a></li><li class><a href="/skill/">Skill</a></li><li class><a href="/tool-call/">Tool Call</a></li></ul></li></ul></li></ul></aside><main class="prose"><h1>Interface 与动态调用：Go 1.26.5 源码分析</h1><div class="markdown-alert markdown-alert-tip" dir="auto">
+<p class="markdown-alert-title" dir="auto"><svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8 1.5c-2.363 0-4 1.69-4 3.75 0 .984.424 1.625.984 2.304l.214.253c.223.264.47.556.673.848.284.411.537.896.621 1.49a.75.75 0 0 1-1.484.211c-.04-.282-.163-.547-.37-.847a8.456 8.456 0 0 0-.542-.68c-.084-.1-.173-.205-.268-.32C3.201 7.75 2.5 6.766 2.5 5.25 2.5 2.31 4.863 0 8 0s5.5 2.31 5.5 5.25c0 1.516-.701 2.5-1.328 3.259-.095.115-.184.22-.268.319-.207.245-.383.453-.541.681-.208.3-.33.565-.37.847a.751.751 0 0 1-1.485-.212c.084-.593.337-1.078.621-1.489.203-.292.45-.584.673-.848.075-.088.147-.173.213-.253.561-.679.985-1.32.985-2.304 0-2.06-1.637-3.75-4-3.75ZM5.75 12h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1 0-1.5ZM6 15.25a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1-.75-.75Z"></path></svg>TIP</p>
+<p> 先抓住主干
+Go 的接口在运行时只有两种形态：</p>
+<ul>
+<li><strong><code>eface</code></strong>（空接口 <code>any</code>）：两个字——<code>(_type, data)</code>，只记录”装的是什么类型 + 数据指针”；</li>
+<li><strong><code>iface</code></strong>（带方法的接口）：两个字——<code>(itab, data)</code>，<code>itab</code> 里缓存了”接口方法 → 具体类型方法”的跳转表。</li>
+</ul>
+<p>接口调用 <code>r.Read()</code> 不是反射查找，而是一次数组下标：<code>itab.Fun[0]</code>。类型断言和 type switch 靠 <code>itab</code> 缓存（Go 1.26 还加了调用点本地缓存加速）。理解这三样——<code>eface</code>/<code>iface</code>/<code>itab</code>——就理解了 Go 的所有动态分发。</p>
+</div>
+<p><strong>版本与源码基线</strong></p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>主题</th><th>位置</th></tr></thead><tbody><tr><td><code>iface</code>/<code>eface</code>/<code>itab</code> 与缓存</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/iface.go" rel="noopener noreferrer" target="_blank"><code>runtime/iface.go</code></a></td></tr><tr><td>接口类型描述符</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/internal/abi/type.go" rel="noopener noreferrer" target="_blank"><code>internal/abi/type.go</code> 的 <code>InterfaceType</code>/<code>Imethod</code></a></td></tr><tr><td>类型描述符基础</td><td>见 <a href="/type-metadata/">Go 类型元数据与对象布局（Go 1.26.5）</a></td></tr><tr><td>编译器生成的断言</td><td><code>cmd/compile/internal/walk/convert.go</code></td></tr></tbody></table>
+<div class="bm-diagram"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 590.9614999999999 422.3" width="590.9614999999999" height="422.3" style="--bg:var(--bm-bg);--fg:var(--bm-fg);--line:var(--bm-border);--accent:var(--bm-accent);--muted:var(--bm-muted);--surface:var(--bm-surface);--border:var(--bm-border)">
+<style>
+  text { font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif; }
+  svg {
+    /* Derived from --bg and --fg (overridable via --line, --accent, etc.) */
+    --_text:          var(--fg);
+    --_text-sec:      var(--muted, color-mix(in srgb, var(--fg) 60%, var(--bg)));
+    --_text-muted:    var(--muted, color-mix(in srgb, var(--fg) 40%, var(--bg)));
+    --_text-faint:    color-mix(in srgb, var(--fg) 25%, var(--bg));
+    --_line:          var(--line, color-mix(in srgb, var(--fg) 50%, var(--bg)));
+    --_arrow:         var(--accent, color-mix(in srgb, var(--fg) 85%, var(--bg)));
+    --_node-fill:     var(--surface, color-mix(in srgb, var(--fg) 3%, var(--bg)));
+    --_node-stroke:   var(--border, color-mix(in srgb, var(--fg) 20%, var(--bg)));
+    --_group-fill:    var(--bg);
+    --_group-hdr:     color-mix(in srgb, var(--fg) 5%, var(--bg));
+    --_inner-stroke:  color-mix(in srgb, var(--fg) 12%, var(--bg));
+    --_key-badge:     color-mix(in srgb, var(--fg) 10%, var(--bg));
+  }
+</style>
+<defs>
+  <marker id="arrowhead" markerWidth="8" markerHeight="5" refX="7" refY="2.5" orient="auto">
+    <polygon points="0 0, 8 2.5, 0 5" fill="var(--_arrow)" stroke="var(--_arrow)" stroke-width="0.75" stroke-linejoin="round"></polygon>
+  </marker>
+  <marker id="arrowhead-start" markerWidth="8" markerHeight="5" refX="1" refY="2.5" orient="auto-start-reverse">
+    <polygon points="8 0, 0 2.5, 8 5" fill="var(--_arrow)" stroke="var(--_arrow)" stroke-width="0.75" stroke-linejoin="round"></polygon>
+  </marker>
+</defs>
+<polyline class="edge" data-from="IFACE" data-to="ITAB" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="399.96324999999996,93.80000000000001 399.96324999999996,141.8" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)"></polyline>
+<polyline class="edge" data-from="ITAB" data-to="CACHE" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="372.1000833333333,195.60000000000002 372.1000833333333,231.60000000000002 308.54999999999995,231.60000000000002 308.54999999999995,243.60000000000002" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)"></polyline>
+<polyline class="edge" data-from="EFACE" data-to="TYPE" data-style="dotted" data-arrow-start="false" data-arrow-end="true" data-label="动态类型" points="126.5535,195.60000000000002 126.55349999999999,333.40000000000003 275.6678333333333,333.40000000000003 275.6678333333333,345.40000000000003" fill="none" stroke="var(--_line)" stroke-width="1" stroke-dasharray="4 4" marker-end="url(#arrowhead)"></polyline>
+<polyline class="edge" data-from="ITAB" data-to="TYPE" data-style="dotted" data-arrow-start="false" data-arrow-end="true" data-label="具体类型" points="427.82641666666666,195.60000000000002 427.82641666666666,231.60000000000002 491.37649999999996,231.60000000000002 491.37649999999996,333.40000000000003 342.26216666666664,333.40000000000003 342.26216666666664,345.40000000000003" fill="none" stroke="var(--_line)" stroke-width="1" stroke-dasharray="4 4" marker-end="url(#arrowhead)"></polyline>
+<g class="edge-label" data-from="EFACE" data-to="TYPE" data-label="动态类型">
+  <rect x="93.55349999999999" y="296.1" width="65.17" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1"></rect>
+  <text x="126.1385" y="311.25" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">动态类型</text>
+</g>
+<g class="edge-label" data-from="ITAB" data-to="TYPE" data-label="具体类型">
+  <rect x="458.37649999999996" y="296.1" width="65.17" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1"></rect>
+  <text x="490.96149999999994" y="311.25" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">具体类型</text>
+</g>
+<g class="node" data-id="EFACE" data-label="eface（空接口 any）
+_type ＋ data" data-shape="rectangle">
+  <rect x="40" y="141.8" width="173.107" height="53.800000000000004" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></rect>
+  <text x="126.5535" y="168.70000000000002" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)"><tspan x="126.5535" dy="-3.9000000000000012">eface（空接口 any）</tspan><tspan x="126.5535" dy="16.900000000000002">_type ＋ data</tspan></text>
+</g>
+<g class="node" data-id="IFACE" data-label="iface（带方法接口）
+tab ＋ data" data-shape="rectangle">
+  <rect x="313.03925" y="40" width="173.84799999999998" height="53.800000000000004" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></rect>
+  <text x="399.96324999999996" y="66.9" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)"><tspan x="399.96324999999996" dy="-3.9000000000000012">iface（带方法接口）</tspan><tspan x="399.96324999999996" dy="16.900000000000002">tab ＋ data</tspan></text>
+</g>
+<g class="node" data-id="ITAB" data-label="&#x22;itab
+inter · _type · fun[0..n" data-shape="rectangle">
+  <rect x="316.37375" y="141.8" width="167.179" height="53.800000000000004" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></rect>
+  <text x="399.96324999999996" y="168.70000000000002" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)"><tspan x="399.96324999999996" dy="-3.9000000000000012">"itab</tspan><tspan x="399.96324999999996" dy="16.900000000000002">inter · _type · fun[0..n</tspan></text>
+</g>
+<g class="node" data-id="CACHE" data-label="itab 缓存
+全局 itabTable ＋ 调用点本地缓存" data-shape="rectangle">
+  <rect x="182.7235" y="243.60000000000002" width="251.653" height="53.800000000000004" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></rect>
+  <text x="308.55" y="270.5" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)"><tspan x="308.55" dy="-3.9000000000000012">itab 缓存</tspan><tspan x="308.55" dy="16.900000000000002">全局 itabTable ＋ 调用点本地缓存</tspan></text>
+</g>
+<g class="node" data-id="TYPE" data-label="abi.Type 具体类型描述符" data-shape="rectangle">
+  <rect x="209.07349999999997" y="345.40000000000003" width="199.783" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></rect>
+  <text x="308.965" y="363.85" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">abi.Type 具体类型描述符</text>
+</g>
+</svg></div>
+<h2 id="两个字的接口eface-与-iface">两个字的接口：<code>eface</code> 与 <code>iface</code></h2>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#6A737D">// runtime/runtime2.go</span></span>
+<span class="line"><span style="color:#F97583">type</span><span style="color:#B392F0"> eface</span><span style="color:#F97583"> struct</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">    _type </span><span style="color:#F97583">*</span><span style="color:#B392F0">_type</span><span style="color:#6A737D">         // 动态类型</span></span>
+<span class="line"><span style="color:#E1E4E8">    data  </span><span style="color:#B392F0">unsafe</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">Pointer</span><span style="color:#6A737D"> // 指向实际值</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span>
+<span class="line"><span style="color:#F97583">type</span><span style="color:#B392F0"> iface</span><span style="color:#F97583"> struct</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">    tab  </span><span style="color:#F97583">*</span><span style="color:#B392F0">itab</span><span style="color:#6A737D">           // 接口方法表 + 动态类型</span></span>
+<span class="line"><span style="color:#E1E4E8">    data </span><span style="color:#B392F0">unsafe</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">Pointer</span><span style="color:#6A737D">  // 指向实际值</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<ul>
+<li><strong>空接口 <code>any</code></strong> 用 <code>eface</code>，只装类型和值，没有方法可调（要调方法得先类型断言成具体类型或非空接口）。</li>
+<li><strong>非空接口</strong>（如 <code>io.Reader</code>）用 <code>iface</code>，<code>tab</code> 指向一个 <code>itab</code>，里面既有动态类型也有方法跳转表。</li>
+<li><strong><code>data</code> 永远是指针</strong>。若值本身是指针/chan/map/func（<code>TFlagDirectIface</code>），<code>data</code> 直接装这个字；否则装值的地址（值通常在堆上，装箱 <code>i=T(x)</code> 可能触发逃逸分配）。</li>
+<li><strong>nil 接口</strong>：两个字都为 0。一个接口是否为 nil，只看这两个字，<strong>不看 data 指向的内容</strong>。</li>
+</ul>
+<h2 id="itab接口方法表"><code>itab</code>：接口方法表</h2>
+<p><code>itab</code> 是接口和具体类型配对的产物，是动态调用的核心：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">type</span><span style="color:#B392F0"> itab</span><span style="color:#F97583"> struct</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">    inter </span><span style="color:#F97583">*</span><span style="color:#B392F0">interfacetype</span><span style="color:#6A737D">  // 接口类型</span></span>
+<span class="line"><span style="color:#E1E4E8">    _type </span><span style="color:#F97583">*</span><span style="color:#B392F0">_type</span><span style="color:#6A737D">          // 具体类型</span></span>
+<span class="line"><span style="color:#E1E4E8">    hash  </span><span style="color:#F97583">uint32</span><span style="color:#6A737D">          // 仅 type switch 用（注意：不是 itabTable 的哈希）</span></span>
+<span class="line"><span style="color:#E1E4E8">    _     [</span><span style="color:#79B8FF">4</span><span style="color:#E1E4E8">]</span><span style="color:#F97583">byte</span></span>
+<span class="line"><span style="color:#E1E4E8">    fun   [</span><span style="color:#79B8FF">1</span><span style="color:#E1E4E8">]</span><span style="color:#F97583">uintptr</span><span style="color:#6A737D">      // 变长：接口方法数 N，实际分配 N 个字</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<ul>
+<li><code>fun[0]</code> 是接口第一个方法的实现地址，<code>fun[1]</code> 是第二个……接口方法调用 <code>r.Read()</code> 编译成 <code>(*itab).Fun[0]</code>，<strong>一次间接跳转，和 C++ 虚函数同价</strong>。</li>
+<li><code>fun</code> 是变长数组：分配时额外分配 <code>len(inter.Methods)-1</code> 个字，避免二级指针。</li>
+<li><strong><code>fun[0] == 0</code> 是”该类型未实现此接口”的哨兵</strong>。构建 <code>itab</code> 时若某个接口方法找不到，<code>fun[0]</code> 保持 0，这个 itab 还会被缓存起来作为<strong>负缓存</strong>，下次同样的断言直接失败。</li>
+</ul>
+<p>构建方法表在 <code>itabInit</code> 里：接口方法和具体类型方法都<strong>按名排序</strong>，双指针归并匹配，O(ni+nt) 而非 O(ni×nt)。匹配要求方法名相同、函数类型完全一致、未导出方法还要包路径一致。匹配上的不是直接放具体方法地址，而是放 <code>Ifn</code>（接口调用入口），这样需要时编译器能插入接收者转换的适配代码。</p>
+<h2 id="itab-缓存全局表--调用点本地缓存">itab 缓存：全局表 + 调用点本地缓存</h2>
+<p><code>itab</code> 一旦构建就<strong>全局缓存、永不释放、只读复用</strong>。key 是 <code>(inter, _type)</code> 对。</p>
+<p><strong>1. 全局 <code>itabTable</code>（规范存储）</strong></p>
+<ul>
+<li>进程级单例，开放寻址 + 二次探测（<code>h(i) = h0 + i*(i+1)/2 mod 2^k</code>），初始 512 槽，75% 负载时翻倍。</li>
+<li>哈希是 <code>inter.Type.Hash ^ typ.Hash</code>。</li>
+<li><strong>读无锁</strong>（<code>atomic.Loadp</code>）；写加 <code>itabLock</code>，双检后用 <code>atomic.StorepNoWB</code> 发布。</li>
+<li>用 <code>persistentalloc</code> 分配 itab，不走 GC（程序生命周期内常驻）。</li>
+</ul>
+<p><strong>2. 调用点本地缓存（Go 1.26 新增的快路径）</strong></p>
+<p><code>getitab</code> 仍是兜底，但高频的类型断言和 type switch 由编译器在每个调用点挂一个 <code>abi.TypeAssertCache</code>/<code>abi.InterfaceSwitchCache</code>：</p>
+<ul>
+<li>它直接把具体 <code>*_type</code> 映射到结果（case 编号 + itab），命中就跳过全局表查找；</li>
+<li>缓存以 CAS 安装，并发安全；</li>
+<li>大约每 1024 次调用才重建一次（随着表变大频率更低），摊销成本接近一次指针比较；</li>
+<li>架构不支持时回退到 <code>getitab</code>。</li>
+</ul>
+<p>这是典型的”稳定配对值得缓存”的优化：接口和具体类型的组合在一个程序里通常就那么几个，却被反复断言。</p>
+<h2 id="装箱断言与-type-switch">装箱、断言与 type switch</h2>
+<p><strong>装箱（<code>var i any = x</code>）</strong>：编译器生成 <code>convT*</code>，把值拷到堆上（若需要），构造 <code>eface{typeOf(x), &#x26;x}</code>。<code>x</code> 是指针类类型则不分配。</p>
+<p><strong>类型断言 <code>v, ok := i.(T)</code></strong>：</p>
+<ul>
+<li><code>i</code> 是空接口、<code>T</code> 是非接口具体类型：走 <code>assertE2T2</code>（comma-ok）或 <code>assertE2T</code>（panic 版），直接比 <code>i._type == typeOf(T)</code>，相等就从 <code>data</code> 拷回值。</li>
+<li><code>i</code> 是非空接口、<code>T</code> 是接口：走 <code>assertI2I</code>，调 <code>getitab(T, i.tab._type, canfail)</code> 拿到 itab。</li>
+<li>失败时 comma-ok 返回零值 + false；非 comma-ok 调 <code>panicdottypeE/I</code> 抛 <code>TypeAssertionError</code>。</li>
+</ul>
+<p><strong><code>getitab(inter, typ, canfail)</code> 的路径</strong>：</p>
+<ol>
+<li>空接口方法集会 throw（内部误用，不可恢复）；</li>
+<li>具体类型没有方法（<code>TFlagUncommon</code> 未置）直接失败；</li>
+<li>无锁查全局表，命中且 <code>fun[0]!=0</code> 返回；</li>
+<li>未命中加锁双检，再未命中就 <code>persistentalloc</code> + <code>itabInit</code> 构建，<code>itabAdd</code> 发布；</li>
+<li><code>fun[0]==0</code> 表示未实现：<code>canfail</code> 返回 nil，否则 panic（负 itab 不记缺哪个方法，panic 时重跑一次 <code>itabInit</code> 只为取回缺失方法名）。</li>
+</ol>
+<p><strong>type switch</strong>：走 <code>interfaceSwitch</code>，优先查调用点缓存，把具体类型映射到 case 编号，比逐个 <code>getitab</code> 快得多。</p>
+<h2 id="nil-interface-与-typed-nil">nil interface 与 typed nil</h2>
+<p>这是最常见的坑：<strong>接口值是否为 nil，取决于两个字是否都为零，不取决于 data 指向的值是否为 nil。</strong></p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">var</span><span style="color:#E1E4E8"> p </span><span style="color:#F97583">*</span><span style="color:#B392F0">os</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">File</span><span style="color:#F97583"> =</span><span style="color:#79B8FF"> nil</span></span>
+<span class="line"><span style="color:#F97583">var</span><span style="color:#E1E4E8"> r </span><span style="color:#B392F0">io</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">Reader</span><span style="color:#F97583"> =</span><span style="color:#E1E4E8"> p   </span><span style="color:#6A737D">// r != nil！</span></span>
+<span class="line"><span style="color:#6A737D">// r.tab != nil（类型是 *os.File），r.data == nil</span></span>
+<span class="line"><span style="color:#6A737D">// 所以 r != nil，调用 r.Read() 会用 nil 接收者进去</span></span></code></pre>
+<ul>
+<li>把一个有类型的 nil 指针赋给接口，接口非 nil，因为 <code>_type</code>/<code>itab</code> 已填。</li>
+<li>函数返回 <code>error</code> 时，返回具体类型的 nil 指针会导致接口非 nil——经典 bug，应直接 <code>return nil</code>。</li>
+<li>真正的 nil 接口是 <code>var r io.Reader</code>（从未赋值），<code>tab==nil &#x26;&#x26; data==nil</code>。</li>
+</ul>
+<h2 id="边界与误区">边界与误区</h2>
+<ul>
+<li><strong>空接口不做方法查找</strong>：<code>any</code> 没有方法表，所有动态行为都要先断言。</li>
+<li><strong>接口值比较可能 panic</strong>：动态类型如果不可比较（slice/map/func），比接口会 panic，即使两个接口的 <code>_type</code> 相同。</li>
+<li><strong>装箱可能分配</strong>：非指针值赋给接口通常逃逸到堆；值本身就是一字指针类（<code>*T</code>、chan、map、func、<code>uintptr</code> 大小的类型）则不分配。</li>
+<li><strong>方法集是按值/指针接收者区分的</strong>：<code>*T</code> 的方法集包含 <code>T</code> 的，反之不然；itab 构建时按具体类型的方法集匹配，所以 <code>var r io.Reader = T{}</code> 可能失败而 <code>&#x26;T{}</code> 成功。</li>
+<li><strong>itab 是负缓存</strong>：类型不实现接口也会缓存一个 <code>fun[0]==0</code> 的 itab，反复断言不会重复构建。</li>
+<li><strong>不要用反射替代类型断言</strong>：类型断言有缓存和编译优化，反射是慢路径。</li>
+</ul>
+<h2 id="参考资料">参考资料</h2>
+<ul>
+<li><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/iface.go" rel="noopener noreferrer" target="_blank"><code>runtime/iface.go</code></a></li>
+<li>Russ Cox <a href="https://research.swtch.com/interfaces" rel="noopener noreferrer" target="_blank">Go Data Structures: Interfaces</a></li>
+<li>配套阅读：<a href="/type-metadata/">Go 类型元数据与对象布局（Go 1.26.5）</a>、<a href="/channel/">Channel（Go 1.26.5 源码分析）</a></li>
+</ul></main><aside class="toc"><p class="toc-title">本页目录</p><ul><li class="toc-d2"><a href="#两个字的接口eface-与-iface">两个字的接口：eface 与 iface</a></li><li class="toc-d2"><a href="#itab接口方法表">itab：接口方法表</a></li><li class="toc-d2"><a href="#itab-缓存全局表--调用点本地缓存">itab 缓存：全局表 + 调用点本地缓存</a></li><li class="toc-d2"><a href="#装箱断言与-type-switch">装箱、断言与 type switch</a></li><li class="toc-d2"><a href="#nil-interface-与-typed-nil">nil interface 与 typed nil</a></li><li class="toc-d2"><a href="#边界与误区">边界与误区</a></li><li class="toc-d2"><a href="#参考资料">参考资料</a></li></ul></aside></div><div class="lightbox" id="lightbox" aria-hidden="true"><img alt=""></div><script type="module">var e=document.documentElement,t=document.getElementById(`themeToggle`),n={auto:`🖥️`,light:`☀️`,dark:`🌙`};function r(){var e=localStorage.getItem(`theme`);return e===`light`||e===`dark`?e:`auto`}function i(){var i=r();i===`auto`?e.removeAttribute(`data-theme`):e.setAttribute(`data-theme`,i),t.textContent=n[i]}i(),t.addEventListener(`click`,()=>{var e=[`auto`,`light`,`dark`],t=e[(e.indexOf(r())+1)%3];t===`auto`?localStorage.removeItem(`theme`):localStorage.setItem(`theme`,t),i()}),window.matchMedia(`(prefers-color-scheme: dark)`).addEventListener(`change`,()=>{r()===`auto`&&i()});var a=document.getElementById(`lightbox`),o=a.querySelector(`img`);document.querySelectorAll(`.prose img`).forEach(e=>{e.style.cursor=`zoom-in`,e.addEventListener(`click`,()=>{o.src=e.currentSrc||e.src,o.alt=e.alt,a.classList.add(`open`),a.setAttribute(`aria-hidden`,`false`)})}),a.addEventListener(`click`,()=>{a.classList.remove(`open`),a.setAttribute(`aria-hidden`,`true`)}),document.addEventListener(`keydown`,e=>{e.key===`Escape`&&a.click()});</script></body></html>

@@ -1,0 +1,206 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Go 类型元数据与对象布局：Go 1.26.5 源码分析</title><script>
+      (function () {
+        var s = localStorage.getItem('theme');
+        if (s === 'light' || s === 'dark') {
+          document.documentElement.setAttribute('data-theme', s);
+        }
+      })();
+    </script><link rel="stylesheet" href="/_astro/Base.h73xs6F0.css"></head><body><header class="topbar"><a href="/" class="brand">HLDay</a><nav><a href="/">专题</a><a href="/posts/">博客</a><a href="https://github.com/hTangle" class="nav-github" aria-label="GitHub">GitHub</a></nav><button class="theme-toggle" id="themeToggle" type="button" title="切换主题（自动/浅色/深色）" aria-label="切换主题">🖥️</button></header><div class="layout"><aside class="booknav"><ul class="nav-tree"><li><p class="nav-group">Go</p><ul><li><p class="nav-subgroup">运行时基础</p><ul><li class><a href="/source-map/">源码环境与目录地图</a></li><li class><a href="/bootstrap/">程序启动流程</a></li></ul></li><li><p class="nav-subgroup">并发编程</p><ul><li class><a href="/gmp/">GMP 调度器</a></li><li class><a href="/netpoll/">网络轮询器</a></li><li class><a href="/timer/">定时器</a></li><li class><a href="/sync-lock/">同步和锁</a></li><li class><a href="/channel/">Channel</a></li><li class><a href="/context/">Context</a></li><li class><a href="/defer-panic/">defer/panic/recover</a></li></ul></li><li><p class="nav-subgroup">内存管理</p><ul><li class><a href="/memory-alloc/">内存分配器</a></li><li class><a href="/gc/">垃圾收集器</a></li><li class><a href="/stack/">栈空间管理</a></li></ul></li><li><p class="nav-subgroup">数据结构</p><ul><li class="active"><a href="/type-metadata/">类型元数据与对象布局</a></li><li class><a href="/iface/">Interface 与动态调用</a></li><li class><a href="/array/">数组</a></li><li class><a href="/slice/">切片</a></li><li class><a href="/swiss-map/">哈希表 (Swiss Table)</a></li><li class><a href="/string/">字符串</a></li></ul></li></ul></li><li><p class="nav-group">Agent 开发</p><ul><li><p class="nav-subgroup">核心协议与机制</p><ul><li class><a href="/mcp/">MCP</a></li><li class><a href="/skill/">Skill</a></li><li class><a href="/tool-call/">Tool Call</a></li></ul></li></ul></li></ul></aside><main class="prose"><h1>Go 类型元数据与对象布局：Go 1.26.5 源码分析</h1><div class="markdown-alert markdown-alert-tip" dir="auto">
+<p class="markdown-alert-title" dir="auto"><svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8 1.5c-2.363 0-4 1.69-4 3.75 0 .984.424 1.625.984 2.304l.214.253c.223.264.47.556.673.848.284.411.537.896.621 1.49a.75.75 0 0 1-1.484.211c-.04-.282-.163-.547-.37-.847a8.456 8.456 0 0 0-.542-.68c-.084-.1-.173-.205-.268-.32C3.201 7.75 2.5 6.766 2.5 5.25 2.5 2.31 4.863 0 8 0s5.5 2.31 5.5 5.25c0 1.516-.701 2.5-1.328 3.259-.095.115-.184.22-.268.319-.207.245-.383.453-.541.681-.208.3-.33.565-.37.847a.751.751 0 0 1-1.485-.212c.084-.593.337-1.078.621-1.489.203-.292.45-.584.673-.848.075-.088.147-.173.213-.253.561-.679.985-1.32.985-2.304 0-2.06-1.637-3.75-4-3.75ZM5.75 12h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1 0-1.5ZM6 15.25a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1-.75-.75Z"></path></svg>TIP</p>
+<p> 先抓住主干
+Go 里每个具体类型在运行时都对应一个<strong>只读的类型描述符</strong>（<code>internal/abi.Type</code>，runtime 里别名 <code>_type</code>）。它回答四个问题：</p>
+<ol>
+<li>这个类型的值占多少字节、怎么对齐（<code>Size_</code>/<code>Align_</code>）；</li>
+<li>值的哪几个字是指针（<code>PtrBytes</code> + <code>GCData</code> 位图）——GC 靠它扫描；</li>
+<li>两个值怎么比较、怎么哈希（<code>Equal</code>/<code>Hash</code>）——map 和 <code>==</code> 靠它；</li>
+<li>它有哪些方法、名字叫什么（<code>UncommonType</code>/<code>Str</code>）——interface 和反射靠它。</li>
+</ol>
+<p><strong>值本身不存类型指针</strong>；类型信息只在”需要动态行为”的地方出现：interface、反射、map、GC 扫描。普通 <code>int</code>、结构体字段访问在编译期就确定了，运行时零开销。</p>
+</div>
+<p><strong>版本与源码基线</strong></p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>主题</th><th>位置</th></tr></thead><tbody><tr><td><code>abi.Type</code> 结构体</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/internal/abi/type.go#L20-L45" rel="noopener noreferrer" target="_blank"><code>internal/abi/type.go#L20-L45</code></a></td></tr><tr><td><code>UncommonType</code> / <code>Method</code></td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/internal/abi/type.go#L207-L240" rel="noopener noreferrer" target="_blank"><code>internal/abi/type.go#L207-L240</code></a></td></tr><tr><td>runtime 别名与位图</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/type.go" rel="noopener noreferrer" target="_blank"><code>runtime/type.go</code></a></td></tr><tr><td>各类型专用描述符</td><td><code>runtime/type.go</code>（<code>arraytype</code>/<code>slicetype</code>/<code>structtype</code>/<code>maptype</code>/<code>chantype</code>/<code>functype</code>/<code>interfacetype</code>）</td></tr></tbody></table>
+<div class="bm-diagram"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 802.9169999999999 403.4" width="802.9169999999999" height="403.4" style="--bg:var(--bm-bg);--fg:var(--bm-fg);--line:var(--bm-border);--accent:var(--bm-accent);--muted:var(--bm-muted);--surface:var(--bm-surface);--border:var(--bm-border)">
+<style>
+  text { font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif; }
+  svg {
+    /* Derived from --bg and --fg (overridable via --line, --accent, etc.) */
+    --_text:          var(--fg);
+    --_text-sec:      var(--muted, color-mix(in srgb, var(--fg) 60%, var(--bg)));
+    --_text-muted:    var(--muted, color-mix(in srgb, var(--fg) 40%, var(--bg)));
+    --_text-faint:    color-mix(in srgb, var(--fg) 25%, var(--bg));
+    --_line:          var(--line, color-mix(in srgb, var(--fg) 50%, var(--bg)));
+    --_arrow:         var(--accent, color-mix(in srgb, var(--fg) 85%, var(--bg)));
+    --_node-fill:     var(--surface, color-mix(in srgb, var(--fg) 3%, var(--bg)));
+    --_node-stroke:   var(--border, color-mix(in srgb, var(--fg) 20%, var(--bg)));
+    --_group-fill:    var(--bg);
+    --_group-hdr:     color-mix(in srgb, var(--fg) 5%, var(--bg));
+    --_inner-stroke:  color-mix(in srgb, var(--fg) 12%, var(--bg));
+    --_key-badge:     color-mix(in srgb, var(--fg) 10%, var(--bg));
+  }
+</style>
+<defs>
+  <marker id="arrowhead" markerWidth="8" markerHeight="5" refX="7" refY="2.5" orient="auto">
+    <polygon points="0 0, 8 2.5, 0 5" fill="var(--_arrow)" stroke="var(--_arrow)" stroke-width="0.75" stroke-linejoin="round"></polygon>
+  </marker>
+  <marker id="arrowhead-start" markerWidth="8" markerHeight="5" refX="1" refY="2.5" orient="auto-start-reverse">
+    <polygon points="8 0, 0 2.5, 8 5" fill="var(--_arrow)" stroke="var(--_arrow)" stroke-width="0.75" stroke-linejoin="round"></polygon>
+  </marker>
+</defs>
+<g class="subgraph" data-id="D" data-label="只读类型描述符（全局唯一）">
+  <rect x="272.96999999999997" y="40" width="489.9469999999999" height="232.5" rx="0" ry="0" fill="var(--_group-fill)" stroke="var(--_node-stroke)" stroke-width="1"></rect>
+  <rect x="272.96999999999997" y="40" width="489.9469999999999" height="28" rx="0" ry="0" fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="1"></rect>
+  <text x="284.96999999999997" y="54" font-size="12" font-weight="600" fill="var(--_text-sec)" dy="4.199999999999999">只读类型描述符（全局唯一）</text>
+</g>
+<polyline class="edge" data-from="UK" data-to="M1" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="641.8384999999998,256.5 641.8384999999998,291.5 578.7054999999999,291.5 578.7054999999999,326.5" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)"></polyline>
+<polyline class="edge" data-from="UK" data-to="M2" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="641.8384999999998,256.5 641.8384999999998,291.5 704.9714999999999,291.5 704.9714999999999,326.5" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)"></polyline>
+<polyline class="edge" data-from="T" data-to="UK" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="520.3517499999999,154.7 520.3517499999999,178.7 641.8384999999998,178.7 641.8384999999998,202.7" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)"></polyline>
+<polyline class="edge" data-from="T" data-to="SPEC" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="520.3517499999999,154.7 520.3517499999999,178.7 398.86499999999995,178.7 398.86499999999995,202.7" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)"></polyline>
+<g class="node" data-id="V" data-label="栈或堆上的值
+只有数据，不带类型指针" data-shape="rectangle">
+  <rect x="40" y="40" width="204.96999999999997" height="53.800000000000004" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></rect>
+  <text x="142.48499999999999" y="66.9" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)"><tspan x="142.48499999999999" dy="-3.9000000000000012">栈或堆上的值</tspan><tspan x="142.48499999999999" dy="16.900000000000002">只有数据，不带类型指针</tspan></text>
+</g>
+<g class="node" data-id="M1" data-label="&#x22;Method[0" data-shape="rectangle">
+  <rect x="528.4609999999999" y="326.5" width="100.489" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></rect>
+  <text x="578.7054999999999" y="344.95" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">"Method[0</text>
+</g>
+<g class="node" data-id="M2" data-label="&#x22;Method[1" data-shape="rectangle">
+  <rect x="656.9499999999999" y="326.5" width="96.043" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></rect>
+  <text x="704.9714999999999" y="344.95" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">"Method[1</text>
+</g>
+<g class="node" data-id="T" data-label="abi.Type
+Size_·PtrBytes·Hash·Kind_
+Align_·Equal·GCData·Str" data-shape="rectangle">
+  <rect x="412.67974999999996" y="84" width="215.34399999999994" height="70.7" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></rect>
+  <text x="520.3517499999999" y="119.35" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)"><tspan x="520.3517499999999" dy="-12.350000000000001">abi.Type</tspan><tspan x="520.3517499999999" dy="16.900000000000002">Size_·PtrBytes·Hash·Kind_</tspan><tspan x="520.3517499999999" dy="16.900000000000002">Align_·Equal·GCData·Str</tspan></text>
+</g>
+<g class="node" data-id="UK" data-label="UncommonType
+PkgPath·Mcount·方法数组" data-shape="rectangle">
+  <rect x="536.7599999999999" y="202.7" width="210.15699999999998" height="53.800000000000004" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></rect>
+  <text x="641.8384999999998" y="229.6" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)"><tspan x="641.8384999999998" dy="-3.9000000000000012">UncommonType</tspan><tspan x="641.8384999999998" dy="16.900000000000002">PkgPath·Mcount·方法数组</tspan></text>
+</g>
+<g class="node" data-id="SPEC" data-label="专用头部
+structtype/slicetype/maptype..." data-shape="rectangle">
+  <rect x="288.96999999999997" y="202.7" width="219.78999999999994" height="53.800000000000004" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></rect>
+  <text x="398.86499999999995" y="229.6" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)"><tspan x="398.86499999999995" dy="-3.9000000000000012">专用头部</tspan><tspan x="398.86499999999995" dy="16.900000000000002">structtype/slicetype/maptype...</tspan></text>
+</g>
+</svg></div>
+<h2 id="为什么需要类型描述符">为什么需要类型描述符</h2>
+<p>编译期类型信息在代码生成后大多消失了——<code>x.f</code> 访问结构体字段靠的是编译期确定的偏移，不需要运行时查类型。但有些事编译期定不下来：</p>
+<ul>
+<li><strong>GC</strong>：拿到一个堆对象地址，得知道它里面哪些字是指针，才能追踪引用、判断存活；</li>
+<li><strong>接口/反射</strong>：<code>var i any = x</code> 之后，运行时要知道 <code>i</code> 里装的到底是什么、能不能断言成 <code>T</code>、有哪些方法；</li>
+<li><strong>map</strong>：用任意类型做 key 时，需要它的哈希函数和相等函数；</li>
+<li><strong>栈扫描</strong>：栈帧里哪些位置存了指针，由编译器生成的栈图给出，堆对象则靠类型描述符的位图。</li>
+</ul>
+<p>所以每个非泛型实例化后的具体类型，链接器都会生成一份只读描述符。<code>runtime._type</code> 就是 <code>internal/abi.Type</code> 的别名，runtime、reflect、编译器共用同一份布局。</p>
+<h2 id="abitype-的核心字段"><code>abi.Type</code> 的核心字段</h2>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#6A737D">// internal/abi/type.go (Go 1.26.5)</span></span>
+<span class="line"><span style="color:#F97583">type</span><span style="color:#B392F0"> Type</span><span style="color:#F97583"> struct</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">    Size_       </span><span style="color:#F97583">uintptr</span><span style="color:#6A737D">                          // 值的字节大小</span></span>
+<span class="line"><span style="color:#E1E4E8">    PtrBytes    </span><span style="color:#F97583">uintptr</span><span style="color:#6A737D">                          // 前缀中可能含指针的字节数</span></span>
+<span class="line"><span style="color:#E1E4E8">    Hash        </span><span style="color:#F97583">uint32</span><span style="color:#6A737D">                           // 缓存的类型哈希</span></span>
+<span class="line"><span style="color:#E1E4E8">    TFlag       </span><span style="color:#B392F0">TFlag</span><span style="color:#6A737D">                            // 附加标志</span></span>
+<span class="line"><span style="color:#E1E4E8">    Align_      </span><span style="color:#F97583">uint8</span><span style="color:#6A737D">                            // 变量对齐</span></span>
+<span class="line"><span style="color:#E1E4E8">    FieldAlign_ </span><span style="color:#F97583">uint8</span><span style="color:#6A737D">                            // 结构体字段对齐</span></span>
+<span class="line"><span style="color:#E1E4E8">    Kind_       </span><span style="color:#B392F0">Kind</span><span style="color:#6A737D">                             // 类型种类（Bool/Int/Slice/Struct...）</span></span>
+<span class="line"><span style="color:#E1E4E8">    Equal       </span><span style="color:#F97583">func</span><span style="color:#E1E4E8">(</span><span style="color:#B392F0">unsafe</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">Pointer</span><span style="color:#E1E4E8">, </span><span style="color:#B392F0">unsafe</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">Pointer</span><span style="color:#E1E4E8">) </span><span style="color:#F97583">bool</span></span>
+<span class="line"><span style="color:#E1E4E8">    GCData      </span><span style="color:#F97583">*byte</span><span style="color:#6A737D">                            // 指针位图</span></span>
+<span class="line"><span style="color:#E1E4E8">    Str         </span><span style="color:#B392F0">NameOff</span><span style="color:#6A737D">                          // 类型名偏移</span></span>
+<span class="line"><span style="color:#E1E4E8">    PtrToThis   </span><span style="color:#B392F0">TypeOff</span><span style="color:#6A737D">                          // 指向本类型的指针类型（0 表示无）</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>逐组看：</p>
+<ul>
+<li><strong>大小与对齐</strong>：<code>Size_</code>、<code>Align_</code>、<code>FieldAlign_</code> 决定对象布局和 <code>unsafe.Sizeof</code>/<code>Alignof</code> 的结果。</li>
+<li><strong>种类</strong>：<code>Kind_</code> 是 <code>Bool/Int/.../Struct/Slice/Map/Chan/Interface/...</code>。运行时用它做类型断言检查、选择专用描述符（比如 <code>maptype</code>）。</li>
+<li><strong>比较与哈希</strong>：<code>Equal</code> 是这个类型的相等函数（不可比较类型为 nil）。map 的哈希值在类型里也有缓存（<code>Hash</code> 字段是结构哈希，运行时哈希算法在 <code>runtime/alg.go</code>）。</li>
+<li><strong>指针信息</strong>：<code>PtrBytes</code> + <code>GCData</code>，下一节详述。</li>
+<li><strong>名字与方法</strong>：<code>Str</code> 是名字偏移；<code>TFlag&#x26;TFlagUncommon != 0</code> 时，类型头后面紧跟一个 <code>UncommonType</code>，存方法集和包路径。</li>
+<li><strong><code>TFlag</code> 关键标志</strong>：
+<ul>
+<li><code>TFlagNamed</code>：有命名类型；</li>
+<li><code>TFlagUncommon</code>：后面带 <code>UncommonType</code>；</li>
+<li><code>TFlagRegularMemory</code>：值可当一段连续内存做 memequal/memhash（典型如纯数值数组）；</li>
+<li><code>TFlagDirectIface</code>：值能直接塞进 interface 的一个字（即 <code>Size_==PtrBytes==goarch.PtrSize</code>，如指针、channel、map、func）。</li>
+</ul>
+</li>
+</ul>
+<h2 id="指针位图gc-怎么知道哪里有指针">指针位图：GC 怎么知道哪里有指针</h2>
+<p>GC 扫一段内存时不能逐字猜”这是不是指针”。每个类型用一张位图回答：</p>
+<ul>
+<li><code>PtrBytes</code> 是值的<strong>前缀</strong>中可能含指针的字节数。前缀之后的部分 GC 直接当纯数据不扫描。比如 <code>struct { p *int; x [1024]byte }</code>，<code>PtrBytes</code> 只覆盖到 <code>p</code>，后面的大数组不进位图。</li>
+<li><code>GCData</code> 指向一个 bit 串，<strong>每个 bit 对应一个机器字</strong>，1 表示该字是指针、0 表示不是。位图按值的布局逐字标记，嵌套结构体/数组会被展开。</li>
+<li>若设了 <code>TFlagGCMaskOnDemand</code>，<code>GCData</code> 是一个间接字节，真正的位图在运行时按需构造（泛型实例化等场景用来节省体积）。</li>
+</ul>
+<p>这就是”GC 是精确的、不是保守的”基础——它不会把一个恰好长得像指针的整数当根。栈上的局部变量则用编译器生成的栈图（<code>FUNCDATA</code>/<code>PCDATA</code>），不走 <code>GCData</code>，但思想一致。</p>
+<h2 id="uncommontype方法挂在哪里"><code>UncommonType</code>：方法挂在哪里</h2>
+<p>类型描述符的公共部分不直接带方法表。只有命名类型、或需要方法集时，才在类型专用头后面追加一个 <code>UncommonType</code>：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">type</span><span style="color:#B392F0"> UncommonType</span><span style="color:#F97583"> struct</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">    PkgPath </span><span style="color:#B392F0">NameOff</span><span style="color:#6A737D">  // 包路径（内置类型为空）</span></span>
+<span class="line"><span style="color:#E1E4E8">    Mcount  </span><span style="color:#F97583">uint16</span><span style="color:#6A737D">   // 方法总数</span></span>
+<span class="line"><span style="color:#E1E4E8">    Xcount  </span><span style="color:#F97583">uint16</span><span style="color:#6A737D">   // 导出方法数</span></span>
+<span class="line"><span style="color:#E1E4E8">    Moff    </span><span style="color:#F97583">uint32</span><span style="color:#6A737D">   // 到方法数组的字节偏移</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span>
+<span class="line"><span style="color:#F97583">type</span><span style="color:#B392F0"> Method</span><span style="color:#F97583"> struct</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">    Name </span><span style="color:#B392F0">NameOff</span><span style="color:#6A737D">     // 方法名</span></span>
+<span class="line"><span style="color:#E1E4E8">    Mtyp </span><span style="color:#B392F0">TypeOff</span><span style="color:#6A737D">     // 方法签名类型</span></span>
+<span class="line"><span style="color:#E1E4E8">    Ifn  </span><span style="color:#B392F0">TextOff</span><span style="color:#6A737D">    // 接口调用时用的函数（T.fn 形式）</span></span>
+<span class="line"><span style="color:#E1E4E8">    Tfn  </span><span style="color:#B392F0">TextOff</span><span style="color:#6A737D">    // 普通方法调用时用的函数</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>方法表是<strong>按名排序</strong>的数组，interface 查找时二分查找。<code>Ifn</code> 和 <code>Tfn</code> 的区别：如果方法不需要接收者解引用/不需要触发编译器生成的包装，两者指向同一个函数；否则 <code>Ifn</code> 是生成的适配闭包（见 Interface 笔记）。</p>
+<p>不同 kind 的类型头不同：<code>structtype</code> 带字段数组、<code>interfacetype</code> 带方法数组、<code>maptype</code> 带 key/elem 类型指针。它们都以 <code>Type</code> 开头，所以任何类型指针都能当成 <code>*Type</code> 读公共字段，再按 <code>Kind_</code> 转成具体类型。</p>
+<h2 id="对象在内存里怎么摆">对象在内存里怎么摆</h2>
+<p>类型描述符决定值的布局，规则简单：</p>
+<ul>
+<li><strong>对齐</strong>：每个字段按其 <code>Align_</code> 对齐；结构体整体对齐取字段最大对齐，大小是对齐的整数倍（尾部可能有 padding）。</li>
+<li><strong>顺序</strong>：字段按声明顺序排列，但编译器<strong>不做重排</strong>（与某些语言不同）——要省空间得自己手动调整字段顺序。</li>
+<li><strong>零大小类型</strong>：<code>struct{}</code>、<code>[0]T</code> 大小为 0。作为结构体<strong>最后一个</strong>字段时，Go 会额外补 1 字节，避免取其地址越界到别的对象；作为唯一字段或非末尾字段时可能零分配。</li>
+<li><strong>空接口/接口</strong>：两个字大小（类型指针 + 数据指针）；<code>TFlagDirectIface</code> 的类型直接把值放进数据字（如 <code>*T</code>、chan、map），其他类型则数据字是指向堆/栈值的指针。</li>
+<li><strong>字符串/切片/slice header</strong>：字符串是 <code>{data, len}</code> 两字；切片是 <code>{data, len, cap}</code> 三字；map/chan/func 在用户侧都是一个字的指针。</li>
+</ul>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">type</span><span style="color:#B392F0"> Demo</span><span style="color:#F97583"> struct</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">    A </span><span style="color:#F97583">bool</span><span style="color:#6A737D">     // offset 0, size 1</span></span>
+<span class="line"><span style="color:#E1E4E8">    B </span><span style="color:#F97583">int64</span><span style="color:#6A737D">    // offset 8（前补 7 字节 padding）</span></span>
+<span class="line"><span style="color:#E1E4E8">    C </span><span style="color:#F97583">*int</span><span style="color:#6A737D">     // offset 16</span></span>
+<span class="line"><span style="color:#E1E4E8">}            </span><span style="color:#6A737D">// Size_=24, PtrBytes=24, Align_=8</span></span></code></pre>
+<h2 id="边界与误区">边界与误区</h2>
+<ul>
+<li><strong><code>Kind</code> 不做掩码</strong>：Go 1.26 里 <code>t.Kind()</code> 直接返回 <code>Kind_</code>，没有 <code>kindMask</code>；种类判断用 <code>k == KindStruct</code> 等直接比较。</li>
+<li><strong>命名类型和未命名类型是两个描述符</strong>：<code>type MyInt int</code> 和 <code>int</code> 是不同 <code>*Type</code>，但底层 <code>Kind_</code> 相同、内存布局相同。</li>
+<li><strong>接口里的”类型”是动态类型</strong>：<code>var r io.Reader = w</code>，接口里存的是 <code>w</code> 的具体类型描述符（可能是 <code>*os.File</code>），不是 <code>io.Reader</code> 自己。</li>
+<li><strong>GCData 只覆盖前缀指针区</strong>：<code>PtrBytes</code> 之后的字节保证无指针，把大的非指针数据放后面能缩小位图、加速扫描。</li>
+<li><strong>方法集不在 <code>Type</code> 公共头里</strong>：反射拿方法要走 <code>Uncommon()</code>，且仅当 <code>TFlagUncommon</code> 存在。</li>
+<li><strong>类型描述符是只读、全局唯一、可指针比较</strong>：两个接口值的动态类型是否相同，直接比 <code>*Type</code> 指针即可。</li>
+</ul>
+<h2 id="参考资料">参考资料</h2>
+<ul>
+<li><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/internal/abi/type.go" rel="noopener noreferrer" target="_blank"><code>internal/abi/type.go</code></a></li>
+<li><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/type.go" rel="noopener noreferrer" target="_blank"><code>runtime/type.go</code></a></li>
+<li>Go 博客 <a href="https://research.swtch.com/godata" rel="noopener noreferrer" target="_blank">Go Data Structures</a> 与 <a href="https://research.swtch.com/interfaces" rel="noopener noreferrer" target="_blank">Interfaces</a></li>
+<li>配套阅读：<a href="/iface/">Interface 与动态调用（Go 1.26.5 源码分析）</a>、<a href="/gc/">垃圾收集器</a>、反射</li>
+</ul></main><aside class="toc"><p class="toc-title">本页目录</p><ul><li class="toc-d2"><a href="#为什么需要类型描述符">为什么需要类型描述符</a></li><li class="toc-d2"><a href="#abitype-的核心字段">abi.Type 的核心字段</a></li><li class="toc-d2"><a href="#指针位图gc-怎么知道哪里有指针">指针位图：GC 怎么知道哪里有指针</a></li><li class="toc-d2"><a href="#uncommontype方法挂在哪里">UncommonType：方法挂在哪里</a></li><li class="toc-d2"><a href="#对象在内存里怎么摆">对象在内存里怎么摆</a></li><li class="toc-d2"><a href="#边界与误区">边界与误区</a></li><li class="toc-d2"><a href="#参考资料">参考资料</a></li></ul></aside></div><div class="lightbox" id="lightbox" aria-hidden="true"><img alt=""></div><script type="module">var e=document.documentElement,t=document.getElementById(`themeToggle`),n={auto:`🖥️`,light:`☀️`,dark:`🌙`};function r(){var e=localStorage.getItem(`theme`);return e===`light`||e===`dark`?e:`auto`}function i(){var i=r();i===`auto`?e.removeAttribute(`data-theme`):e.setAttribute(`data-theme`,i),t.textContent=n[i]}i(),t.addEventListener(`click`,()=>{var e=[`auto`,`light`,`dark`],t=e[(e.indexOf(r())+1)%3];t===`auto`?localStorage.removeItem(`theme`):localStorage.setItem(`theme`,t),i()}),window.matchMedia(`(prefers-color-scheme: dark)`).addEventListener(`change`,()=>{r()===`auto`&&i()});var a=document.getElementById(`lightbox`),o=a.querySelector(`img`);document.querySelectorAll(`.prose img`).forEach(e=>{e.style.cursor=`zoom-in`,e.addEventListener(`click`,()=>{o.src=e.currentSrc||e.src,o.alt=e.alt,a.classList.add(`open`),a.setAttribute(`aria-hidden`,`false`)})}),a.addEventListener(`click`,()=>{a.classList.remove(`open`),a.setAttribute(`aria-hidden`,`true`)}),document.addEventListener(`keydown`,e=>{e.key===`Escape`&&a.click()});</script></body></html>

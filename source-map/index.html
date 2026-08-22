@@ -1,0 +1,281 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Go 源码环境与目录地图：Go 1.26.5</title><script>
+      (function () {
+        var s = localStorage.getItem('theme');
+        if (s === 'light' || s === 'dark') {
+          document.documentElement.setAttribute('data-theme', s);
+        }
+      })();
+    </script><link rel="stylesheet" href="/_astro/Base.h73xs6F0.css"></head><body><header class="topbar"><a href="/" class="brand">HLDay</a><nav><a href="/">专题</a><a href="/posts/">博客</a><a href="https://github.com/hTangle" class="nav-github" aria-label="GitHub">GitHub</a></nav><button class="theme-toggle" id="themeToggle" type="button" title="切换主题（自动/浅色/深色）" aria-label="切换主题">🖥️</button></header><div class="layout"><aside class="booknav"><ul class="nav-tree"><li><p class="nav-group">Go</p><ul><li><p class="nav-subgroup">运行时基础</p><ul><li class="active"><a href="/source-map/">源码环境与目录地图</a></li><li class><a href="/bootstrap/">程序启动流程</a></li></ul></li><li><p class="nav-subgroup">并发编程</p><ul><li class><a href="/gmp/">GMP 调度器</a></li><li class><a href="/netpoll/">网络轮询器</a></li><li class><a href="/timer/">定时器</a></li><li class><a href="/sync-lock/">同步和锁</a></li><li class><a href="/channel/">Channel</a></li><li class><a href="/context/">Context</a></li><li class><a href="/defer-panic/">defer/panic/recover</a></li></ul></li><li><p class="nav-subgroup">内存管理</p><ul><li class><a href="/memory-alloc/">内存分配器</a></li><li class><a href="/gc/">垃圾收集器</a></li><li class><a href="/stack/">栈空间管理</a></li></ul></li><li><p class="nav-subgroup">数据结构</p><ul><li class><a href="/type-metadata/">类型元数据与对象布局</a></li><li class><a href="/iface/">Interface 与动态调用</a></li><li class><a href="/array/">数组</a></li><li class><a href="/slice/">切片</a></li><li class><a href="/swiss-map/">哈希表 (Swiss Table)</a></li><li class><a href="/string/">字符串</a></li></ul></li></ul></li><li><p class="nav-group">Agent 开发</p><ul><li><p class="nav-subgroup">核心协议与机制</p><ul><li class><a href="/mcp/">MCP</a></li><li class><a href="/skill/">Skill</a></li><li class><a href="/tool-call/">Tool Call</a></li></ul></li></ul></li></ul></aside><main class="prose"><h1>Go 源码环境与目录地图：Go 1.26.5</h1><div class="markdown-alert markdown-alert-tip" dir="auto">
+<p class="markdown-alert-title" dir="auto"><svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8 1.5c-2.363 0-4 1.69-4 3.75 0 .984.424 1.625.984 2.304l.214.253c.223.264.47.556.673.848.284.411.537.896.621 1.49a.75.75 0 0 1-1.484.211c-.04-.282-.163-.547-.37-.847a8.456 8.456 0 0 0-.542-.68c-.084-.1-.173-.205-.268-.32C3.201 7.75 2.5 6.766 2.5 5.25 2.5 2.31 4.863 0 8 0s5.5 2.31 5.5 5.25c0 1.516-.701 2.5-1.328 3.259-.095.115-.184.22-.268.319-.207.245-.383.453-.541.681-.208.3-.33.565-.37.847a.751.751 0 0 1-1.485-.212c.084-.593.337-1.078.621-1.489.203-.292.45-.584.673-.848.075-.088.147-.173.213-.253.561-.679.985-1.32.985-2.304 0-2.06-1.637-3.75-4-3.75ZM5.75 12h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1 0-1.5ZM6 15.25a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1-.75-.75Z"></path></svg>TIP</p>
+<p> 先抓住主干
+读 Go 源码最容易犯的错是一头扎进 <code>runtime/proc.go</code> 然后迷路。正确的准备只有三件事：</p>
+<ol>
+<li><strong>固定一个版本和提交</strong>（本系列用 <code>go1.26.5</code>，commit <code>c19862e5</code>），所有行号链接都指向它，避免不同版本对不上；</li>
+<li><strong>先有一张目录地图</strong>：知道 <code>runtime/</code>、<code>cmd/compile/</code>、<code>internal/</code> 各管什么，遇到函数能迅速定位到文件；</li>
+<li><strong>掌握四组工具</strong>：源码检索（<code>rg</code>/<code>git blame</code>）、编译器决策（<code>-gcflags=-m</code>、<code>GOSSAFUNC</code>）、汇编与符号（<code>objdump</code>/<code>nm</code>）、行为验证（<code>trace</code>/<code>pprof</code>/<code>GODEBUG</code>）。</li>
+</ol>
+<p>这篇是后续所有源码笔记的”地图图例”。</p>
+</div>
+<h2 id="固定源码与构建环境">固定源码与构建环境</h2>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="bash"><code><span class="line"><span style="color:#6A737D"># 克隆并检出本系列使用的精确版本</span></span>
+<span class="line"><span style="color:#B392F0">git</span><span style="color:#9ECBFF"> clone</span><span style="color:#9ECBFF"> https://github.com/golang/go.git</span></span>
+<span class="line"><span style="color:#79B8FF">cd</span><span style="color:#9ECBFF"> go</span></span>
+<span class="line"><span style="color:#B392F0">git</span><span style="color:#9ECBFF"> checkout</span><span style="color:#9ECBFF"> go1.26.5</span><span style="color:#6A737D">          # tag</span></span>
+<span class="line"><span style="color:#B392F0">git</span><span style="color:#9ECBFF"> rev-parse</span><span style="color:#9ECBFF"> HEAD</span><span style="color:#6A737D">              # 应为 c19862e5f8415b4f24b189d065ed739517c548ba</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D"># 用一个已安装的稳定 Go 作为 bootstrap 编译它</span></span>
+<span class="line"><span style="color:#79B8FF">cd</span><span style="color:#9ECBFF"> src</span><span style="color:#E1E4E8"> &#x26;&#x26; </span><span style="color:#B392F0">./make.bash</span><span style="color:#6A737D">           # 产出 ../bin/go</span></span>
+<span class="line"><span style="color:#79B8FF">.</span><span style="color:#9ECBFF">./bin/go</span><span style="color:#9ECBFF"> version</span></span>
+<span class="line"><span style="color:#79B8FF">.</span><span style="color:#9ECBFF">./bin/go</span><span style="color:#9ECBFF"> test</span><span style="color:#9ECBFF"> runtime</span><span style="color:#6A737D">          # 跑一组最小测试</span></span>
+<span class="line"><span style="color:#79B8FF">.</span><span style="color:#9ECBFF">./bin/go</span><span style="color:#9ECBFF"> test</span><span style="color:#9ECBFF"> sync</span><span style="color:#9ECBFF"> context</span></span></code></pre>
+<p>要点：</p>
+<ul>
+<li>编译 Go 需要一个<strong>已安装的 Go</strong>（bootstrap toolchain），通常用当前稳定版即可。</li>
+<li><code>make.bash</code> 只构建不跑测试；<code>all.bash</code> 构建并跑全量测试（耗时）。</li>
+<li>改了 runtime 后用自编译的 <code>../bin/go</code> 跑实验，避免和系统 Go 混淆。</li>
+<li>每个主题建议建一个实验目录，保留 <code>main.go</code>、<code>*_test.go</code>、<code>bench_test.go</code>、以及 trace/profile 输出和一段 README 说明结论。</li>
+</ul>
+<h2 id="src-目录总览">src 目录总览</h2>
+<div class="bm-diagram"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 965.334 563.9166666666667" width="965.334" height="563.9166666666667" style="--bg:var(--bm-bg);--fg:var(--bm-fg);--line:var(--bm-border);--accent:var(--bm-accent);--muted:var(--bm-muted);--surface:var(--bm-surface);--border:var(--bm-border)">
+<style>
+  text { font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif; }
+  svg {
+    /* Derived from --bg and --fg (overridable via --line, --accent, etc.) */
+    --_text:          var(--fg);
+    --_text-sec:      var(--muted, color-mix(in srgb, var(--fg) 60%, var(--bg)));
+    --_text-muted:    var(--muted, color-mix(in srgb, var(--fg) 40%, var(--bg)));
+    --_text-faint:    color-mix(in srgb, var(--fg) 25%, var(--bg));
+    --_line:          var(--line, color-mix(in srgb, var(--fg) 50%, var(--bg)));
+    --_arrow:         var(--accent, color-mix(in srgb, var(--fg) 85%, var(--bg)));
+    --_node-fill:     var(--surface, color-mix(in srgb, var(--fg) 3%, var(--bg)));
+    --_node-stroke:   var(--border, color-mix(in srgb, var(--fg) 20%, var(--bg)));
+    --_group-fill:    var(--bg);
+    --_group-hdr:     color-mix(in srgb, var(--fg) 5%, var(--bg));
+    --_inner-stroke:  color-mix(in srgb, var(--fg) 12%, var(--bg));
+    --_key-badge:     color-mix(in srgb, var(--fg) 10%, var(--bg));
+  }
+</style>
+<defs>
+  <marker id="arrowhead" markerWidth="8" markerHeight="5" refX="7" refY="2.5" orient="auto">
+    <polygon points="0 0, 8 2.5, 0 5" fill="var(--_arrow)" stroke="var(--_arrow)" stroke-width="0.75" stroke-linejoin="round"></polygon>
+  </marker>
+  <marker id="arrowhead-start" markerWidth="8" markerHeight="5" refX="1" refY="2.5" orient="auto-start-reverse">
+    <polygon points="8 0, 0 2.5, 8 5" fill="var(--_arrow)" stroke="var(--_arrow)" stroke-width="0.75" stroke-linejoin="round"></polygon>
+  </marker>
+</defs>
+<polyline class="edge" data-from="ROOT" data-to="RT" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="124.928,295.5166666666667 142.928,295.5166666666667 142.928,66.9 256.37500000000006,66.9" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)"></polyline>
+<polyline class="edge" data-from="ROOT" data-to="CC" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="124.928,295.5166666666667 142.928,295.5166666666667 142.928,176.8166666666667 205.5320000000001,176.8166666666667" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)"></polyline>
+<polyline class="edge" data-from="ROOT" data-to="CL" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="124.928,295.5166666666667 142.928,295.5166666666667 142.928,258.6166666666667 160.92800000000003,258.6166666666667" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)"></polyline>
+<polyline class="edge" data-from="ROOT" data-to="IT" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="124.928,295.5166666666667 142.928,295.5166666666667 142.928,195.26666666666668 710.731,195.26666666666668" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)"></polyline>
+<polyline class="edge" data-from="ROOT" data-to="REF" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="124.928,295.5166666666667 142.928,295.5166666666667 142.928,333.4166666666667 160.92800000000003,333.4166666666667" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)"></polyline>
+<polyline class="edge" data-from="ROOT" data-to="STD" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="124.928,295.5166666666667 142.928,295.5166666666667 142.928,415.2166666666667 160.928,415.2166666666667" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)"></polyline>
+<polyline class="edge" data-from="ROOT" data-to="SYS" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="124.928,295.5166666666667 142.928,295.5166666666667 142.928,497.0166666666667 160.92800000000003,497.0166666666667" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)"></polyline>
+<polyline class="edge" data-from="CC" data-to="SSA" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="422.35800000000006,176.8166666666667 447.46950000000004,176.8166666666667 447.46950000000004,135.91666666666666 472.581,135.91666666666666" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)"></polyline>
+<polyline class="edge" data-from="CC" data-to="WALK" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="422.35800000000006,176.8166666666667 447.46950000000004,176.8166666666667 447.46950000000004,217.71666666666667 472.581,217.71666666666667" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)"></polyline>
+<polyline class="edge" data-from="RT" data-to="IT" data-style="dotted" data-arrow-start="false" data-arrow-end="true" data-label="编译器/链接器生成元数据" points="495.43100000000004,66.9 698.731,66.89999999999999 698.731,186.3 710.731,186.3" fill="none" stroke="var(--_line)" stroke-width="1" stroke-dasharray="4 4" marker-end="url(#arrowhead)"></polyline>
+<g class="edge-label" data-from="RT" data-to="IT" data-label="编译器/链接器生成元数据">
+  <rect x="539.431" y="50.9" width="151.3" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1"></rect>
+  <text x="615.081" y="66.05" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">编译器/链接器生成元数据</text>
+</g>
+<g class="node" data-id="ROOT" data-label="go/src/" data-shape="rectangle">
+  <rect x="40" y="277.0666666666667" width="84.928" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></rect>
+  <text x="82.464" y="295.5166666666667" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">go/src/</text>
+</g>
+<g class="node" data-id="RT" data-label="runtime/
+调度·内存·GC·栈·通道·netpoll" data-shape="rectangle">
+  <rect x="256.37500000000006" y="40" width="239.05599999999995" height="53.800000000000004" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></rect>
+  <text x="375.903" y="66.9" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)"><tspan x="375.903" dy="-3.9000000000000012">runtime/</tspan><tspan x="375.903" dy="16.900000000000002">调度·内存·GC·栈·通道·netpoll</tspan></text>
+</g>
+<g class="node" data-id="CC" data-label="cmd/compile/
+编译器前端·SSA·代码生成" data-shape="rectangle">
+  <rect x="205.5320000000001" y="149.91666666666669" width="216.82599999999994" height="53.800000000000004" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></rect>
+  <text x="313.94500000000005" y="176.8166666666667" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)"><tspan x="313.94500000000005" dy="-3.9000000000000012">cmd/compile/</tspan><tspan x="313.94500000000005" dy="16.900000000000002">编译器前端·SSA·代码生成</tspan></text>
+</g>
+<g class="node" data-id="CL" data-label="cmd/link/
+链接器·重定位·生成可执行文件" data-shape="rectangle">
+  <rect x="160.92800000000003" y="231.7166666666667" width="249.42999999999998" height="53.800000000000004" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></rect>
+  <text x="285.64300000000003" y="258.6166666666667" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)"><tspan x="285.64300000000003" dy="-3.9000000000000012">cmd/link/</tspan><tspan x="285.64300000000003" dy="16.900000000000002">链接器·重定位·生成可执行文件</tspan></text>
+</g>
+<g class="node" data-id="IT" data-label="internal/
+ABI·abi·runtime 内部共用包" data-shape="rectangle">
+  <rect x="710.731" y="168.36666666666667" width="214.60299999999998" height="53.800000000000004" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></rect>
+  <text x="818.0325" y="195.26666666666668" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)"><tspan x="818.0325" dy="-3.9000000000000012">internal/</tspan><tspan x="818.0325" dy="16.900000000000002">ABI·abi·runtime 内部共用包</tspan></text>
+</g>
+<g class="node" data-id="REF" data-label="reflect/
+反射" data-shape="rectangle">
+  <rect x="160.92800000000003" y="306.5166666666667" width="82.705" height="53.800000000000004" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></rect>
+  <text x="202.28050000000002" y="333.4166666666667" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)"><tspan x="202.28050000000002" dy="-3.9000000000000012">reflect/</tspan><tspan x="202.28050000000002" dy="16.900000000000002">反射</tspan></text>
+</g>
+<g class="node" data-id="STD" data-label="标准库
+sync/ context/ net/ io/ ..." data-shape="rectangle">
+  <rect x="160.928" y="388.3166666666667" width="175.32999999999996" height="53.800000000000004" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></rect>
+  <text x="248.59299999999996" y="415.2166666666667" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)"><tspan x="248.59299999999996" dy="-3.9000000000000012">标准库</tspan><tspan x="248.59299999999996" dy="16.900000000000002">sync/ context/ net/ io/ ...</tspan></text>
+</g>
+<g class="node" data-id="SYS" data-label="runtime/internal/sys
+平台常量·架构定义" data-shape="rectangle">
+  <rect x="160.92800000000003" y="470.11666666666673" width="167.92" height="53.800000000000004" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></rect>
+  <text x="244.88800000000003" y="497.0166666666667" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)"><tspan x="244.88800000000003" dy="-3.9000000000000012">runtime/internal/sys</tspan><tspan x="244.88800000000003" dy="16.900000000000002">平台常量·架构定义</tspan></text>
+</g>
+<g class="node" data-id="SSA" data-label="cmd/compile/internal/ssa
+SSA pass" data-shape="rectangle">
+  <rect x="472.581" y="109.01666666666667" width="187.927" height="53.800000000000004" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></rect>
+  <text x="566.5445" y="135.91666666666666" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)"><tspan x="566.5445" dy="-3.9000000000000012">cmd/compile/internal/ssa</tspan><tspan x="566.5445" dy="16.900000000000002">SSA pass</tspan></text>
+</g>
+<g class="node" data-id="WALK" data-label="cmd/compile/internal/walk
+高层 lowering" data-shape="rectangle">
+  <rect x="472.581" y="190.81666666666666" width="192.373" height="53.800000000000004" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></rect>
+  <text x="568.7675" y="217.71666666666667" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)"><tspan x="568.7675" dy="-3.9000000000000012">cmd/compile/internal/walk</tspan><tspan x="568.7675" dy="16.900000000000002">高层 lowering</tspan></text>
+</g>
+</svg></div>
+<p>主要目录：</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>目录</th><th>作用</th></tr></thead><tbody><tr><td><code>src/runtime/</code></td><td>Go 运行时核心：调度、内存分配、GC、栈、channel、map、defer/panic、netpoll、timer、信号、cgo 桥接</td></tr><tr><td><code>src/cmd/compile/</code></td><td>Go 编译器：语法/类型检查、逃逸分析、NIR→SSA、架构相关代码生成</td></tr><tr><td><code>src/cmd/link/</code></td><td>链接器：符号解析、重定位、生成 ELF/Mach-O/PE</td></tr><tr><td><code>src/cmd/go/</code></td><td><code>go</code> 命令本身：build/test/mod/vet 等子命令</td></tr><tr><td><code>src/internal/abi/</code></td><td><code>abi.Type</code>、调用约定、栈图等编译器与 runtime 共享的 ABI 定义</td></tr><tr><td><code>src/internal/runtime/</code>、<code>runtime/internal/</code></td><td>runtime 内部工具（原子、原子指针、平台抽象）</td></tr><tr><td><code>src/reflect/</code></td><td>反射，依赖 runtime 的类型元数据</td></tr><tr><td><code>src/sync/</code>、<code>src/context/</code>、<code>src/net/</code>、<code>src/syscall/</code></td><td>直接调用 runtime 的标准库包</td></tr></tbody></table>
+<h2 id="runtime-关键文件分组">runtime 关键文件分组</h2>
+<p>按主题找文件，而不是按文件名瞎翻：</p>
+<p><strong>调度与 GMP</strong></p>
+<ul>
+<li><code>proc.go</code>：<code>schedinit</code>、<code>runtime.main</code>、<code>schedule</code>、<code>newproc</code>、<code>mstart</code>、<code>findRunnable</code>、<code>park_m</code></li>
+<li><code>runtime2.go</code>：<code>g</code>/<code>m</code>/<code>p</code>/<code>schedt</code>/<code>defer</code>/<code>panic</code>/<code>sudog</code> 等核心结构体</li>
+<li><code>preempt.go</code>：异步抢占</li>
+</ul>
+<p><strong>内存与 GC</strong></p>
+<ul>
+<li><code>malloc.go</code>：<code>mallocgc</code>、tiny/small/large 分配</li>
+<li><code>mcache.go</code>/<code>mcentral.go</code>/<code>mheap.go</code>：三级分配缓存</li>
+<li><code>mpagealloc.go</code>/<code>mheap.go</code>：page allocator、arena</li>
+<li><code>mgc.go</code>：GC 主循环、trigger、<code>gcStart</code></li>
+<li><code>mgcmark.go</code>：标记 worker、<code>gcDrain</code>、<code>markroot</code></li>
+<li><code>mgcmark_greenteagc.go</code>：Go 1.26 默认 Green Tea 标记路径</li>
+<li><code>mbarrier.go</code>：写屏障</li>
+<li><code>mgcsweep.go</code>/<code>mgcscavenge.go</code>：清扫与归还物理页</li>
+<li><code>mfinal.go</code>：finalizer</li>
+</ul>
+<p><strong>栈</strong></p>
+<ul>
+<li><code>stack.go</code>：<code>stackalloc</code>、<code>newstack</code>、<code>copystack</code>、<code>shrinkstack</code></li>
+<li><code>asm_amd64.s</code>/<code>stmts_amd64.h</code>：<code>morestack</code> 序言汇编</li>
+</ul>
+<p><strong>并发原语</strong></p>
+<ul>
+<li><code>chan.go</code>：hchan、send/recv、select</li>
+<li><code>select.go</code>：select 实现</li>
+<li><code>sync.go</code>：<code>gopark</code>/<code>goready</code>、semaphore</li>
+<li><code>rwmutex.go</code>、<code>sema.go</code>（部分在 <code>sync/</code>）</li>
+</ul>
+<p><strong>netpoll 与 timer</strong></p>
+<ul>
+<li><code>netpoll.go</code>：pollDesc、netpollblock</li>
+<li><code>netpoll_epoll.go</code>/<code>netpoll_kqueue.go</code>/<code>netpoll_windows.go</code>：平台后端</li>
+<li><code>time.go</code>/<code>timer.go</code>：timer 堆、checkTimers</li>
+</ul>
+<p><strong>类型与接口</strong></p>
+<ul>
+<li><code>type.go</code>：<code>_type = abi.Type</code>、位图</li>
+<li><code>iface.go</code>：eface/iface、itab 缓存、assert</li>
+<li><code>error.go</code>、<code>string.go</code>、<code>slice.go</code>：基础类型的 runtime 操作</li>
+</ul>
+<p><strong>启动与平台</strong></p>
+<ul>
+<li><code>asm_amd64.s</code>：<code>rt0_go</code>、<code>mstart</code> 等汇编</li>
+<li><code>sys_linux_amd64.s</code>、<code>os_linux.go</code>：平台/OS 特定</li>
+<li><code>cgocall.go</code>、<code>cgo.go</code>：cgo 桥接</li>
+<li><code>trace.go</code>、<code>cpuprof.go</code>、<code>memprof.go</code>：诊断</li>
+</ul>
+<h2 id="四组必备工具">四组必备工具</h2>
+<p><strong>源码查找</strong></p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="bash"><code><span class="line"><span style="color:#B392F0">rg</span><span style="color:#9ECBFF"> "func mallocgc"</span><span style="color:#9ECBFF"> src/runtime/</span><span style="color:#6A737D">        # 按内容找</span></span>
+<span class="line"><span style="color:#B392F0">rg</span><span style="color:#79B8FF"> -t</span><span style="color:#9ECBFF"> go</span><span style="color:#9ECBFF"> "itabTable"</span><span style="color:#9ECBFF"> src/runtime/</span></span>
+<span class="line"><span style="color:#B392F0">git</span><span style="color:#9ECBFF"> log</span><span style="color:#79B8FF"> -L</span><span style="color:#9ECBFF"> :schedinit:src/runtime/proc.go</span><span style="color:#6A737D">   # 追踪某函数的演变</span></span>
+<span class="line"><span style="color:#B392F0">git</span><span style="color:#9ECBFF"> blame</span><span style="color:#9ECBFF"> src/runtime/proc.go</span><span style="color:#F97583"> |</span><span style="color:#B392F0"> grep</span><span style="color:#79B8FF"> -i</span><span style="color:#9ECBFF"> netpoll</span></span>
+<span class="line"><span style="color:#B392F0">gh</span><span style="color:#9ECBFF"> search</span><span style="color:#9ECBFF"> code</span><span style="color:#9ECBFF"> "findRunnable"</span><span style="color:#79B8FF"> --repo</span><span style="color:#9ECBFF"> golang/go</span><span style="color:#6A737D">   # 跨版本/CL 参考</span></span></code></pre>
+<p>固定提交行号链接写法：
+<code>https://github.com/golang/go/blob/&#x3C;sha>/src/runtime/proc.go#L983-L1101</code></p>
+<p><strong>编译器决策</strong></p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="bash"><code><span class="line"><span style="color:#B392F0">go</span><span style="color:#9ECBFF"> build</span><span style="color:#79B8FF"> -gcflags=</span><span style="color:#9ECBFF">'-m=2'</span><span style="color:#9ECBFF"> ./...</span><span style="color:#6A737D">        # 逃逸分析、内联、边界检查决策（看两遍 -m）</span></span>
+<span class="line"><span style="color:#B392F0">go</span><span style="color:#9ECBFF"> build</span><span style="color:#79B8FF"> -gcflags=</span><span style="color:#9ECBFF">'-S'</span><span style="color:#9ECBFF"> ./x.go</span><span style="color:#6A737D">        # 输出汇编</span></span>
+<span class="line"><span style="color:#E1E4E8">GOSSAFUNC</span><span style="color:#F97583">=</span><span style="color:#9ECBFF">Foo</span><span style="color:#B392F0"> go</span><span style="color:#9ECBFF"> build</span><span style="color:#9ECBFF"> ./...</span><span style="color:#6A737D">         # 生成 ssa.html，逐层看 SSA 优化</span></span>
+<span class="line"><span style="color:#B392F0">go</span><span style="color:#9ECBFF"> build</span><span style="color:#79B8FF"> -gcflags=</span><span style="color:#9ECBFF">'-d=ssa/check/on'</span><span style="color:#6A737D">  # 调试用</span></span></code></pre>
+<p><strong>汇编与符号</strong></p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="bash"><code><span class="line"><span style="color:#B392F0">go</span><span style="color:#9ECBFF"> tool</span><span style="color:#9ECBFF"> objdump</span><span style="color:#79B8FF"> -s</span><span style="color:#9ECBFF"> "main.main"</span><span style="color:#9ECBFF"> ./bin</span><span style="color:#6A737D">   # 反汇编指定函数</span></span>
+<span class="line"><span style="color:#B392F0">go</span><span style="color:#9ECBFF"> tool</span><span style="color:#9ECBFF"> nm</span><span style="color:#9ECBFF"> ./bin</span><span style="color:#F97583"> |</span><span style="color:#B392F0"> rg</span><span style="color:#9ECBFF"> "runtime.mallocgc"</span></span>
+<span class="line"><span style="color:#B392F0">go</span><span style="color:#9ECBFF"> tool</span><span style="color:#9ECBFF"> compile</span><span style="color:#79B8FF"> -S</span><span style="color:#9ECBFF"> x.go</span><span style="color:#F97583"> ></span><span style="color:#9ECBFF"> x.s</span></span>
+<span class="line"><span style="color:#B392F0">dlv</span><span style="color:#9ECBFF"> exec</span><span style="color:#9ECBFF"> ./bin</span><span style="color:#6A737D">                        # 源码级调试，可下 runtime 断点</span></span></code></pre>
+<p>架构后缀决定文件选择：<code>_amd64.s</code>/<code>_arm64.s</code>/<code>_linux.go</code>/<code>_darwin.go</code>；build tag 在文件头 <code>//go:build</code>。</p>
+<p><strong>行为验证</strong></p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="bash"><code><span class="line"><span style="color:#E1E4E8">GODEBUG</span><span style="color:#F97583">=</span><span style="color:#E1E4E8">gctrace</span><span style="color:#F97583">=</span><span style="color:#9ECBFF">1,</span><span style="color:#E1E4E8">schedtrace</span><span style="color:#F97583">=</span><span style="color:#9ECBFF">1000,</span><span style="color:#E1E4E8">scheddetail</span><span style="color:#F97583">=</span><span style="color:#9ECBFF">1</span><span style="color:#B392F0"> ./bin</span><span style="color:#6A737D">   # GC/调度器内部日志</span></span>
+<span class="line"><span style="color:#E1E4E8">GODEBUG</span><span style="color:#F97583">=</span><span style="color:#E1E4E8">allocfreetrace</span><span style="color:#F97583">=</span><span style="color:#9ECBFF">1</span><span style="color:#B392F0"> ./bin</span><span style="color:#6A737D">                          # 每次分配/释放（量很大）</span></span>
+<span class="line"><span style="color:#B392F0">go</span><span style="color:#9ECBFF"> test</span><span style="color:#79B8FF"> -race</span><span style="color:#9ECBFF"> ./...</span><span style="color:#6A737D">                                     # 竞态检测</span></span>
+<span class="line"><span style="color:#B392F0">go</span><span style="color:#9ECBFF"> test</span><span style="color:#79B8FF"> -bench=.</span><span style="color:#79B8FF"> -benchmem</span><span style="color:#79B8FF"> -cpuprofile</span><span style="color:#9ECBFF"> cpu.prof</span><span style="color:#79B8FF"> -memprofile</span><span style="color:#9ECBFF"> mem.prof</span></span>
+<span class="line"><span style="color:#B392F0">go</span><span style="color:#9ECBFF"> tool</span><span style="color:#9ECBFF"> pprof</span><span style="color:#79B8FF"> -http</span><span style="color:#9ECBFF"> :8080</span><span style="color:#9ECBFF"> cpu.prof</span></span>
+<span class="line"><span style="color:#E1E4E8">GODEBUG</span><span style="color:#F97583">=</span><span style="color:#E1E4E8">clobberfree</span><span style="color:#F97583">=</span><span style="color:#9ECBFF">1</span><span style="color:#B392F0"> ./bin</span><span style="color:#6A737D">                             # 调试 use-after-free</span></span>
+<span class="line"><span style="color:#B392F0">go</span><span style="color:#9ECBFF"> tool</span><span style="color:#9ECBFF"> trace</span><span style="color:#9ECBFF"> trace.out</span><span style="color:#6A737D">                                  # 调度/syscall/GC/网络 时间线</span></span></code></pre>
+<p>注意区分：<code>GODEBUG</code> 的选项随版本变化，用 <code>go doc runtime</code> 或看 <code>runtime/extern.go</code> 里的 <code>godebug</code> 表确认 1.26 支持哪些。</p>
+<h2 id="runtime-的特殊约束">runtime 的特殊约束</h2>
+<p>读 runtime 源码时要时刻记得它不是普通 Go 代码：</p>
+<ul>
+<li><strong><code>//go:nosplit</code></strong>：函数序言不插入栈增长检查。写这种函数时绝不能做可能增长栈的调用，否则栈溢出直接崩溃。用于调度、栈增长自身等最底层路径。</li>
+<li><strong><code>//go:systemstack</code>、<code>systemstack(fn)</code></strong>：在当前 M 的 g0 上运行 fn。需要大栈、不能被抢占、不能触发调度的工作（GC、调度本身）用它。</li>
+<li><strong><code>mcall(fn)</code></strong>：切到 g0 栈并永不直接返回（fn 负责调度回别的 G）。用于 <code>park_m</code>、<code>recovery</code> 等。</li>
+<li><strong><code>getg()</code></strong>：拿到当前 g。要区分 <code>getg()</code>（可能是 g0）和 <code>getg().m.curg</code>（当前用户 G）。<code>getg()</code> 在 g0 与用户 G 之间含义不同。</li>
+<li><strong><code>//go:nowritebarrier</code> / <code>//go:nowritebarrierrec</code></strong>：标注函数不允许/或其调用链不允许触发写屏障。GC 标记、栈管理等路径用，因为此时写屏障所需状态可能未就绪。</li>
+<li><strong><code>//go:linkname</code></strong>：绕过包可见性，把本地函数链接到另一个包的符号。标准库常用它调 runtime 私有函数（如 <code>time</code> 调 timer 内部）。这是<strong>没有 API 承诺的后门</strong>，随版本可能变。</li>
+<li><strong>runtime 内部尽量避免</strong>：普通 interface、defer、堆分配、复杂锁顺序、channel 操作——这些都会回调调度器/GC，而 runtime 正处在它们无法工作的上下文中。</li>
+<li><strong>写屏障不是锁</strong>：它只保证 GC 的指针追踪正确性，不替代原子操作和同步。</li>
+</ul>
+<h2 id="推荐的阅读姿势">推荐的阅读姿势</h2>
+<ul>
+<li><strong>一次追一条主链</strong>：比如”一个 goroutine 从 <code>go func()</code> 到被调度运行”，只追 <code>newproc → newproc1 → ready → schedule → execute → gogo</code>，不要同时铺开 GC、栈、netpoll。</li>
+<li><strong>用实验验证结论</strong>：读到一个机制，写 30 行代码用 <code>-gcflags=-m</code>、trace 或 GODEBUG 复现它，再回源码。纯读容易产生”以为懂了”。</li>
+<li><strong>先读注释再读代码</strong>：runtime 源码的头部注释（<code>mgc.go</code>、<code>proc.go</code>、<code>hchan</code> 上方）通常是设计文档，比代码更准确。</li>
+<li><strong>行号会漂移</strong>：所有链接固定到 <code>go1.26.5</code> commit；切到别的版本，行号不能直接信。</li>
+<li><strong>画自己的图</strong>：每个主题画一张数据结构关系图（本篇其他笔记用 Mermaid），比硬记字段有效。</li>
+</ul>
+<h2 id="参考资料">参考资料</h2>
+<ul>
+<li><a href="https://github.com/golang/go/tree/c19862e5f8415b4f24b189d065ed739517c548ba/src" rel="noopener noreferrer" target="_blank">Go 1.26.5 源码树</a></li>
+<li><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/HACKING.md" rel="noopener noreferrer" target="_blank"><code>runtime/HACKING.md</code></a> —— runtime 贡献者必读</li>
+<li><a href="https://go.dev/doc/asm" rel="noopener noreferrer" target="_blank">Go 汇编指南</a></li>
+<li><a href="https://go.dev/doc/diagnostics" rel="noopener noreferrer" target="_blank">Go 诊断工具</a></li>
+<li><a href="https://go.dev/ref/mem" rel="noopener noreferrer" target="_blank">Go 内存模型</a></li>
+<li>配套阅读：<a href="/bootstrap/">Go 程序启动流程（Go 1.26.5 源码分析）</a>、<a href="/gmp/">GMP（Go 1.26.5 源码分析）</a></li>
+</ul></main><aside class="toc"><p class="toc-title">本页目录</p><ul><li class="toc-d2"><a href="#固定源码与构建环境">固定源码与构建环境</a></li><li class="toc-d2"><a href="#src-目录总览">src 目录总览</a></li><li class="toc-d2"><a href="#runtime-关键文件分组">runtime 关键文件分组</a></li><li class="toc-d2"><a href="#四组必备工具">四组必备工具</a></li><li class="toc-d2"><a href="#runtime-的特殊约束">runtime 的特殊约束</a></li><li class="toc-d2"><a href="#推荐的阅读姿势">推荐的阅读姿势</a></li><li class="toc-d2"><a href="#参考资料">参考资料</a></li></ul></aside></div><div class="lightbox" id="lightbox" aria-hidden="true"><img alt=""></div><script type="module">var e=document.documentElement,t=document.getElementById(`themeToggle`),n={auto:`🖥️`,light:`☀️`,dark:`🌙`};function r(){var e=localStorage.getItem(`theme`);return e===`light`||e===`dark`?e:`auto`}function i(){var i=r();i===`auto`?e.removeAttribute(`data-theme`):e.setAttribute(`data-theme`,i),t.textContent=n[i]}i(),t.addEventListener(`click`,()=>{var e=[`auto`,`light`,`dark`],t=e[(e.indexOf(r())+1)%3];t===`auto`?localStorage.removeItem(`theme`):localStorage.setItem(`theme`,t),i()}),window.matchMedia(`(prefers-color-scheme: dark)`).addEventListener(`change`,()=>{r()===`auto`&&i()});var a=document.getElementById(`lightbox`),o=a.querySelector(`img`);document.querySelectorAll(`.prose img`).forEach(e=>{e.style.cursor=`zoom-in`,e.addEventListener(`click`,()=>{o.src=e.currentSrc||e.src,o.alt=e.alt,a.classList.add(`open`),a.setAttribute(`aria-hidden`,`false`)})}),a.addEventListener(`click`,()=>{a.classList.remove(`open`),a.setAttribute(`aria-hidden`,`true`)}),document.addEventListener(`keydown`,e=>{e.key===`Escape`&&a.click()});</script></body></html>
