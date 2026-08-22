@@ -516,6 +516,69 @@ wakep 唤醒一个 M 来跑" data-shape="rectangle">
 <li>若干被 syscall/cgo 堵住的 M。</li>
 </ul>
 <p>而 <code>epoll_wait</code> 一个线程就能监听上百万 fd。因此几十万连接只对应几十万 parked G，常驻 M 数与连接数无关。</p>
+<h2 id="和-java-的对比">和 Java 的对比</h2>
+<p>先抓住一个前提：<strong>多路复用那一层是 OS 的公版能力</strong>。Go netpoller 在 Linux 上用 epoll，Java NIO 的 <code>Selector</code> 底层也是 epoll；BSD/macOS 都用 kqueue，Windows 都用 IOCP。区别不在”谁能用 epoll”，而在 <strong>fd 没就绪时挂起谁、由谁来复用线程</strong> 这层并发抽象。</p>
+<p><strong>Java 的三代做法：</strong></p>
+<ul>
+<li><strong>阻塞 IO + thread-per-connection（<code>java.net.Socket</code>）</strong>：一个连接一个平台线程，<code>read()</code> 没数据就阻塞 OS 线程。平台线程默认约 1MB 栈、由 OS 调度。10 万连接 = 10 万线程，内存和上下文切换都爆。这正是 Go netpoller 要解决的反面教材。</li>
+<li><strong>NIO Selector + Reactor（Netty 为代表）</strong>：把非阻塞 <code>SocketChannel</code> 注册到 <code>Selector</code>，声明关心 <code>OP_READ</code>/<code>OP_WRITE</code>；少量 EventLoop 线程（Netty 默认 <code>2 * CPU</code> 核）跑 <code>select()</code>，拿到一批就绪 key 后分发到各自的 ChannelPipeline 回调。靠几个线程也能扛几十万连接，<strong>伸缩性和 Go 相同</strong>，因为同样吃 epoll。代价是编程模型变成异步回调/状态机——不能写直线代码，要拆 handler、管 event loop 绑定、处理半包和背压，心智负担重，Netty 就是帮你扛这些的框架。</li>
+<li><strong>虚拟线程（Project Loom，JDK 21+）</strong>：现在可以像 Go 一样写直线阻塞代码：一个虚拟线程处理一个连接，<code>socket.read()</code> 没数据就 park 虚拟线程，carrier（平台线程）放回 ForkJoinPool 跑别的虚拟线程。JDK 内部有自己的 Poller 线程调 epoll，fd 就绪再 unpark 对应虚拟线程——<strong>这几乎是 Go netpoller + GMP 的镜像</strong>：poller ≈ netpoller，虚拟线程 ≈ G，carrier 线程 ≈ M，scheduler ≈ P。</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>维度</th><th>Go</th><th>Java NIO / Netty</th><th>Java 虚拟线程 (JDK 21+)</th></tr></thead><tbody><tr><td>多路复用</td><td>epoll / kqueue / IOCP</td><td>epoll / kqueue / IOCP（Selector）</td><td>epoll / kqueue / IOCP（JDK Poller）</td></tr><tr><td>连接对应</td><td>goroutine</td><td>Channel + 回调（无每连接线程）</td><td>虚拟线程</td></tr><tr><td>调度单元</td><td>goroutine（约 2KB 栈，运行时 M:N）</td><td>平台线程（EventLoop）</td><td>虚拟线程（挂到 carrier，M:N）</td></tr><tr><td>代码写法</td><td>同步直线</td><td>异步回调 / Reactor</td><td>同步直线</td></tr><tr><td>调度集成</td><td><strong>语言运行时内置</strong>，findRunnable 里直接 netpoll、work stealing</td><td><strong>库级别</strong>，Netty 自己写 EventLoop 调度</td><td>JDK 内置，与线程模型/GC 解耦</td></tr><tr><td>栈管理</td><td>栈可拷贝、动态伸缩</td><td>平台线程约 1MB 固定栈</td><td>虚拟线程栈存堆上</td></tr><tr><td>典型坑</td><td>对用户几乎透明</td><td>回调地狱、event loop 不能阻塞、线程模型手管</td><td><code>synchronized</code>/native 调用会 pin 住 carrier</td></tr></tbody></table>
+<p>一句话：Go 的优势不是”用了 epoll”，而是 <strong>goroutine + GMP 把 epoll 封进了运行时，用同步写法拿到异步伸缩性，还不用碰回调</strong>。Java 绕了一圈——重线程 → NIO 异步回调（Netty）→ 虚拟线程（又回到同步写法）；Loom 之后两者架构高度同构，差别主要在生态成熟度和运行时集成深度。</p>
 <h2 id="边界与误区">边界与误区</h2>
 <ul>
 <li><strong>只有网络 fd 走 netpoller</strong>。Linux 上 epoll 对 regular file（普通磁盘文件）永远报”就绪”，但磁盘读本身可能在内核里阻塞。这种 read 走 <code>entersyscall</code> 路径：M 与 P 解绑、让 P 去找别的 M 跑，等 I/O 完成再回来，<strong>不是 park G</strong>。所以磁盘 IO 重的服务 M 数会明显多于 <code>GOMAXPROCS</code>。</li>
@@ -532,4 +595,4 @@ wakep 唤醒一个 M 来跑" data-shape="rectangle">
 <li><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/netpoll_epoll.go" rel="noopener noreferrer" target="_blank"><code>runtime/netpoll_epoll.go</code></a></li>
 <li><a href="https://github.com/golang/go/tree/c19862e5f8415b4f24b189d065ed739517c548ba/src/internal/poll" rel="noopener noreferrer" target="_blank"><code>internal/poll</code></a></li>
 <li>Go 网络编程与 netpoller 设计文档</li>
-</ul></main><aside class="toc"><p class="toc-title">本页目录</p><ul><li class="toc-d2"><a href="#核心模型从阻塞线程到park-g">核心模型：从”阻塞线程”到”park G”</a></li><li class="toc-d2"><a href="#polldesc每个-fd-的等待记录">pollDesc：每个 fd 的等待记录</a></li><li class="toc-d2"><a href="#阻塞与唤醒netpollblock-与-netpollgoready">阻塞与唤醒：netpollblock 与 netpollgoready</a></li><li class="toc-d2"><a href="#epoll-后端注册等待卸货">epoll 后端：注册、等待、卸货</a></li><li class="toc-d2"><a href="#与调度器的三次握手">与调度器的三次握手</a></li><li class="toc-d2"><a href="#为什么能扛几十万连接">为什么能扛几十万连接</a></li><li class="toc-d2"><a href="#边界与误区">边界与误区</a></li><li class="toc-d2"><a href="#参考资料">参考资料</a></li></ul></aside></div><div class="lightbox" id="lightbox" aria-hidden="true"><img alt=""></div><script type="module">var e=document.documentElement,t=document.getElementById(`themeToggle`),n={auto:`🖥️`,light:`☀️`,dark:`🌙`};function r(){var e=localStorage.getItem(`theme`);return e===`light`||e===`dark`?e:`auto`}function i(){var i=r();i===`auto`?e.removeAttribute(`data-theme`):e.setAttribute(`data-theme`,i),t.textContent=n[i]}i(),t.addEventListener(`click`,()=>{var e=[`auto`,`light`,`dark`],t=e[(e.indexOf(r())+1)%3];t===`auto`?localStorage.removeItem(`theme`):localStorage.setItem(`theme`,t),i()}),window.matchMedia(`(prefers-color-scheme: dark)`).addEventListener(`change`,()=>{r()===`auto`&&i()});var a=document.getElementById(`lightbox`),o=a.querySelector(`img`);document.querySelectorAll(`.prose img`).forEach(e=>{e.style.cursor=`zoom-in`,e.addEventListener(`click`,()=>{o.src=e.currentSrc||e.src,o.alt=e.alt,a.classList.add(`open`),a.setAttribute(`aria-hidden`,`false`)})}),a.addEventListener(`click`,()=>{a.classList.remove(`open`),a.setAttribute(`aria-hidden`,`true`)}),document.addEventListener(`keydown`,e=>{e.key===`Escape`&&a.click()});</script></body></html>
+</ul></main><aside class="toc"><p class="toc-title">本页目录</p><ul><li class="toc-d2"><a href="#核心模型从阻塞线程到park-g">核心模型：从”阻塞线程”到”park G”</a></li><li class="toc-d2"><a href="#polldesc每个-fd-的等待记录">pollDesc：每个 fd 的等待记录</a></li><li class="toc-d2"><a href="#阻塞与唤醒netpollblock-与-netpollgoready">阻塞与唤醒：netpollblock 与 netpollgoready</a></li><li class="toc-d2"><a href="#epoll-后端注册等待卸货">epoll 后端：注册、等待、卸货</a></li><li class="toc-d2"><a href="#与调度器的三次握手">与调度器的三次握手</a></li><li class="toc-d2"><a href="#为什么能扛几十万连接">为什么能扛几十万连接</a></li><li class="toc-d2"><a href="#和-java-的对比">和 Java 的对比</a></li><li class="toc-d2"><a href="#边界与误区">边界与误区</a></li><li class="toc-d2"><a href="#参考资料">参考资料</a></li></ul></aside></div><div class="lightbox" id="lightbox" aria-hidden="true"><img alt=""></div><script type="module">var e=document.documentElement,t=document.getElementById(`themeToggle`),n={auto:`🖥️`,light:`☀️`,dark:`🌙`};function r(){var e=localStorage.getItem(`theme`);return e===`light`||e===`dark`?e:`auto`}function i(){var i=r();i===`auto`?e.removeAttribute(`data-theme`):e.setAttribute(`data-theme`,i),t.textContent=n[i]}i(),t.addEventListener(`click`,()=>{var e=[`auto`,`light`,`dark`],t=e[(e.indexOf(r())+1)%3];t===`auto`?localStorage.removeItem(`theme`):localStorage.setItem(`theme`,t),i()}),window.matchMedia(`(prefers-color-scheme: dark)`).addEventListener(`change`,()=>{r()===`auto`&&i()});var a=document.getElementById(`lightbox`),o=a.querySelector(`img`);document.querySelectorAll(`.prose img`).forEach(e=>{e.style.cursor=`zoom-in`,e.addEventListener(`click`,()=>{o.src=e.currentSrc||e.src,o.alt=e.alt,a.classList.add(`open`),a.setAttribute(`aria-hidden`,`false`)})}),a.addEventListener(`click`,()=>{a.classList.remove(`open`),a.setAttribute(`aria-hidden`,`true`)}),document.addEventListener(`keydown`,e=>{e.key===`Escape`&&a.click()});</script></body></html>
