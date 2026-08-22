@@ -1,0 +1,228 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>泛型与字典传递：Go 1.26.5 源码分析</title><script>
+      (function () {
+        var s = localStorage.getItem('theme');
+        if (s === 'light' || s === 'dark') {
+          document.documentElement.setAttribute('data-theme', s);
+        }
+      })();
+    </script><link rel="stylesheet" href="/_astro/Base.h73xs6F0.css"></head><body><header class="topbar"><a href="/" class="brand">HLDay</a><nav><a href="/">专题</a><a href="/posts/">博客</a><a href="https://github.com/hTangle" class="nav-github" aria-label="GitHub">GitHub</a></nav><button class="theme-toggle" id="themeToggle" type="button" title="切换主题（自动/浅色/深色）" aria-label="切换主题">🖥️</button></header><div class="layout"><aside class="booknav"><ul class="nav-tree"><li><p class="nav-group">Go</p><ul><li><p class="nav-subgroup">运行时基础</p><ul><li class><a href="/source-map/">源码环境与目录地图</a></li><li class><a href="/bootstrap/">程序启动流程</a></li></ul></li><li><p class="nav-subgroup">并发编程</p><ul><li class><a href="/gmp/">GMP 调度器</a></li><li class><a href="/netpoll/">网络轮询器</a></li><li class><a href="/timer/">定时器</a></li><li class><a href="/sync-lock/">同步和锁</a></li><li class><a href="/channel/">Channel</a></li><li class><a href="/context/">Context</a></li><li class><a href="/defer-panic/">defer/panic/recover</a></li></ul></li><li><p class="nav-subgroup">内存管理</p><ul><li class><a href="/memory-alloc/">内存分配器</a></li><li class><a href="/gc/">垃圾收集器</a></li><li class><a href="/stack/">栈空间管理</a></li></ul></li><li><p class="nav-subgroup">数据结构</p><ul><li class><a href="/type-metadata/">类型元数据与对象布局</a></li><li class><a href="/iface/">Interface 与动态调用</a></li><li class="active"><a href="/generics/">泛型与字典传递</a></li><li class><a href="/array/">数组</a></li><li class><a href="/slice/">切片</a></li><li class><a href="/swiss-map/">哈希表 (Swiss Table)</a></li><li class><a href="/string/">字符串</a></li></ul></li></ul></li><li><p class="nav-group">Agent 开发</p><ul><li><p class="nav-subgroup">核心协议与机制</p><ul><li class><a href="/mcp/">MCP</a></li><li class><a href="/skill/">Skill</a></li><li class><a href="/tool-call/">Tool Call</a></li></ul></li></ul></li></ul></aside><main class="prose"><h1>泛型与字典传递：Go 1.26.5 源码分析</h1><div class="markdown-alert markdown-alert-tip" dir="auto">
+<p class="markdown-alert-title" dir="auto"><svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8 1.5c-2.363 0-4 1.69-4 3.75 0 .984.424 1.625.984 2.304l.214.253c.223.264.47.556.673.848.284.411.537.896.621 1.49a.75.75 0 0 1-1.484.211c-.04-.282-.163-.547-.37-.847a8.456 8.456 0 0 0-.542-.68c-.084-.1-.173-.205-.268-.32C3.201 7.75 2.5 6.766 2.5 5.25 2.5 2.31 4.863 0 8 0s5.5 2.31 5.5 5.25c0 1.516-.701 2.5-1.328 3.259-.095.115-.184.22-.268.319-.207.245-.383.453-.541.681-.208.3-.33.565-.37.847a.751.751 0 0 1-1.485-.212c.084-.593.337-1.078.621-1.489.203-.292.45-.584.673-.848.075-.088.147-.173.213-.253.561-.679.985-1.32.985-2.304 0-2.06-1.637-3.75-4-3.75ZM5.75 12h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1 0-1.5ZM6 15.25a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1-.75-.75Z"></path></svg>TIP</p>
+<p> 先抓住主干
+Go 泛型不是 C++ 那种”每个类型参数生成一份代码”的完全单态化，也不是 Java 那种”全擦成 Object”的装箱，而是<strong>两者混合</strong>：</p>
+<ol>
+<li><strong>GC shape 分组（stenciling）</strong>：把”内存布局和 GC 行为相同”的类型归为一个 shape（所有指针一个 shape，int64/uint64/float64 一个 shape，……），每个 shape <strong>生成一份函数机器码</strong>。</li>
+<li><strong>字典传递（dictionary）</strong>：泛型函数被调用时，编译器额外传入一个<strong>字典指针</strong>，里面装着具体类型的 <code>*abi.Type</code>、itab、方法函数值、子字典等——所有需要”知道具体类型”的操作都查字典。</li>
+</ol>
+<p>结果是：<code>Max[int]</code> 和 <code>Max[uint64]</code> 可能共用一份机器码（同 shape），但执行行为由各自的字典区分，既不爆炸代码体积，又不牺牲太多性能。</p>
+</div>
+<p><strong>版本与源码基线</strong></p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>主题</th><th>位置</th></tr></thead><tbody><tr><td>类型检查与实例化</td><td><code>cmd/compile/internal/types2/instantiate.go</code>、<code>subst.go</code>、<code>mono.go</code></td></tr><tr><td>统一 IR 与字典/shape 生成</td><td><code>cmd/compile/internal/noder/unified.go</code>、<code>reader.go</code>、<code>writer.go</code></td></tr><tr><td>代码生成（字典传参、shape 调用）</td><td><code>cmd/compile/internal/ssagen/</code>、<code>cmd/compile/internal/walk/</code></td></tr><tr><td>运行时类型描述符</td><td>见 <a href="/type-metadata/">Go 类型元数据与对象布局（Go 1.26.5）</a></td></tr><tr><td>itab/接口</td><td>见 <a href="/iface/">Interface 与动态调用（Go 1.26.5 源码分析）</a></td></tr></tbody></table>
+<p>注：本系列其他 runtime 笔记可给精确行号；泛型主要是<strong>编译期机制</strong>，运行时几乎不感知（没有”泛型对象”），所以下面以编译器设计和生成结果为主，不纠结逐行号。</p>
+<div class="bm-diagram"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 580.3209999999999 596.4" width="580.3209999999999" height="596.4" style="--bg:var(--bm-bg);--fg:var(--bm-fg);--line:var(--bm-border);--accent:var(--bm-accent);--muted:var(--bm-muted);--surface:var(--bm-surface);--border:var(--bm-border)">
+<style>
+  text { font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif; }
+  svg {
+    /* Derived from --bg and --fg (overridable via --line, --accent, etc.) */
+    --_text:          var(--fg);
+    --_text-sec:      var(--muted, color-mix(in srgb, var(--fg) 60%, var(--bg)));
+    --_text-muted:    var(--muted, color-mix(in srgb, var(--fg) 40%, var(--bg)));
+    --_text-faint:    color-mix(in srgb, var(--fg) 25%, var(--bg));
+    --_line:          var(--line, color-mix(in srgb, var(--fg) 50%, var(--bg)));
+    --_arrow:         var(--accent, color-mix(in srgb, var(--fg) 85%, var(--bg)));
+    --_node-fill:     var(--surface, color-mix(in srgb, var(--fg) 3%, var(--bg)));
+    --_node-stroke:   var(--border, color-mix(in srgb, var(--fg) 20%, var(--bg)));
+    --_group-fill:    var(--bg);
+    --_group-hdr:     color-mix(in srgb, var(--fg) 5%, var(--bg));
+    --_inner-stroke:  color-mix(in srgb, var(--fg) 12%, var(--bg));
+    --_key-badge:     color-mix(in srgb, var(--fg) 10%, var(--bg));
+  }
+</style>
+<defs>
+  <marker id="arrowhead" markerWidth="8" markerHeight="5" refX="7" refY="2.5" orient="auto">
+    <polygon points="0 0, 8 2.5, 0 5" fill="var(--_arrow)" stroke="var(--_arrow)" stroke-width="0.75" stroke-linejoin="round"></polygon>
+  </marker>
+  <marker id="arrowhead-start" markerWidth="8" markerHeight="5" refX="1" refY="2.5" orient="auto-start-reverse">
+    <polygon points="8 0, 0 2.5, 8 5" fill="var(--_arrow)" stroke="var(--_arrow)" stroke-width="0.75" stroke-linejoin="round"></polygon>
+  </marker>
+</defs>
+<g class="subgraph" data-id="COMPILE" data-label="编译期">
+  <rect x="40" y="147.8" width="500.32099999999997" height="232.5" rx="0" ry="0" fill="var(--_group-fill)" stroke="var(--_node-stroke)" stroke-width="1"></rect>
+  <rect x="40" y="147.8" width="500.32099999999997" height="28" rx="0" ry="0" fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="1"></rect>
+  <text x="52" y="161.8" font-size="12" font-weight="600" fill="var(--_text-sec)" dy="4.199999999999999">编译期</text>
+</g>
+<polyline class="edge" data-from="CALL1" data-to="DICT" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="346.847,85.35000000000001 346.847,138.57500000000002 411.46199999999993,138.57500000000002 411.46199999999993,191.8" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)"></polyline>
+<polyline class="edge" data-from="CALL2" data-to="DICT" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="476.077,85.35000000000001 476.077,138.57500000000002 411.46199999999993,138.57500000000002 411.46199999999993,191.8" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)"></polyline>
+<polyline class="edge" data-from="STENCIL" data-to="RT" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="运行时查字典" points="163.30149999999998,364.3 163.3015,502.6" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)"></polyline>
+<polyline class="edge" data-from="SHAPE" data-to="STENCIL" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="163.30149999999998,262.5 163.30149999999998,310.5" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)"></polyline>
+<g class="edge-label" data-from="STENCIL" data-to="RT" data-label="运行时查字典">
+  <rect x="118.8015" y="429.3" width="88.93" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1"></rect>
+  <text x="163.2665" y="444.45" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">运行时查字典</text>
+</g>
+<g class="node" data-id="SRC" data-label="&#x22;泛型源码
+func Max[T cmp.Ordered" data-shape="rectangle">
+  <rect x="87.3445" y="48.45" width="187.18599999999998" height="53.800000000000004" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></rect>
+  <text x="180.9375" y="75.35000000000001" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)"><tspan x="180.9375" dy="-3.9000000000000012">"泛型源码</tspan><tspan x="180.9375" dy="16.900000000000002">func Max[T cmp.Ordered</tspan></text>
+</g>
+<g class="node" data-id="CALL1" data-label="&#x22;Max[int" data-shape="rectangle">
+  <rect x="302.53049999999996" y="48.45" width="88.63300000000001" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></rect>
+  <text x="346.847" y="66.9" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">"Max[int</text>
+</g>
+<g class="node" data-id="CALL2" data-label="&#x22;Max[float64" data-shape="rectangle">
+  <rect x="419.1635" y="48.45" width="113.827" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></rect>
+  <text x="476.077" y="66.9" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">"Max[float64</text>
+</g>
+<g class="node" data-id="RT" data-label="移动内存用 shape 布局
+调用方法/转接口用字典" data-shape="rectangle">
+  <rect x="66.37400000000001" y="502.6" width="193.855" height="53.800000000000004" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></rect>
+  <text x="163.3015" y="529.5" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)"><tspan x="163.3015" dy="-3.9000000000000012">移动内存用 shape 布局</tspan><tspan x="163.3015" dy="16.900000000000002">调用方法/转接口用字典</tspan></text>
+</g>
+<g class="node" data-id="SHAPE" data-label="GC shape 分组
+指针类→shape-ptr
+int64/float64...→shape-uint8 等" data-shape="rectangle">
+  <rect x="56" y="191.8" width="214.60299999999998" height="70.7" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></rect>
+  <text x="163.30149999999998" y="227.15" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)"><tspan x="163.30149999999998" dy="-12.350000000000001">GC shape 分组</tspan><tspan x="163.30149999999998" dy="16.900000000000002">指针类→shape-ptr</tspan><tspan x="163.30149999999998" dy="16.900000000000002">int64/float64...→shape-uint8 等</tspan></text>
+</g>
+<g class="node" data-id="STENCIL" data-label="&#x22;每个 shape 一份机器码
+Max[go.shape.uint8" data-shape="rectangle">
+  <rect x="67.856" y="310.5" width="190.891" height="53.800000000000004" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></rect>
+  <text x="163.30149999999998" y="337.4" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)"><tspan x="163.30149999999998" dy="-3.9000000000000012">"每个 shape 一份机器码</tspan><tspan x="163.30149999999998" dy="16.900000000000002">Max[go.shape.uint8</tspan></text>
+</g>
+<g class="node" data-id="DICT" data-label="为每个调用点构建字典
+*Type · itab · 方法值 · 子字典" data-shape="rectangle">
+  <rect x="298.60299999999995" y="191.8" width="225.718" height="53.800000000000004" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></rect>
+  <text x="411.46199999999993" y="218.70000000000002" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)"><tspan x="411.46199999999993" dy="-3.9000000000000012">为每个调用点构建字典</tspan><tspan x="411.46199999999993" dy="16.900000000000002">*Type · itab · 方法值 · 子字典</tspan></text>
+</g>
+</svg></div>
+<h2 id="类型参数约束与类型集">类型参数、约束与类型集</h2>
+<p>语法层三个概念：</p>
+<ul>
+<li><strong>类型参数（type parameter）</strong>：函数或类型声明里 <code>[T any]</code>、<code>[T comparable]</code> 的 <code>T</code>，是一个占位类型。</li>
+<li><strong>约束（constraint）</strong>：类型参数的”类型”，本质是一个 <strong>interface</strong>。Go 1.18 扩展了 interface：除了方法集，还可以嵌<strong>类型集（type set）</strong>，用 <code>|</code> 列出允许的具体类型，如 <code>constraints.Integer</code> 大致是 <code>~int | ~int8 | ... | ~uint64</code>。
+<ul>
+<li>只有方法的约束是老派接口（<code>io.Reader</code>）；</li>
+<li>带类型列表的约束只能用于泛型约束，不能当普通接口值传。</li>
+</ul>
+</li>
+<li><strong><code>comparable</code></strong>：一个内置约束，表示类型可以用 <code>==</code>/<code>!=</code>。它比”类型集可比较”更微妙，是个编译器特判的约束。</li>
+</ul>
+<p><code>~T</code>（underlying type，近似底层类型）很关键：<code>~int</code> 表示”底层类型是 int 的所有命名类型”。所以 <code>type MyInt int</code> 也满足 <code>~int</code>，即使它和 <code>int</code> 是两个不同类型。约束匹配按<strong>底层类型</strong>和方法集判断，不是按类型名。</p>
+<h2 id="gc-shape哪些类型共用一份机器码">GC shape：哪些类型共用一份机器码</h2>
+<p>核心想法：如果两个类型在运行时<strong>布局和 GC 行为完全一致</strong>，同一份机器码就能正确处理它们，不需要重复生成。</p>
+<p>一个 GC shape 由这些因素决定（对类型的归纳）：</p>
+<ul>
+<li><strong>大小与对齐</strong>（<code>Size_</code>、<code>Align_</code>）；</li>
+<li><strong>指针前缀长度 <code>PtrBytes</code></strong>：GC 扫描只看这部分；</li>
+<li><strong>是否为指针类型</strong>（<code>TFlagDirectIface</code>，值本身是一个指针字）；</li>
+<li><strong>哈希/相等函数的族</strong>（能否当连续内存 memequal/memhash，还是需要 <code>Equal</code>）。</li>
+</ul>
+<p>由此得到直觉：</p>
+<ul>
+<li>所有指针 <code>*int</code>、<code>*Foo</code>、<code>*Bar</code>、<code>unsafe.Pointer</code> → <strong>同一个 shape</strong>（都是一个指针字）；</li>
+<li>所有一字节非指针 <code>int8</code>/<code>uint8</code>/<code>byte</code>/<code>bool</code> → 一个 shape；</li>
+<li><code>int64</code>/<code>uint64</code>/<code>float64</code>（在 64 位平台）→ 一个 shape；</li>
+<li><code>int32</code>/<code>uint32</code>/<code>float32</code> → 一个 shape；</li>
+<li><code>string</code>、<code>slice</code>、<code>interface</code>、<code>chan</code>、<code>map</code>、<code>func</code> 各自一个 shape（布局固定）；</li>
+<li>每个不同字段布局的 struct、不同元素类型/长度的 array，通常各自一个 shape（或按指针位图折叠）。</li>
+</ul>
+<p>调用 <code>Max[int]</code> 和 <code>Max[uint64]</code>，若二者属同 shape，编译器只生成一份函数体，符号被 mangle 成 <code>Max[go.shape.uint8]</code>（名字里带 shape 标识，不是具体类型名）。具体是谁，靠字典区分。</p>
+<p>这是<strong>部分单态化</strong>：比全装箱快（没有类型断言/拆箱），比完全单态化省代码（不会 <code>Max[int]</code>、<code>Max[uint]</code>、<code>Max[int64]</code>… 各来一份）。</p>
+<h2 id="字典所有需要具体类型的信息">字典：所有”需要具体类型”的信息</h2>
+<p>泛型函数机器码里，对类型参数 <code>T</code> 的值能直接做的操作，只有<strong>不依赖具体类型</strong>的：按字移动内存、清内存、已知偏移的读写。但凡涉及下列操作，必须查字典：</p>
+<ul>
+<li>把 <code>T</code> 值装箱进 interface（需要 <code>*abi.Type</code>）；</li>
+<li>做类型断言、type switch；</li>
+<li>调用 <code>T</code> 的方法（方法地址因类型而异）；</li>
+<li>访问结构体字段、调用类型参数的底层类型的方法；</li>
+<li>把 <code>T</code> 放进 map（需要哈希/相等函数）、比较 <code>==</code>；</li>
+<li>用 <code>T</code> 调另一个泛型函数（需要传<strong>子字典</strong>）。</li>
+</ul>
+<p>字典在编译期为每个具体调用点构建，是一个<strong>编译单元内的只读结构</strong>，大致包含：</p>
+<ul>
+<li>类型参数对应的 <strong><code>*abi.Type</code></strong>（运行时类型描述符）；</li>
+<li>约束方法所需的 <strong>itab</strong>（见 Interface 笔记）或方法函数值；</li>
+<li>字典里的 <strong>函数/方法值</strong>（method expression）；</li>
+<li>嵌套泛型调用的 <strong>子字典指针</strong>。</li>
+</ul>
+<p>调用泛型函数时，字典作为<strong>第一个额外参数</strong>传入（类似上下文指针）。在 ABIInternal 下走寄存器，不额外占栈。</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#6A737D">// 你写的</span></span>
+<span class="line"><span style="color:#F97583">func</span><span style="color:#B392F0"> MapKeys</span><span style="color:#E1E4E8">[</span><span style="color:#FFAB70">K</span><span style="color:#B392F0"> comparable</span><span style="color:#E1E4E8">, </span><span style="color:#FFAB70">V</span><span style="color:#B392F0"> any</span><span style="color:#E1E4E8">](</span><span style="color:#FFAB70">m</span><span style="color:#F97583"> map</span><span style="color:#E1E4E8">[</span><span style="color:#B392F0">K</span><span style="color:#E1E4E8">]</span><span style="color:#B392F0">V</span><span style="color:#E1E4E8">) []</span><span style="color:#B392F0">K</span><span style="color:#E1E4E8"> { </span><span style="color:#F97583">...</span><span style="color:#E1E4E8"> }</span></span>
+<span class="line"><span style="color:#E1E4E8">keys </span><span style="color:#F97583">:=</span><span style="color:#B392F0"> MapKeys</span><span style="color:#E1E4E8">[</span><span style="color:#F97583">string</span><span style="color:#E1E4E8">, </span><span style="color:#F97583">int</span><span style="color:#E1E4E8">](m)</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#6A737D">// 编译器大致生成（示意，非真实代码）</span></span>
+<span class="line"><span style="color:#F97583">func</span><span style="color:#B392F0"> MapKeys</span><span style="color:#E1E4E8">[</span><span style="color:#B392F0">shapeK</span><span style="color:#E1E4E8">, </span><span style="color:#B392F0">shapeV</span><span style="color:#E1E4E8">](</span><span style="color:#FFAB70">dict</span><span style="color:#F97583"> *</span><span style="color:#B392F0">Dict</span><span style="color:#E1E4E8">, </span><span style="color:#FFAB70">m</span><span style="color:#F97583"> map</span><span style="color:#E1E4E8">[</span><span style="color:#B392F0">shapeK</span><span style="color:#E1E4E8">]</span><span style="color:#B392F0">shapeV</span><span style="color:#E1E4E8">) []</span><span style="color:#B392F0">shapeK</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#6A737D">    // map 操作通过 dict 里的 hash/equal</span></span>
+<span class="line"><span style="color:#6A737D">    // new([]shapeK) 用 dict 里的 *abi.Type</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span>
+<span class="line"><span style="color:#F97583">&#x26;</span><span style="color:#E1E4E8">dictFor_string_int </span><span style="color:#F97583">:=</span><span style="color:#F97583"> &#x26;</span><span style="color:#B392F0">Dict</span><span style="color:#E1E4E8">{</span></span>
+<span class="line"><span style="color:#E1E4E8">    Ktype: typeOfString, Vtype: typeOfInt,</span></span>
+<span class="line"><span style="color:#F97583">    ...</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span>
+<span class="line"><span style="color:#B392F0">MapKeys</span><span style="color:#E1E4E8">(</span><span style="color:#F97583">&#x26;</span><span style="color:#E1E4E8">dictFor_string_int, m)</span></span></code></pre>
+<h2 id="方法itab-与泛型接收者">方法、itab 与泛型接收者</h2>
+<p>泛型类型的方法、以及对类型参数调用约束方法，是字典最能体现价值的地方：</p>
+<ul>
+<li><code>type Stack[T any] struct{ ... }</code> 的方法 <code>func (s *Stack[T]) Push(v T)</code> 会按 <code>T</code> 的 shape 生成代码；方法表和接口实现由编译器实例化时补齐。</li>
+<li>当一个泛型函数里 <code>T</code> 约束为 <code>io.Reader</code>，并调 <code>T.Read</code> 时：字典里存的是<strong>具体类型实现 <code>Read</code> 的函数地址</strong>（或一个 itab），函数体通过 <code>dict.ReadFn</code> 间接调用，和接口的动态分发同构，但比接口调用多了内联和去虚化的机会。</li>
+<li>泛型类型实现接口时，编译器在实例化点生成对应的 itab/方法表，保证 `var _ io.Reader = &#x26;MyStruct[int]{} 能成立。</li>
+</ul>
+<p>一个反直觉点：<strong>类型参数本身不能直接”断言成具体类型”</strong>（除了 type switch），因为它在机器码层是 shape。所有运行时类型识别都要走字典或接口。</p>
+<h2 id="泛型与逃逸内联性能">泛型与逃逸、内联、性能</h2>
+<ul>
+<li><strong>字典本身通常不导致分配</strong>：它在编译期构建为只读静态数据，传的是指针。</li>
+<li><strong>泛型函数里的 <code>new(T)</code> / <code>make([]T, n)</code></strong>：字典给类型描述符，分配走标准 <code>mallocgc</code>；是否逃逸按常规逃逸分析判断，没有因为”泛型”就必然堆分配。</li>
+<li><strong>内联</strong>：小泛型函数可以被内联，字典和 shape 代码在内联后常常被进一步优化（常量传播、去虚化）。<code>slices.Sort</code>、<code>maps.Clone</code> 这类标准库泛型之所以快，部分原因是编译器能针对 shape 内联和特化。</li>
+<li><strong>代码体积</strong>：shape 分组已大幅抑制膨胀，但如果用了大量布局各异的 struct 实例化泛型，每个 struct 仍可能是一个独立 shape，体积会增长——这是”用泛型还是接口”的经典权衡。</li>
+<li><strong>与接口的选择</strong>：
+<ul>
+<li>类型集小、操作”数据相关”（排序、集合、算法）→ 泛型，内联 + 无装箱；</li>
+<li>类型集开放、只需少量行为（<code>io.Reader</code>）→ 接口，一份代码、二进制小；</li>
+<li>两者可组合：泛型函数内部用约束方法，对外暴露接口版本也常见。</li>
+</ul>
+</li>
+</ul>
+<h2 id="边界与误区">边界与误区</h2>
+<ul>
+<li><strong>泛型是编译期概念</strong>：运行时没有”泛型类型”这回事，只有 shape 实例化后的具体类型、字典和普通机器码。反射看不到类型参数（它只看到实例化后的具体类型）。</li>
+<li><strong><code>any</code> 不是万能</strong>：用 <code>any</code> 做类型参数会退化成大量 interface 操作，反而比直接用接口慢；约束越精确，编译器能生成的代码越好。</li>
+<li><strong>方法不能直接引入新的类型参数</strong>：Go 目前只允许泛型<strong>类型</strong>的方法，不允许方法自己声明类型参数（即 <code>func (s Stack[T]) Map[R](...)</code> 不合法）。变通方式是用包级泛型函数。</li>
+<li><strong><code>comparable</code> 不是”类型集可比较”那么简单</strong>：它包含接口类型、指针等，且随版本演进；不要用它推断结构体字段能否比较。</li>
+<li><strong>递归类型参数有约束</strong>：像 <code>type T[T2]</code> 这类递归/自引用实例化受编译器规则限制，遇到 F-bounded 多态的写法要小心。</li>
+<li><strong>没有 <code>switch T.(type)</code> 对类型参数</strong>：对类型参数做分支用普通 type switch 断言其到接口，或通过约束方法分发，不能 <code>switch T.(type)</code> 切换类型参数本身。</li>
+<li><strong>跨包泛型实例化</strong>：字典和 shape 实例化在调用包发生，Go 的实现避免了”模板重复实例化”的代码膨胀（不同于 C++ 头文件模型）。</li>
+</ul>
+<h2 id="参考资料">参考资料</h2>
+<ul>
+<li>Go 官方提案 <a href="https://go.googlesource.com/proposal/+/refs/heads/master/design/43651-type-parameters.md" rel="noopener noreferrer" target="_blank">Type Parameters</a></li>
+<li>Go 博客 <a href="https://go.dev/blog/intro-generics" rel="noopener noreferrer" target="_blank">An Introduction to Generics</a> 与 <a href="https://go.dev/blog/when-generics" rel="noopener noreferrer" target="_blank">When to Use Generics</a></li>
+<li>Go 官方设计文档 <a href="https://github.com/golang/proposal/blob/master/design/generics-implementation-dictionaries.md" rel="noopener noreferrer" target="_blank">Dictionary Resolution</a>、<a href="https://github.com/golang/proposal/blob/master/design/generics-implementation-gcshape.md" rel="noopener noreferrer" target="_blank">GC Shape Stenciling</a></li>
+<li>配套阅读：<a href="/type-metadata/">Go 类型元数据与对象布局（Go 1.26.5）</a>、<a href="/iface/">Interface 与动态调用（Go 1.26.5 源码分析）</a>、<a href="/bootstrap/">Go 程序启动流程（Go 1.26.5 源码分析）</a></li>
+</ul></main><aside class="toc"><p class="toc-title">本页目录</p><ul><li class="toc-d2"><a href="#类型参数约束与类型集">类型参数、约束与类型集</a></li><li class="toc-d2"><a href="#gc-shape哪些类型共用一份机器码">GC shape：哪些类型共用一份机器码</a></li><li class="toc-d2"><a href="#字典所有需要具体类型的信息">字典：所有”需要具体类型”的信息</a></li><li class="toc-d2"><a href="#方法itab-与泛型接收者">方法、itab 与泛型接收者</a></li><li class="toc-d2"><a href="#泛型与逃逸内联性能">泛型与逃逸、内联、性能</a></li><li class="toc-d2"><a href="#边界与误区">边界与误区</a></li><li class="toc-d2"><a href="#参考资料">参考资料</a></li></ul></aside></div><div class="lightbox" id="lightbox" aria-hidden="true"><img alt=""></div><script type="module">var e=document.documentElement,t=document.getElementById(`themeToggle`),n={auto:`🖥️`,light:`☀️`,dark:`🌙`};function r(){var e=localStorage.getItem(`theme`);return e===`light`||e===`dark`?e:`auto`}function i(){var i=r();i===`auto`?e.removeAttribute(`data-theme`):e.setAttribute(`data-theme`,i),t.textContent=n[i]}i(),t.addEventListener(`click`,()=>{var e=[`auto`,`light`,`dark`],t=e[(e.indexOf(r())+1)%3];t===`auto`?localStorage.removeItem(`theme`):localStorage.setItem(`theme`,t),i()}),window.matchMedia(`(prefers-color-scheme: dark)`).addEventListener(`change`,()=>{r()===`auto`&&i()});var a=document.getElementById(`lightbox`),o=a.querySelector(`img`);document.querySelectorAll(`.prose img`).forEach(e=>{e.style.cursor=`zoom-in`,e.addEventListener(`click`,()=>{o.src=e.currentSrc||e.src,o.alt=e.alt,a.classList.add(`open`),a.setAttribute(`aria-hidden`,`false`)})}),a.addEventListener(`click`,()=>{a.classList.remove(`open`),a.setAttribute(`aria-hidden`,`true`)}),document.addEventListener(`keydown`,e=>{e.key===`Escape`&&a.click()});</script></body></html>
