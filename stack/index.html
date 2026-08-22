@@ -12,7 +12,7 @@
 <p> 当前实现
 Go 1.26.5 使用 <strong>连续、可复制栈（contiguous copying stack）</strong>：从小栈开始，空间不足时分配更大的连续区域，复制有效数据并修正栈内指针。</p>
 </div>
-<h2 id="go-1265-必须先知道的变化">Go 1.26.5 必须先知道的变化</h2>
+<p><strong>Go 1.26.5 必须先知道的变化</strong></p>
 
 
 
@@ -56,7 +56,7 @@ Go 1.26.5 使用 <strong>连续、可复制栈（contiguous copying stack）</st
 
 <table><thead><tr><th>主题</th><th>当前结论</th></tr></thead><tbody><tr><td>普通 goroutine 初始栈</td><td><code>stackMin = 2048</code>，通常从 2 KiB 开始</td></tr><tr><td>栈增长</td><td>连续栈复制，通常按 2 倍增长</td></tr><tr><td>栈缩容</td><td>GC/安全点检查；使用不足 1/4 时才考虑缩为一半</td></tr><tr><td>小栈分配</td><td>per-P <code>mcache.stackcache</code> + 全局 <code>stackpool</code></td></tr><tr><td>大栈分配</td><td>从 <code>mheap</code> 申请 manual stack span</td></tr><tr><td>函数检查</td><td>编译器在可分裂函数序言插入 stack bound check</td></tr><tr><td>Go 1.26 编译器变化</td><td>变量长度 <code>make([]T, n)</code> 的 backing store 在更多场景可放栈上，默认试探阈值 32 B</td></tr><tr><td>与 GC 的关系</td><td>stack 是 root；编译器 stack map 支持精确扫描和复制时指针修正</td></tr></tbody></table>
 <p>Go 1.26 的变量长度 slice 栈上分配优化是本篇最重要的新变化，官方说明同时提供 <code>-compile=variablemake</code> bisect 与关闭开关：<a href="https://go.dev/doc/go1.26" rel="noopener noreferrer" target="_blank">Go 1.26 Release Notes</a>。</p>
-<h2 id="源码地图">源码地图</h2>
+<p><strong>源码地图</strong></p>
 
 
 
@@ -116,18 +116,18 @@ Go 1.26.5 使用 <strong>连续、可复制栈（contiguous copying stack）</st
 
 <table><thead><tr><th>主题</th><th>源码入口</th></tr></thead><tbody><tr><td>栈常量与 guard</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/stack.go#L70-L145" rel="noopener noreferrer" target="_blank"><code>runtime/stack.go#L70-L145</code></a></td></tr><tr><td>stack pool/cache</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/stack.go#L147-L335" rel="noopener noreferrer" target="_blank"><code>runtime/stack.go#L147-L335</code></a></td></tr><tr><td>stack 分配/释放</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/stack.go#L338-L530" rel="noopener noreferrer" target="_blank"><code>runtime/stack.go#L338-L530</code></a></td></tr><tr><td>goroutine 创建</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/proc.go#L5272-L5355" rel="noopener noreferrer" target="_blank"><code>runtime/proc.go#L5272-L5355</code></a></td></tr><tr><td>amd64 <code>morestack</code></td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/asm_amd64.s#L622-L688" rel="noopener noreferrer" target="_blank"><code>runtime/asm_amd64.s#L622-L688</code></a></td></tr><tr><td>栈复制</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/stack.go#L898-L1003" rel="noopener noreferrer" target="_blank"><code>runtime/stack.go#L898-L1003</code></a></td></tr><tr><td><code>newstack</code></td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/stack.go#L1014-L1185" rel="noopener noreferrer" target="_blank"><code>runtime/stack.go#L1014-L1185</code></a></td></tr><tr><td>栈缩容</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/stack.go#L1253-L1305" rel="noopener noreferrer" target="_blank"><code>runtime/stack.go#L1253-L1305</code></a></td></tr><tr><td><code>g</code> 的 stack 字段</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/runtime2.go#L459-L534" rel="noopener noreferrer" target="_blank"><code>runtime/runtime2.go#L459-L534</code></a></td></tr><tr><td>逃逸分析</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/cmd/compile/internal/escape/escape.go#L21-L47" rel="noopener noreferrer" target="_blank"><code>cmd/compile/internal/escape/escape.go#L21-L47</code></a></td></tr><tr><td>variable make</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/cmd/compile/internal/walk/builtin.go#L469-L500" rel="noopener noreferrer" target="_blank"><code>cmd/compile/internal/walk/builtin.go#L469-L500</code></a></td></tr><tr><td>GC stack scan</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mgcstack.go#L166-L240" rel="noopener noreferrer" target="_blank"><code>runtime/mgcstack.go#L166-L240</code></a></td></tr></tbody></table>
 <h2 id="一进程里不止一种栈">一、进程里不止一种栈</h2>
-<h2 id="普通-g-stack">普通 G stack</h2>
+<p><strong>普通 G stack</strong></p>
 <p>每个普通 goroutine 的 <code>g.stack</code> 描述严格的 <code>[lo, hi)</code> 地址区间，<code>stackguard0</code> 是函数序言比较的 guard，结构定义见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/runtime2.go#L459-L483" rel="noopener noreferrer" target="_blank"><code>runtime2.go#L459-L483</code></a>。</p>
 <img src="/images/go/02-普通-g-stack.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
 <p>Go 支持的多数架构上栈向低地址增长。函数序言在真正建立较大 frame 前检查 SP 与 guard，空间不足则进入 <code>morestack</code>。</p>
-<h2 id="g0每个-m-的调度栈">g0：每个 M 的调度栈</h2>
+<p><strong>g0：每个 M 的调度栈</strong></p>
 <p>每个 OS thread 对应的 M 有一个 <code>g0</code>。调度器、栈分配、栈复制、部分 GC 和必须 <code>//go:systemstack</code> 的 runtime 代码运行在 g0 上。</p>
 <p>为什么不能在待扩容的 G stack 上执行 <code>stackalloc</code>？因为分配过程自身可能持锁、调用 page allocator；若它再需要扩容会形成递归或自死锁。<code>stackalloc</code> 明确要求运行在 scheduler stack，见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/stack.go#L338-L351" rel="noopener noreferrer" target="_blank"><code>stack.go#L338-L351</code></a>。</p>
-<h2 id="gsignal信号处理栈">gsignal：信号处理栈</h2>
+<p><strong>gsignal：信号处理栈</strong></p>
 <p>每个 M 还有 <code>gsignal</code>，用于操作系统信号。<code>morestack</code> 明确禁止扩容 g0 与 gsignal；amd64 检查见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/asm_amd64.s#L628-L653" rel="noopener noreferrer" target="_blank"><code>asm_amd64.s#L628-L653</code></a>。</p>
 <img src="/images/go/03-gsignal-信号处理栈.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
 <h2 id="二栈与堆的决定发生在哪里">二、栈与堆的决定发生在哪里</h2>
-<h2 id="逃逸分析的两个不变量">逃逸分析的两个不变量</h2>
+<p><strong>逃逸分析的两个不变量</strong></p>
 <p>编译器要求：</p>
 <ol>
 <li>指向 stack object 的指针不能被存入 heap 并在栈帧失效后继续存在；</li>
@@ -135,7 +135,7 @@ Go 1.26.5 使用 <strong>连续、可复制栈（contiguous copying stack）</st
 </ol>
 <p>源码使用带权数据流图分析变量之间的地址/解引用关系，见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/cmd/compile/internal/escape/escape.go#L21-L47" rel="noopener noreferrer" target="_blank"><code>escape.go#L21-L47</code></a>。</p>
 <img src="/images/go/04-逃逸分析的两个不变量.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
-<h2 id="常见逃逸场景不是绝对规则">常见逃逸场景不是绝对规则</h2>
+<p><strong>常见逃逸场景不是绝对规则</strong></p>
 
 
 
@@ -214,11 +214,11 @@ Go 1.26.5 使用 <strong>连续、可复制栈（contiguous copying stack）</st
 <code>g</code>、<code>sudog</code>、timer、channel wait、defer、业务对象、profile/race 元数据都可能增加成本；已扩容 stack 也不会因为 goroutine 阻塞就立刻缩回 2 KiB。</p>
 </div>
 <h2 id="五小栈如何分配">五、小栈如何分配</h2>
-<h2 id="per-p-stack-cache">per-P stack cache</h2>
+<p><strong>per-P stack cache</strong></p>
 <p>小栈按 order 管理：2 KiB、4 KiB、8 KiB、16 KiB 等。当前 P 的 <code>mcache.stackcache[order]</code> 保存 free list；cache 空时从全局 <code>stackpool</code> 批量 refill。</p>
 <img src="/images/go/06-per-p-stack-cache.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
 <p>小栈 fast path 见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/stack.go#L368-L405" rel="noopener noreferrer" target="_blank"><code>stackalloc#L368-L405</code></a>。栈内存不是普通 GC heap object：大栈通过 <code>allocManual(..., spanAllocStack)</code> 取得手工管理 span，GC 不把整段栈当普通对象扫描。</p>
-<h2 id="为什么栈大小必须是-2-的幂">为什么栈大小必须是 2 的幂</h2>
+<p><strong>为什么栈大小必须是 2 的幂</strong></p>
 <p><code>stackalloc</code> 明确检查 <code>n&#x26;(n-1)==0</code>。好处包括：</p>
 <ul>
 <li>order 与 cache 索引简单；</li>
@@ -234,7 +234,7 @@ Go 1.26.5 使用 <strong>连续、可复制栈（contiguous copying stack）</st
 <p>实际还要防止下溢、支持 small/large frame、NOSPLIT 链和架构 ABI。权威说明在 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/stack.go#L17-L67" rel="noopener noreferrer" target="_blank"><code>stack.go</code> 顶部注释</a>。</p>
 <img src="/images/go/07-六-函数序言与-morestack.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
 <p>amd64 <code>morestack</code> 保存当前 G 的 PC/SP/BP/context，再保存调用者上下文，切到 g0 后调用 <code>newstack</code>，见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/asm_amd64.s#L628-L682" rel="noopener noreferrer" target="_blank"><code>asm_amd64.s#L628-L682</code></a>。</p>
-<h2 id="nosplit-不是更快注解"><code>NOSPLIT</code> 不是“更快”注解</h2>
+<p><strong><code>NOSPLIT</code> 不是“更快”注解</strong></p>
 <p><code>//go:nosplit</code> 表示函数不能触发栈增长。linker 会检查 NOSPLIT 调用链不能超过 guard 预算。它主要用于 runtime 的底层路径、信号与栈扩容自身；业务代码不应为了省一次检查而随意使用。</p>
 <p>guard 除了增长检查，还复用为同步抢占触发器：runtime 可把 <code>stackguard0</code> 设置为特殊的 <code>stackPreempt</code>，让下一次函数序言失败并进入 <code>newstack</code> 的抢占分支，常量见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/stack.go#L124-L145" rel="noopener noreferrer" target="_blank"><code>stack.go#L124-L145</code></a>。</p>
 <h2 id="七newstack扩容与同步抢占共用入口">七、<code>newstack</code>：扩容与同步抢占共用入口</h2>
@@ -247,10 +247,10 @@ Go 1.26.5 使用 <strong>连续、可复制栈（contiguous copying stack）</st
 <h2 id="八copystack复制的不只是字节">八、<code>copystack</code>：复制的不只是字节</h2>
 <p>栈扩容最难的部分不是 <code>memmove</code>，而是修正所有指向旧栈的指针。<code>copystack</code> 的总体步骤见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/stack.go#L898-L1003" rel="noopener noreferrer" target="_blank"><code>stack.go#L898-L1003</code></a>：</p>
 <img src="/images/go/08-八-copystack-复制的不只是字节.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
-<h2 id="为什么-channel-会让复制复杂">为什么 channel 会让复制复杂</h2>
+<p><strong>为什么 channel 会让复制复杂</strong></p>
 <p>阻塞的 send/receive 使用 <code>sudog.elem</code> 指向 goroutine 栈上的发送值或接收 slot。另一个 goroutine 可能通过 channel 操作访问这段内存，所以复制时必须与 channel lock 协调。</p>
 <p><code>g.activeStackChans</code>、<code>g.parkingOnChan</code> 记录这些危险状态，字段与注释见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/runtime2.go#L526-L534" rel="noopener noreferrer" target="_blank"><code>runtime2.go#L526-L534</code></a>。<code>copystack</code> 在 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/stack.go#L929-L953" rel="noopener noreferrer" target="_blank"><code>stack.go#L929-L953</code></a> 调整 sudog，并只在安全同步后复制相关区域。</p>
-<h2 id="为什么-unsafe-很容易与栈移动冲突">为什么 unsafe 很容易与栈移动冲突</h2>
+<p><strong>为什么 unsafe 很容易与栈移动冲突</strong></p>
 <p>Go 指针能被 runtime 根据 stack map 修正；藏在 <code>uintptr</code>、C 内存或 runtime 不知道的数据结构里的地址不会自动更新。</p>
 <pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#E1E4E8">p </span><span style="color:#F97583">:=</span><span style="color:#F97583"> &#x26;</span><span style="color:#E1E4E8">buf[</span><span style="color:#79B8FF">0</span><span style="color:#E1E4E8">]</span></span>
 <span class="line"><span style="color:#E1E4E8">u </span><span style="color:#F97583">:=</span><span style="color:#F97583"> uintptr</span><span style="color:#E1E4E8">(unsafe.</span><span style="color:#B392F0">Pointer</span><span style="color:#E1E4E8">(p))</span></span>
@@ -289,8 +289,8 @@ Go 1.26.5 使用 <strong>连续、可复制栈（contiguous copying stack）</st
 </ul>
 <img src="/images/go/10-十-gc-如何扫描栈.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
 <p>这连接了 <a href="/gc/">垃圾收集器</a>：goroutine 数量、平均 stack 大小和 stack 中的指针密度都会增加 root scan 工作。大量 blocked goroutine 即使 CPU 为零，也可能持续占用 stack 并保留 heap 对象。</p>
-<h2 id="十一生产内存诊断">十一、生产内存诊断</h2>
-<h2 id="区分-stackheap-与-goroutine-retention">区分 stack、heap 与 goroutine retention</h2>
+<p><strong>十一、生产内存诊断</strong></p>
+<p><strong>区分 stack、heap 与 goroutine retention</strong></p>
 
 
 
@@ -327,7 +327,7 @@ Go 1.26.5 使用 <strong>连续、可复制栈（contiguous copying stack）</st
 
 
 <table><thead><tr><th>现象</th><th>证据</th><th>可能原因</th></tr></thead><tbody><tr><td>goroutine 数持续涨</td><td>goroutine profile、<code>runtime.NumGoroutine</code></td><td>没有 cancel、阻塞 channel、锁等待、IO 卡住</td></tr><tr><td>stack in-use 持续涨</td><td><code>/memory/classes/heap/stacks:bytes</code></td><td>goroutine 增长、深递归、大 frame、峰值栈未缩</td></tr><tr><td>heap profile 某对象被 goroutine 保留</td><td><code>pprof -cum</code>、goroutine stack</td><td>closure/local 仍在阻塞 frame 中</td></tr><tr><td>stack overflow</td><td>fatal 栈与递归链</td><td>无界递归、超大 frame、间接递归</td></tr><tr><td>allocs/op 高</td><td><code>-benchmem</code>、escape output</td><td>意外逃逸或 slice backing store 上 heap</td></tr></tbody></table>
-<h2 id="常用命令">常用命令</h2>
+<p><strong>常用命令</strong></p>
 <pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="bash"><code><span class="line"><span style="color:#6A737D"># 逃逸与内联</span></span>
 <span class="line"><span style="color:#B392F0">go</span><span style="color:#9ECBFF"> build</span><span style="color:#79B8FF"> -gcflags=</span><span style="color:#9ECBFF">'all=-m=2'</span><span style="color:#9ECBFF"> ./...</span></span>
 <span class="line"></span>
@@ -348,7 +348,7 @@ Go 1.26.5 使用 <strong>连续、可复制栈（contiguous copying stack）</st
 <span class="line"><span>/sched/goroutines:goroutines</span></span>
 <span class="line"><span>/gc/scan/stack:bytes</span></span></code></pre>
 <p>Go 1.26 还新增了更多 goroutine 状态与创建总数等 scheduler metrics，可将“总量增加”进一步拆成 runnable/waiting 等状态，见 <a href="https://go.dev/doc/go1.26" rel="noopener noreferrer" target="_blank">Go 1.26 Release Notes</a>。</p>
-<h2 id="大局部变量一定危险吗">大局部变量一定危险吗</h2>
+<p><strong>大局部变量一定危险吗</strong></p>
 <p>大局部对象有三种可能：</p>
 <ol>
 <li>优化后消失或进入寄存器；</li>
@@ -356,8 +356,8 @@ Go 1.26.5 使用 <strong>连续、可复制栈（contiguous copying stack）</st
 <li>因大小/逃逸被移到 heap，增加 allocation 与 GC 压力。</li>
 </ol>
 <p>只看源码声明无法判断。必须结合 <code>-m=2</code>、汇编、benchmark 和 profile。</p>
-<h2 id="十二优化原则">十二、优化原则</h2>
-<h2 id="控制-goroutine-生命周期优先于微调初始栈">控制 goroutine 生命周期优先于微调初始栈</h2>
+<p><strong>十二、优化原则</strong></p>
+<p><strong>控制 goroutine 生命周期优先于微调初始栈</strong></p>
 <p>高级工程实践关注：</p>
 <ul>
 <li>所有后台 goroutine 有明确 owner；</li>
@@ -367,16 +367,16 @@ Go 1.26.5 使用 <strong>连续、可复制栈（contiguous copying stack）</st
 <li>shutdown 能等待 goroutine 收敛；</li>
 <li>goroutine 数、stack bytes、waiting reason 有监控。</li>
 </ul>
-<h2 id="避免无界递归与巨型-frame">避免无界递归与巨型 frame</h2>
+<p><strong>避免无界递归与巨型 frame</strong></p>
 <ul>
 <li>输入深度不可信时改为显式 heap worklist；</li>
 <li>大 buffer 评估复用或分块，但不要盲目全局缓存；</li>
 <li>大数组按 value 传递会复制整个对象，优先审查接口设计；</li>
 <li>benchmark 既看 <code>allocs/op</code>，也看延迟与 stack profile/metrics。</li>
 </ul>
-<h2 id="不要为了栈上分配破坏代码">不要为了“栈上分配”破坏代码</h2>
+<p><strong>不要为了“栈上分配”破坏代码</strong></p>
 <p>让编译器做逃逸分析。只有 profile 证明 allocation 是瓶颈时，才尝试缩短生命周期、改善 API、减少接口装箱或帮助编译器内联；随后用目标版本复测。</p>
-<h2 id="十三常见误区">十三、常见误区</h2>
+<p><strong>十三、常见误区</strong></p>
 
 
 
@@ -419,7 +419,7 @@ Go 1.26.5 使用 <strong>连续、可复制栈（contiguous copying stack）</st
 
 
 <table><thead><tr><th>误区</th><th>Go 1.26.5 正确理解</th></tr></thead><tbody><tr><td>goroutine 只有 2 KiB 成本</td><td>2 KiB 是典型初始 stack，另有 G 与关联对象，且 stack 会增长</td></tr><tr><td>goroutine stack 由多个 segment 串联</td><td>当前使用单段连续复制栈，扩容时整体搬迁有效区域</td></tr><tr><td>栈增长只是改一个边界</td><td>要分配新栈、复制 live bytes、修正所有已知栈指针</td></tr><tr><td>栈会在函数返回时立刻缩小</td><td>缩容依赖 GC/安全点和 1/4 阈值</td></tr><tr><td>返回局部变量地址一定慢</td><td>可能逃逸，但性能影响要看调用频率、内联与 profile</td></tr><tr><td><code>make([]T, n)</code> 一定上 heap</td><td>Go 1.26 对更多小型动态 backing store 做栈上分配</td></tr><tr><td>stack memory 由普通 GC sweep</td><td>stack 使用专门 pool/cache/manual spans，但 GC 会扫描它作为 root</td></tr><tr><td><code>uintptr</code> 能稳定保存栈地址</td><td>栈可能移动，runtime 无法修正隐藏地址</td></tr></tbody></table>
-<h2 id="十四源码阅读主线与验收">十四、源码阅读主线与验收</h2>
+<p><strong>十四、源码阅读主线与验收</strong></p>
 <p>推荐顺序：</p>
 <ol>
 <li><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/runtime2.go#L459-L534" rel="noopener noreferrer" target="_blank"><code>g.stack/stackguard</code></a>；</li>
@@ -444,7 +444,7 @@ Go 1.26.5 使用 <strong>连续、可复制栈（contiguous copying stack）</st
 <li class="task-list-item"><input type="checkbox" disabled> Go 1.26 如何让部分动态 slice backing store 留在栈上？</li>
 <li class="task-list-item"><input type="checkbox" disabled> 大量 blocked goroutine 为什么同时影响 stack memory、heap retention 与 GC？</li>
 </ul>
-<h2 id="总结">总结</h2>
+<p><strong>总结</strong></p>
 <p>Go 1.26.5 的栈管理可以用一条链路概括：</p>
 <pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="text"><code><span class="line"><span>逃逸分析决定 stack/heap</span></span>
 <span class="line"><span>-> newproc1 分配小型连续栈</span></span>
@@ -453,7 +453,7 @@ Go 1.26.5 使用 <strong>连续、可复制栈（contiguous copying stack）</st
 <span class="line"><span>-> newstack/copy 调整全部指针</span></span>
 <span class="line"><span>-> GC safe point 扫描并择机 shrink</span></span></code></pre>
 <p>栈不是孤立机制：它连接 <a href="/memory-alloc/">内存分配器</a> 的 manual span 与 per-P cache，连接 <a href="/gc/">垃圾收集器</a> 的 root scan，也连接 <a href="/gmp/">GMP（Go 1.26.5 源码分析）</a> 的抢占与调度。理解这三条连接，才真正理解“goroutine 为什么轻量”。</p>
-<h2 id="参考资料">参考资料</h2>
+<p><strong>参考资料</strong></p>
 <ul>
 <li><a href="https://go.dev/doc/go1.26" rel="noopener noreferrer" target="_blank">Go 1.26 Release Notes</a></li>
 <li><a href="https://go.dev/doc/diagnostics" rel="noopener noreferrer" target="_blank">Go Diagnostics</a></li>
@@ -461,4 +461,4 @@ Go 1.26.5 使用 <strong>连续、可复制栈（contiguous copying stack）</st
 <li><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/proc.go" rel="noopener noreferrer" target="_blank">Go 1.26.5 runtime/proc.go</a></li>
 <li><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/cmd/compile/internal/escape/escape.go" rel="noopener noreferrer" target="_blank">Go 1.26.5 compiler escape analysis</a></li>
 <li><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/cmd/compile/internal/walk/builtin.go#L469-L500" rel="noopener noreferrer" target="_blank">Go 1.26.5 compiler variable make</a></li>
-</ul></main><aside class="toc"><p class="toc-title">本页目录</p><ul><li class="toc-d2"><a href="#go-1265-必须先知道的变化">Go 1.26.5 必须先知道的变化</a></li><li class="toc-d2"><a href="#源码地图">源码地图</a></li><li class="toc-d2"><a href="#一进程里不止一种栈">一、进程里不止一种栈</a></li><li class="toc-d2"><a href="#普通-g-stack">普通 G stack</a></li><li class="toc-d2"><a href="#g0每个-m-的调度栈">g0：每个 M 的调度栈</a></li><li class="toc-d2"><a href="#gsignal信号处理栈">gsignal：信号处理栈</a></li><li class="toc-d2"><a href="#二栈与堆的决定发生在哪里">二、栈与堆的决定发生在哪里</a></li><li class="toc-d2"><a href="#逃逸分析的两个不变量">逃逸分析的两个不变量</a></li><li class="toc-d2"><a href="#常见逃逸场景不是绝对规则">常见逃逸场景不是绝对规则</a></li><li class="toc-d2"><a href="#三go-126-的-variable-size-slice-栈上分配">三、Go 1.26 的 variable-size slice 栈上分配</a></li><li class="toc-d2"><a href="#四goroutine-创建与初始栈">四、goroutine 创建与初始栈</a></li><li class="toc-d2"><a href="#五小栈如何分配">五、小栈如何分配</a></li><li class="toc-d2"><a href="#per-p-stack-cache">per-P stack cache</a></li><li class="toc-d2"><a href="#为什么栈大小必须是-2-的幂">为什么栈大小必须是 2 的幂</a></li><li class="toc-d2"><a href="#六函数序言与-morestack">六、函数序言与 morestack</a></li><li class="toc-d2"><a href="#nosplit-不是更快注解">NOSPLIT 不是“更快”注解</a></li><li class="toc-d2"><a href="#七newstack扩容与同步抢占共用入口">七、newstack：扩容与同步抢占共用入口</a></li><li class="toc-d2"><a href="#八copystack复制的不只是字节">八、copystack：复制的不只是字节</a></li><li class="toc-d2"><a href="#为什么-channel-会让复制复杂">为什么 channel 会让复制复杂</a></li><li class="toc-d2"><a href="#为什么-unsafe-很容易与栈移动冲突">为什么 unsafe 很容易与栈移动冲突</a></li><li class="toc-d2"><a href="#九栈缩容">九、栈缩容</a></li><li class="toc-d2"><a href="#十gc-如何扫描栈">十、GC 如何扫描栈</a></li><li class="toc-d2"><a href="#十一生产内存诊断">十一、生产内存诊断</a></li><li class="toc-d2"><a href="#区分-stackheap-与-goroutine-retention">区分 stack、heap 与 goroutine retention</a></li><li class="toc-d2"><a href="#常用命令">常用命令</a></li><li class="toc-d2"><a href="#大局部变量一定危险吗">大局部变量一定危险吗</a></li><li class="toc-d2"><a href="#十二优化原则">十二、优化原则</a></li><li class="toc-d2"><a href="#控制-goroutine-生命周期优先于微调初始栈">控制 goroutine 生命周期优先于微调初始栈</a></li><li class="toc-d2"><a href="#避免无界递归与巨型-frame">避免无界递归与巨型 frame</a></li><li class="toc-d2"><a href="#不要为了栈上分配破坏代码">不要为了“栈上分配”破坏代码</a></li><li class="toc-d2"><a href="#十三常见误区">十三、常见误区</a></li><li class="toc-d2"><a href="#十四源码阅读主线与验收">十四、源码阅读主线与验收</a></li><li class="toc-d2"><a href="#总结">总结</a></li><li class="toc-d2"><a href="#参考资料">参考资料</a></li></ul></aside></div><div class="lightbox" id="lightbox" aria-hidden="true"><img alt=""></div><script type="module">var e=document.documentElement,t=document.getElementById(`themeToggle`),n={auto:`🖥️`,light:`☀️`,dark:`🌙`};function r(){var e=localStorage.getItem(`theme`);return e===`light`||e===`dark`?e:`auto`}function i(){var i=r();i===`auto`?e.removeAttribute(`data-theme`):e.setAttribute(`data-theme`,i),t.textContent=n[i]}i(),t.addEventListener(`click`,()=>{var e=[`auto`,`light`,`dark`],t=e[(e.indexOf(r())+1)%3];t===`auto`?localStorage.removeItem(`theme`):localStorage.setItem(`theme`,t),i()}),window.matchMedia(`(prefers-color-scheme: dark)`).addEventListener(`change`,()=>{r()===`auto`&&i()});var a=document.getElementById(`lightbox`),o=a.querySelector(`img`);document.querySelectorAll(`.prose img`).forEach(e=>{e.style.cursor=`zoom-in`,e.addEventListener(`click`,()=>{o.src=e.currentSrc||e.src,o.alt=e.alt,a.classList.add(`open`),a.setAttribute(`aria-hidden`,`false`)})}),a.addEventListener(`click`,()=>{a.classList.remove(`open`),a.setAttribute(`aria-hidden`,`true`)}),document.addEventListener(`keydown`,e=>{e.key===`Escape`&&a.click()});</script></body></html>
+</ul></main><aside class="toc"><p class="toc-title">本页目录</p><ul><li class="toc-d2"><a href="#一进程里不止一种栈">一、进程里不止一种栈</a></li><li class="toc-d2"><a href="#二栈与堆的决定发生在哪里">二、栈与堆的决定发生在哪里</a></li><li class="toc-d2"><a href="#三go-126-的-variable-size-slice-栈上分配">三、Go 1.26 的 variable-size slice 栈上分配</a></li><li class="toc-d2"><a href="#四goroutine-创建与初始栈">四、goroutine 创建与初始栈</a></li><li class="toc-d2"><a href="#五小栈如何分配">五、小栈如何分配</a></li><li class="toc-d2"><a href="#六函数序言与-morestack">六、函数序言与 morestack</a></li><li class="toc-d2"><a href="#七newstack扩容与同步抢占共用入口">七、newstack：扩容与同步抢占共用入口</a></li><li class="toc-d2"><a href="#八copystack复制的不只是字节">八、copystack：复制的不只是字节</a></li><li class="toc-d2"><a href="#九栈缩容">九、栈缩容</a></li><li class="toc-d2"><a href="#十gc-如何扫描栈">十、GC 如何扫描栈</a></li></ul></aside></div><div class="lightbox" id="lightbox" aria-hidden="true"><img alt=""></div><script type="module">var e=document.documentElement,t=document.getElementById(`themeToggle`),n={auto:`🖥️`,light:`☀️`,dark:`🌙`};function r(){var e=localStorage.getItem(`theme`);return e===`light`||e===`dark`?e:`auto`}function i(){var i=r();i===`auto`?e.removeAttribute(`data-theme`):e.setAttribute(`data-theme`,i),t.textContent=n[i]}i(),t.addEventListener(`click`,()=>{var e=[`auto`,`light`,`dark`],t=e[(e.indexOf(r())+1)%3];t===`auto`?localStorage.removeItem(`theme`):localStorage.setItem(`theme`,t),i()}),window.matchMedia(`(prefers-color-scheme: dark)`).addEventListener(`change`,()=>{r()===`auto`&&i()});var a=document.getElementById(`lightbox`),o=a.querySelector(`img`);document.querySelectorAll(`.prose img`).forEach(e=>{e.style.cursor=`zoom-in`,e.addEventListener(`click`,()=>{o.src=e.currentSrc||e.src,o.alt=e.alt,a.classList.add(`open`),a.setAttribute(`aria-hidden`,`false`)})}),a.addEventListener(`click`,()=>{a.classList.remove(`open`),a.setAttribute(`aria-hidden`,`true`)}),document.addEventListener(`keydown`,e=>{e.key===`Escape`&&a.click()});</script></body></html>

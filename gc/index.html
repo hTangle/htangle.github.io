@@ -12,7 +12,7 @@
 <p> 本文的结论
 Go 1.26.5 的 GC 仍然是 concurrent mark-and-sweep；Green Tea 优化的是 <strong>mark/scan 的局部性与扩展性</strong>，不是把 Go 改成分代 GC，也不是让对象移动或压缩。</p>
 </div>
-<h2 id="go-1265-版本结论">Go 1.26.5 版本结论</h2>
+<p><strong>Go 1.26.5 版本结论</strong></p>
 
 
 
@@ -60,7 +60,7 @@ Go 1.26.5 的 GC 仍然是 concurrent mark-and-sweep；Green Tea 优化的是 <s
 
 <table><thead><tr><th>能力</th><th>Go 1.26.5 状态</th></tr></thead><tbody><tr><td>Green Tea GC</td><td>默认开启；可在构建时用 <code>GOEXPERIMENT=nogreenteagc</code> 临时关闭</td></tr><tr><td>收集方式</td><td>并发 mark + 并发 sweep，精确扫描</td></tr><tr><td>分代</td><td>否</td></tr><tr><td>压缩/移动对象</td><td>否，<code>heapObjectsCanMove()</code> 返回 <code>false</code></td></tr><tr><td>写屏障</td><td>混合写屏障：同时 shade 旧指针与新指针</td></tr><tr><td>新对象</td><td>标记期 allocate black</td></tr><tr><td>GC 调节</td><td><code>GOGC</code> + <code>GOMEMLIMIT</code>/<code>debug.SetMemoryLimit</code></td></tr><tr><td>STW</td><td>sweep termination 与 mark termination 仍有短暂停顿</td></tr><tr><td>goroutine leak profile</td><td>Go 1.26 实验能力，构建时需开启对应 experiment</td></tr></tbody></table>
 <p>官方说明给出的预期是：对 GC 压力较重的真实程序，Green Tea 可降低约 10%～40% GC 开销；较新的 amd64 CPU 还可能从向量化扫描获得额外收益。实际效果必须以自己的 workload 为准：<a href="https://go.dev/doc/go1.26" rel="noopener noreferrer" target="_blank">Go 1.26 Release Notes</a>。</p>
-<h2 id="源码地图">源码地图</h2>
+<p><strong>源码地图</strong></p>
 
 
 
@@ -124,11 +124,11 @@ Go 1.26.5 的 GC 仍然是 concurrent mark-and-sweep；Green Tea 优化的是 <s
 
 <table><thead><tr><th>主题</th><th>源码入口</th></tr></thead><tbody><tr><td>算法与阶段总览</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mgc.go#L5-L127" rel="noopener noreferrer" target="_blank"><code>runtime/mgc.go#L5-L127</code></a></td></tr><tr><td>GC 触发与启动</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mgc.go#L676-L930" rel="noopener noreferrer" target="_blank"><code>runtime/mgc.go#L676-L930</code></a></td></tr><tr><td>root 与 drain</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mgcmark.go#L221-L430" rel="noopener noreferrer" target="_blank"><code>runtime/mgcmark.go#L221-L430</code></a>、<a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mgcmark.go#L1239-L1380" rel="noopener noreferrer" target="_blank"><code>#L1239-L1380</code></a></td></tr><tr><td>Green Tea</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mgcmark_greenteagc.go#L5-L35" rel="noopener noreferrer" target="_blank"><code>runtime/mgcmark_greenteagc.go#L5-L35</code></a></td></tr><tr><td>Green Tea span 位图</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mgcmark_greenteagc.go#L50-L88" rel="noopener noreferrer" target="_blank"><code>runtime/mgcmark_greenteagc.go#L50-L88</code></a></td></tr><tr><td>Green Tea 扫描</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mgcmark_greenteagc.go#L842-L929" rel="noopener noreferrer" target="_blank"><code>runtime/mgcmark_greenteagc.go#L842-L929</code></a></td></tr><tr><td>GC work queue</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mgcwork.go#L34-L137" rel="noopener noreferrer" target="_blank"><code>runtime/mgcwork.go#L34-L137</code></a></td></tr><tr><td>写屏障</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mbarrier.go#L24-L131" rel="noopener noreferrer" target="_blank"><code>runtime/mbarrier.go#L24-L131</code></a></td></tr><tr><td>allocation assist</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mgcmark.go#L499-L760" rel="noopener noreferrer" target="_blank"><code>runtime/mgcmark.go#L499-L760</code></a></td></tr><tr><td>pacer</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mgcpacer.go#L92-L180" rel="noopener noreferrer" target="_blank"><code>runtime/mgcpacer.go#L92-L180</code></a></td></tr><tr><td>GC CPU limiter</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mgclimit.go#L9-L30" rel="noopener noreferrer" target="_blank"><code>runtime/mgclimit.go#L9-L30</code></a></td></tr><tr><td>sweep</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mgcsweep.go#L359-L457" rel="noopener noreferrer" target="_blank"><code>runtime/mgcsweep.go#L359-L457</code></a></td></tr><tr><td>scavenger</td><td><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mgcscavenge.go#L5-L89" rel="noopener noreferrer" target="_blank"><code>runtime/mgcscavenge.go#L5-L89</code></a></td></tr></tbody></table>
 <h2 id="一gc-的基本问题">一、GC 的基本问题</h2>
-<h2 id="可达性而不是出了作用域">可达性，而不是“出了作用域”</h2>
+<p><strong>可达性，而不是“出了作用域”</strong></p>
 <p>GC 从 root 集合出发，沿指针图寻找可达对象；不可达对象才有资格在 sweep 阶段被回收。</p>
 <img src="/images/go/02-可达性-而不是-出了作用域.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
 <p>即使 D 与 E 互相引用，只要 root 到不了它们，整个环仍可回收。反过来，函数返回不保证其对象立即死亡：只要被全局 cache、goroutine、closure、channel buffer 等继续引用，它仍然存活。</p>
-<h2 id="三色抽象仍有用但不是数据结构说明书">三色抽象仍有用，但不是数据结构说明书</h2>
+<p><strong>三色抽象仍有用，但不是数据结构说明书</strong></p>
 <ul>
 <li>白色：尚未确认存活；</li>
 <li>灰色：已发现，但其引用尚未全部扫描；</li>
@@ -143,9 +143,9 @@ Go 1.26.5 的 GC 仍然是 concurrent mark-and-sweep；Green Tea 优化的是 <s
 <h2 id="二一个完整-gc-cycle">二、一个完整 GC cycle</h2>
 <p><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mgc.go#L24-L82" rel="noopener noreferrer" target="_blank"><code>mgc.go</code> 顶部注释</a> 给出了权威阶段划分：</p>
 <img src="/images/go/03-二-一个完整-gc-cycle.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
-<h2 id="1-sweep-terminationstw">1. Sweep termination：STW</h2>
+<p><strong>1. Sweep termination：STW</strong></p>
 <p>新一轮 mark 不能与旧一轮尚未完成的 sweep 混在一起。runtime 停止世界，完成必要的 unswept span，并让所有 P 在一致的阶段边界开启写屏障。</p>
-<h2 id="2-concurrent-mark主要并发阶段">2. Concurrent mark：主要并发阶段</h2>
+<p><strong>2. Concurrent mark：主要并发阶段</strong></p>
 <p>进入 <code>_GCmark</code> 后：</p>
 <ul>
 <li>写屏障开启；</li>
@@ -155,9 +155,9 @@ Go 1.26.5 的 GC 仍然是 concurrent mark-and-sweep；Green Tea 优化的是 <s
 <li>标记期新分配对象直接为黑色。</li>
 </ul>
 <p>root 扫描任务入口是 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mgcmark.go#L221-L329" rel="noopener noreferrer" target="_blank"><code>markroot</code></a>。扫描 goroutine stack 时会短暂停止目标 G，完成精确指针扫描后恢复。</p>
-<h2 id="3-mark-terminationstw">3. Mark termination：STW</h2>
+<p><strong>3. Mark termination：STW</strong></p>
 <p>当所有 root job 和灰对象工作都耗尽，<code>gcMarkDone</code> 执行分布式终止检测，见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mgc.go#L1015-L1095" rel="noopener noreferrer" target="_blank"><code>mgc.go#L1015-L1095</code></a>。随后 STW 进入 mark termination，完成 cache flush、统计和 sweep generation 切换。</p>
-<h2 id="4-concurrent-sweep">4. Concurrent sweep</h2>
+<p><strong>4. Concurrent sweep</strong></p>
 <p>sweep 逐 span 比较本轮 mark bits 与 allocation bits：</p>
 <ul>
 <li>未标记 slot 变为空闲；</li>
@@ -176,16 +176,16 @@ Go 1.26.5 的 GC 仍然是 concurrent mark-and-sweep；Green Tea 优化的是 <s
 <span class="line"><span style="color:#F97583">    *</span><span style="color:#E1E4E8">slot </span><span style="color:#F97583">=</span><span style="color:#E1E4E8"> ptr</span></span></code></pre>
 <p>实际说明见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mbarrier.go#L24-L131" rel="noopener noreferrer" target="_blank"><code>mbarrier.go#L24-L131</code></a>。源码进一步优化为通常不检查当前栈是否灰，直接同时 shade 两者，以减少热路径条件判断。</p>
 <img src="/images/go/04-三-写屏障-并发正确性的核心.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
-<h2 id="为什么栈写通常不走写屏障">为什么栈写通常不走写屏障</h2>
+<p><strong>为什么栈写通常不走写屏障</strong></p>
 <p>栈属于当前 goroutine 私有，GC 通过停止该 G 并扫描整个栈来获得一致视图。heap/global 的指针写才是并发 mutator 与 marker 最危险的交叉点。</p>
-<h2 id="批量写也必须有-barrier">批量写也必须有 barrier</h2>
+<p><strong>批量写也必须有 barrier</strong></p>
 <p><code>typedmemmove</code>、slice copy、map 更新等可能批量写指针，runtime 使用 <code>bulkBarrierPreWrite</code> 等路径在真正复制前处理指针，见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mbarrier.go#L150-L220" rel="noopener noreferrer" target="_blank"><code>mbarrier.go#L150-L220</code></a>。这也是为什么 runtime 源码中的 <code>//go:nowritebarrier</code>/<code>//go:nowritebarrierrec</code> 是严格约束。</p>
 <h2 id="四green-teago-126-默认的新标记扫描路径">四、Green Tea：Go 1.26 默认的新标记扫描路径</h2>
-<h2 id="green-tea-要解决的局部性问题">Green Tea 要解决的局部性问题</h2>
+<p><strong>Green Tea 要解决的局部性问题</strong></p>
 <p>以对象为单位组织扫描工作时，处理过程是：发现对象 -> 标记对象 -> 把对象指针压入 work buffer -> 之后弹出并扫描。若对象很小且分散，扫描会频繁访问不同 span、不同 metadata 与不同 cache line，局部性较差。</p>
 <p>Green Tea 的核心注释位于 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mgcmark_greenteagc.go#L5-L33" rel="noopener noreferrer" target="_blank"><code>mgcmark_greenteagc.go#L5-L33</code></a>：<strong>延迟扫描，在同一 span 上积累多个待扫描对象，再批量扫描。</strong></p>
 <img src="/images/go/05-green-tea-要解决的局部性问题.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
-<h2 id="marks-与-scans"><code>marks</code> 与 <code>scans</code></h2>
+<p><strong><code>marks</code> 与 <code>scans</code></strong></p>
 <p>符合条件的小对象 span 尾部有一个 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mgcmark_greenteagc.go#L50-L71" rel="noopener noreferrer" target="_blank"><code>spanInlineMarkBits</code></a>：</p>
 <pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">type</span><span style="color:#B392F0"> spanInlineMarkBits</span><span style="color:#F97583"> struct</span><span style="color:#E1E4E8"> {</span></span>
 <span class="line"><span style="color:#E1E4E8">    scans [</span><span style="color:#79B8FF">63</span><span style="color:#E1E4E8">]</span><span style="color:#F97583">uint8</span></span>
@@ -200,7 +200,7 @@ Go 1.26.5 的 GC 仍然是 concurrent mark-and-sweep；Green Tea 优化的是 <s
 <li><code>owned</code>：控制 span 是否已被某个 worker 获取/入队。</li>
 </ul>
 <p><code>gcUsesSpanInlineMarkBits</code> 当前要求 metadata 可放 span 且对象大小至少 16 B，见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mgcmark_greenteagc.go#L252-L260" rel="noopener noreferrer" target="_blank"><code>#L252-L260</code></a>。不满足条件的大对象或其他特殊对象仍走对象级 workbuf 路径。</p>
-<h2 id="发现指针标记对象排队-span">发现指针：标记对象，排队 span</h2>
+<p><strong>发现指针：标记对象，排队 span</strong></p>
 <p><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mgcmark_greenteagc.go#L262-L314" rel="noopener noreferrer" target="_blank"><code>tryDeferToSpanScan</code></a> 的步骤是：</p>
 <ol>
 <li>用 arena bitmap 快速判断地址所在 span 是否支持 inline mark bits；</li>
@@ -210,10 +210,10 @@ Go 1.26.5 的 GC 仍然是 concurrent mark-and-sweep；Green Tea 优化的是 <s
 <li>scan 对象尝试获取 span ownership；</li>
 <li>把代表该 span 的条目放入当前 P 的 FIFO span queue。</li>
 </ol>
-<h2 id="为什么-span-queue-用-fifo">为什么 span queue 用 FIFO</h2>
+<p><strong>为什么 span queue 用 FIFO</strong></p>
 <p>源码说明 FIFO 比传统 workbuf 的 LIFO 更有利于“让同一 span 继续积累对象”，见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mgcmark_greenteagc.go#L19-L28" rel="noopener noreferrer" target="_blank"><code>mgcmark_greenteagc.go#L19-L28</code></a>。每个 P 有本地可窃取的 <code>spanQueue</code>，减少全局争用；工作不足时可从其他 P steal。</p>
 <p>GC work 的优先级也经过设计：先消费 P-local 对象 workbuf，再消费 P-local span queue，然后才访问全局/窃取，见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mgcwork.go#L51-L68" rel="noopener noreferrer" target="_blank"><code>mgcwork.go#L51-L68</code></a>。优先对象级工作可以给 span 更多时间积累待扫对象。</p>
-<h2 id="批量扫描-span">批量扫描 span</h2>
+<p><strong>批量扫描 span</strong></p>
 <p><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mgcmark_greenteagc.go#L842-L929" rel="noopener noreferrer" target="_blank"><code>scanSpan</code></a> 会：</p>
 <ol>
 <li>释放 span ownership；</li>
@@ -230,7 +230,7 @@ Go 1.26.5 的 GC 仍然是 concurrent mark-and-sweep；Green Tea 优化的是 <s
 它把“灰对象队列”部分改写为“mark bit 与 scan bit 的差集 + span queue”。可达性、安全屏障、root scan、assist、mark termination、sweep 等总体协议仍然存在。</p>
 </div>
 <h2 id="五并行标记work-buffer-与-assist">五、并行标记、work buffer 与 assist</h2>
-<h2 id="gc-worker">GC worker</h2>
+<p><strong>GC worker</strong></p>
 <p>调度器会运行三类 mark worker：</p>
 <ul>
 <li>dedicated：专用执行标记；</li>
@@ -238,18 +238,18 @@ Go 1.26.5 的 GC 仍然是 concurrent mark-and-sweep；Green Tea 优化的是 <s
 <li>idle：只利用本来空闲的 P。</li>
 </ul>
 <p>本地 <code>gcWork</code> 持有两个 object workbuf、一个 Green Tea span queue、临时 pointer buffer 与统计字段，见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mgcwork.go#L70-L137" rel="noopener noreferrer" target="_blank"><code>mgcwork.go#L70-L137</code></a>。双 workbuf 提供迟滞，降低频繁访问全局 full/empty 列表的竞争。</p>
-<h2 id="allocation-assist谁制造垃圾谁帮助清扫">Allocation assist：谁制造垃圾，谁帮助清扫</h2>
+<p><strong>Allocation assist：谁制造垃圾，谁帮助清扫</strong></p>
 <p>GC 期间分配会产生 assist debt。<code>mallocgc</code> 先扣减 credit；债务过高时当前 goroutine 进入 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mgcmark.go#L499-L610" rel="noopener noreferrer" target="_blank"><code>gcAssistAlloc</code></a>，执行一部分标记工作后才能继续大量分配。</p>
 <img src="/images/go/07-allocation-assist-谁制造垃圾-谁帮助清扫.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
 <p>它既限制 GC 期间的无限制 heap 增长，也把扫描成本按分配速率反馈给 mutator。因此延迟尖刺不一定全来自 STW，也可能是业务 goroutine 在做 assist。</p>
 <h2 id="六pacer决定何时开始用多少-cpu">六、Pacer：决定何时开始、用多少 CPU</h2>
-<h2 id="gogc-的堆目标"><code>GOGC</code> 的堆目标</h2>
+<p><strong><code>GOGC</code> 的堆目标</strong></p>
 <p>稳态下可用近似模型理解：</p>
 <p>$$
 TargetHeap \approx LiveHeap + \frac{GOGC}{100} \times \left(LiveHeap + ScanStacks + ScanGlobals\right)
 $$</p>
 <p><code>GOGC=100</code> 不是简单地承诺“内存翻倍才 GC”，因为当前 pacer 还纳入可扫描栈、全局、memory limit、预测误差和最小 heap goal。源码控制器结构见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mgcpacer.go#L92-L180" rel="noopener noreferrer" target="_blank"><code>gcControllerState</code></a>。</p>
-<h2 id="gomemlimit-是-soft-limit"><code>GOMEMLIMIT</code> 是 soft limit</h2>
+<p><strong><code>GOMEMLIMIT</code> 是 soft limit</strong></p>
 <p>memory limit 覆盖 runtime 管理的大部分内存，可用官方定义近似理解：</p>
 <pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="text"><code><span class="line"><span>runtime memory = /memory/classes/total:bytes</span></span>
 <span class="line"><span>               - /memory/classes/heap/released:bytes</span></span></code></pre>
@@ -263,7 +263,7 @@ $$</p>
 <p> 容器里不要直接把 GOMEMLIMIT 等于 pod limit
 给 thread stack、runtime metadata、cgo、共享库、profile、内核缓冲和瞬时峰值留余量。soft limit 也不是 OOM 的绝对防线。</p>
 </div>
-<h2 id="触发条件">触发条件</h2>
+<p><strong>触发条件</strong></p>
 <p><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mgc.go#L703-L725" rel="noopener noreferrer" target="_blank"><code>gcTrigger.test</code></a> 支持：</p>
 <ul>
 <li>heap 达到 controller trigger；</li>
@@ -276,10 +276,10 @@ $$</p>
 <img src="/images/go/08-七-栈扫描与-gc.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
 <p>栈越多、越大、指针越密集，root scan 成本越高。goroutine 数量不仅是 scheduler 指标，也直接影响 GC 与内存，详见 <a href="/stack/">栈空间管理</a>。</p>
 <h2 id="八sweep-与-scavenger">八、Sweep 与 Scavenger</h2>
-<h2 id="sweep-generation">Sweep generation</h2>
+<p><strong>Sweep generation</strong></p>
 <p><code>mspan.sweepgen</code> 与 <code>mheap_.sweepgen</code> 共同表示 span 未 sweep、正在 sweep、已 sweep 或被 mcache 缓存等状态，字段规则写在 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mheap.go#L494-L500" rel="noopener noreferrer" target="_blank"><code>mheap.go#L494-L500</code></a>。每轮 GC sweepgen 增加 2，让 <code>mcentral</code> 的两套 spanSet 交换 swept/unswept 角色。</p>
 <p>这是一种代际编号，不是“分代 GC”。</p>
-<h2 id="scavenger-为什么独立">Scavenger 为什么独立</h2>
+<p><strong>Scavenger 为什么独立</strong></p>
 <p>GC/sweep 决定对象和 page 是否可复用；scavenger 决定空闲 page 的物理 backing 是否应该释放。后台 scavenger 默认只愿意消耗约 1% mutator 时间，源码见 <a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mgcscavenge.go#L100-L126" rel="noopener noreferrer" target="_blank"><code>mgcscavenge.go#L100-L126</code></a>。</p>
 <p>在 memory limit 压力、heap grow 或 <code>debug.FreeOSMemory</code> 场景，还可能同步、更积极地 scavenging。</p>
 <h2 id="九finalizercleanup-与泄漏理解">九、Finalizer、Cleanup 与泄漏理解</h2>
@@ -292,10 +292,10 @@ $$</p>
 <li>诊断“泄漏”时区分 heap retention、goroutine leak、外部/C 内存和高分配 churn。</li>
 </ul>
 <p>Go 1.26 还提供实验性的 <code>goroutineleak</code> profile。它借助 GC 可达性判断一部分永远无法被唤醒的 goroutine，但对仍被 runnable goroutine 或 global 引用的同步原语可能无法判定。该能力需要构建时开启实验，详情见 <a href="https://go.dev/doc/go1.26" rel="noopener noreferrer" target="_blank">Go 1.26 Release Notes</a>。</p>
-<h2 id="十生产诊断">十、生产诊断</h2>
-<h2 id="一套证据链">一套证据链</h2>
+<p><strong>十、生产诊断</strong></p>
+<p><strong>一套证据链</strong></p>
 <img src="/images/go/09-一套证据链.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
-<h2 id="常用指标">常用指标</h2>
+<p><strong>常用指标</strong></p>
 
 
 
@@ -338,7 +338,7 @@ $$</p>
 
 
 <table><thead><tr><th>指标/证据</th><th>解释</th></tr></thead><tbody><tr><td><code>/gc/heap/live:bytes</code></td><td>上轮 GC 后确认存活的 heap</td></tr><tr><td><code>/gc/heap/goal:bytes</code></td><td>当前 cycle 的 heap goal</td></tr><tr><td><code>/gc/heap/allocs:bytes</code></td><td>累计 heap 分配</td></tr><tr><td><code>/gc/pauses:seconds</code></td><td>GC stop-the-world pause 分布</td></tr><tr><td><code>/memory/classes/heap/released:bytes</code></td><td>已归还 OS 的 heap page</td></tr><tr><td><code>/gc/scan/heap:bytes</code></td><td>需要扫描的 heap 规模</td></tr><tr><td>heap <code>inuse_space</code></td><td>profile 时仍保留的采样对象</td></tr><tr><td>heap <code>alloc_space</code></td><td>时间区间累计分配热点</td></tr></tbody></table>
-<h2 id="命令">命令</h2>
+<p><strong>命令</strong></p>
 <pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="bash"><code><span class="line"><span style="color:#6A737D"># 每轮 GC 摘要</span></span>
 <span class="line"><span style="color:#E1E4E8">GODEBUG</span><span style="color:#F97583">=</span><span style="color:#E1E4E8">gctrace</span><span style="color:#F97583">=</span><span style="color:#9ECBFF">1</span><span style="color:#B392F0"> ./app</span></span>
 <span class="line"></span>
@@ -357,8 +357,8 @@ $$</p>
 <p><code>gctrace=2</code>
 Go 1.26 的 Green Tea 源码包含按 size class 的扫描统计，<code>debug.gctrace > 1</code> 时会收集更细数据；这是实现级诊断，格式不应被业务程序当成稳定 API。</p>
 </div>
-<h2 id="如何解释常见现象">如何解释常见现象</h2>
-<h3 id="gc-很频繁但-heap-不大">GC 很频繁但 heap 不大</h3>
+<p><strong>如何解释常见现象</strong></p>
+<p><strong>GC 很频繁但 heap 不大</strong></p>
 <p>优先检查：</p>
 <ul>
 <li><code>GOMEMLIMIT</code> 是否设置过低；</li>
@@ -367,7 +367,7 @@ Go 1.26 的 Green Tea 源码包含按 size class 的扫描统计，<code>debug.g
 <li>non-heap runtime/cgo 内存是否挤压 limit；</li>
 <li>live heap 是否接近 limit，导致 pacer 无 runway。</li>
 </ul>
-<h3 id="heap-profile-看不大但-rss-很高">heap profile 看不大但 RSS 很高</h3>
+<p><strong>heap profile 看不大但 RSS 很高</strong></p>
 <p>检查：</p>
 <ul>
 <li>goroutine stack；</li>
@@ -377,10 +377,10 @@ Go 1.26 的 Green Tea 源码包含按 size class 的扫描统计，<code>debug.g
 <li>binary/shared library mapping；</li>
 <li>profile 采样误差。</li>
 </ul>
-<h3 id="p99-在-gc-期间抬升">P99 在 GC 期间抬升</h3>
+<p><strong>P99 在 GC 期间抬升</strong></p>
 <p>不要只看 STW：还要查看 allocation assist、CPU 被 mark worker 占用、page fault/scavenging、scheduler run queue 与锁竞争。</p>
-<h2 id="十一调优原则">十一、调优原则</h2>
-<h2 id="优先优化分配图而不是先调-gogc">优先优化分配图，而不是先调 GOGC</h2>
+<p><strong>十一、调优原则</strong></p>
+<p><strong>优先优化分配图，而不是先调 GOGC</strong></p>
 <ol>
 <li>减少无意义分配和复制；</li>
 <li>缩小长期存活指针图；</li>
@@ -389,7 +389,7 @@ Go 1.26 的 Green Tea 源码包含按 size class 的扫描统计，<code>debug.g
 <li>在容器中配置合理 <code>GOMEMLIMIT</code> 并留 headroom；</li>
 <li>用稳定 workload 比较吞吐、P99、GC CPU、peak RSS。</li>
 </ol>
-<h2 id="gogc-与内存的基本权衡"><code>GOGC</code> 与内存的基本权衡</h2>
+<p><strong><code>GOGC</code> 与内存的基本权衡</strong></p>
 <ul>
 <li>提高 <code>GOGC</code>：通常 GC 更少、CPU 更低、峰值 heap 更高；</li>
 <li>降低 <code>GOGC</code>：通常 GC 更频繁、CPU 更高、heap 更低；</li>
@@ -397,7 +397,7 @@ Go 1.26 的 Green Tea 源码包含按 size class 的扫描统计，<code>debug.g
 <li>极低 memory limit：可能进入高频 GC，soft limit 最终选择允许超限以避免死亡螺旋。</li>
 </ul>
 <p>不要把这些当成单调定律：cache locality、assist、scavenger、kernel page fault 和 workload phase 都会改变结果。</p>
-<h2 id="十二常见误区">十二、常见误区</h2>
+<p><strong>十二、常见误区</strong></p>
 
 
 
@@ -440,7 +440,7 @@ Go 1.26 的 Green Tea 源码包含按 size class 的扫描统计，<code>debug.g
 
 
 <table><thead><tr><th>误区</th><th>Go 1.26.5 正确理解</th></tr></thead><tbody><tr><td>Green Tea 是分代 GC</td><td>不是；仍是非分代 mark-and-sweep</td></tr><tr><td>Green Tea 会移动/压缩对象</td><td>不会；当前 GC non-compacting</td></tr><tr><td>三色模型已经过时</td><td>仍用于正确性推理，只是灰工作表示发生变化</td></tr><tr><td>GC 全程 STW</td><td>mark/sweep 主要并发；阶段切换仍 STW</td></tr><tr><td>GC 只由后台线程完成</td><td>mutator 可能通过 allocation assist 做大量工作</td></tr><tr><td><code>GOMEMLIMIT</code> 是硬上限</td><td>是 soft limit，且不覆盖所有进程内存</td></tr><tr><td>GC 完成 RSS 就会下降</td><td>sweep 与 scavenger 是不同步骤</td></tr><tr><td>手动 <code>runtime.GC()</code> 能解决泄漏</td><td>只能更早证明对象仍可达或回收，不能修复保留路径</td></tr></tbody></table>
-<h2 id="十三源码阅读主线与验收">十三、源码阅读主线与验收</h2>
+<p><strong>十三、源码阅读主线与验收</strong></p>
 <p>推荐顺序：</p>
 <ol>
 <li><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mgc.go#L5-L127" rel="noopener noreferrer" target="_blank"><code>mgc.go</code> 算法注释</a>；</li>
@@ -465,12 +465,12 @@ Go 1.26 的 Green Tea 源码包含按 size class 的扫描统计，<code>debug.g
 <li class="task-list-item"><input type="checkbox" disabled> sweep 与 scavenger 为什么必须分开理解？</li>
 <li class="task-list-item"><input type="checkbox" disabled> 为什么大量 goroutine 会增加 GC root scan 成本？</li>
 </ul>
-<h2 id="总结">总结</h2>
+<p><strong>总结</strong></p>
 <p>Go 1.26.5 的 GC 可以压缩为两层认识：</p>
 <pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="text"><code><span class="line"><span>正确性层：root + 混合写屏障 + allocate black + 并发终止检测</span></span>
 <span class="line"><span>性能层：Green Tea span batching + per-P work + pacer + assist + sweep/scavenge</span></span></code></pre>
 <p>Green Tea 没有推翻 Go GC，而是重新组织小对象扫描：把单个对象的随机访存，尽可能转化为同 span 的批量处理。理解它时必须同时连接 <a href="/memory-alloc/">内存分配器</a> 的 span/bitmap 布局和 <a href="/stack/">栈空间管理</a> 的 root scan，才能形成完整内存模型。</p>
-<h2 id="参考资料">参考资料</h2>
+<p><strong>参考资料</strong></p>
 <ul>
 <li><a href="https://go.dev/doc/go1.26" rel="noopener noreferrer" target="_blank">Go 1.26 Release Notes</a></li>
 <li><a href="https://go.dev/doc/gc-guide" rel="noopener noreferrer" target="_blank">A Guide to the Go Garbage Collector</a></li>
@@ -478,4 +478,4 @@ Go 1.26 的 Green Tea 源码包含按 size class 的扫描统计，<code>debug.g
 <li><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mgc.go" rel="noopener noreferrer" target="_blank">Go 1.26.5 runtime/mgc.go</a></li>
 <li><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mgcmark_greenteagc.go" rel="noopener noreferrer" target="_blank">Go 1.26.5 Green Tea implementation</a></li>
 <li><a href="https://github.com/golang/go/blob/c19862e5f8415b4f24b189d065ed739517c548ba/src/runtime/mgcpacer.go" rel="noopener noreferrer" target="_blank">Go 1.26.5 GC pacer</a></li>
-</ul></main><aside class="toc"><p class="toc-title">本页目录</p><ul><li class="toc-d2"><a href="#go-1265-版本结论">Go 1.26.5 版本结论</a></li><li class="toc-d2"><a href="#源码地图">源码地图</a></li><li class="toc-d2"><a href="#一gc-的基本问题">一、GC 的基本问题</a></li><li class="toc-d2"><a href="#可达性而不是出了作用域">可达性，而不是“出了作用域”</a></li><li class="toc-d2"><a href="#三色抽象仍有用但不是数据结构说明书">三色抽象仍有用，但不是数据结构说明书</a></li><li class="toc-d2"><a href="#二一个完整-gc-cycle">二、一个完整 GC cycle</a></li><li class="toc-d2"><a href="#1-sweep-terminationstw">1. Sweep termination：STW</a></li><li class="toc-d2"><a href="#2-concurrent-mark主要并发阶段">2. Concurrent mark：主要并发阶段</a></li><li class="toc-d2"><a href="#3-mark-terminationstw">3. Mark termination：STW</a></li><li class="toc-d2"><a href="#4-concurrent-sweep">4. Concurrent sweep</a></li><li class="toc-d2"><a href="#三写屏障并发正确性的核心">三、写屏障：并发正确性的核心</a></li><li class="toc-d2"><a href="#为什么栈写通常不走写屏障">为什么栈写通常不走写屏障</a></li><li class="toc-d2"><a href="#批量写也必须有-barrier">批量写也必须有 barrier</a></li><li class="toc-d2"><a href="#四green-teago-126-默认的新标记扫描路径">四、Green Tea：Go 1.26 默认的新标记扫描路径</a></li><li class="toc-d2"><a href="#green-tea-要解决的局部性问题">Green Tea 要解决的局部性问题</a></li><li class="toc-d2"><a href="#marks-与-scans">marks 与 scans</a></li><li class="toc-d2"><a href="#发现指针标记对象排队-span">发现指针：标记对象，排队 span</a></li><li class="toc-d2"><a href="#为什么-span-queue-用-fifo">为什么 span queue 用 FIFO</a></li><li class="toc-d2"><a href="#批量扫描-span">批量扫描 span</a></li><li class="toc-d2"><a href="#五并行标记work-buffer-与-assist">五、并行标记、work buffer 与 assist</a></li><li class="toc-d2"><a href="#gc-worker">GC worker</a></li><li class="toc-d2"><a href="#allocation-assist谁制造垃圾谁帮助清扫">Allocation assist：谁制造垃圾，谁帮助清扫</a></li><li class="toc-d2"><a href="#六pacer决定何时开始用多少-cpu">六、Pacer：决定何时开始、用多少 CPU</a></li><li class="toc-d2"><a href="#gogc-的堆目标">GOGC 的堆目标</a></li><li class="toc-d2"><a href="#gomemlimit-是-soft-limit">GOMEMLIMIT 是 soft limit</a></li><li class="toc-d2"><a href="#触发条件">触发条件</a></li><li class="toc-d2"><a href="#七栈扫描与-gc">七、栈扫描与 GC</a></li><li class="toc-d2"><a href="#八sweep-与-scavenger">八、Sweep 与 Scavenger</a></li><li class="toc-d2"><a href="#sweep-generation">Sweep generation</a></li><li class="toc-d2"><a href="#scavenger-为什么独立">Scavenger 为什么独立</a></li><li class="toc-d2"><a href="#九finalizercleanup-与泄漏理解">九、Finalizer、Cleanup 与泄漏理解</a></li><li class="toc-d2"><a href="#十生产诊断">十、生产诊断</a></li><li class="toc-d2"><a href="#一套证据链">一套证据链</a></li><li class="toc-d2"><a href="#常用指标">常用指标</a></li><li class="toc-d2"><a href="#命令">命令</a></li><li class="toc-d2"><a href="#如何解释常见现象">如何解释常见现象</a></li><li class="toc-d3"><a href="#gc-很频繁但-heap-不大">GC 很频繁但 heap 不大</a></li><li class="toc-d3"><a href="#heap-profile-看不大但-rss-很高">heap profile 看不大但 RSS 很高</a></li><li class="toc-d3"><a href="#p99-在-gc-期间抬升">P99 在 GC 期间抬升</a></li><li class="toc-d2"><a href="#十一调优原则">十一、调优原则</a></li><li class="toc-d2"><a href="#优先优化分配图而不是先调-gogc">优先优化分配图，而不是先调 GOGC</a></li><li class="toc-d2"><a href="#gogc-与内存的基本权衡">GOGC 与内存的基本权衡</a></li><li class="toc-d2"><a href="#十二常见误区">十二、常见误区</a></li><li class="toc-d2"><a href="#十三源码阅读主线与验收">十三、源码阅读主线与验收</a></li><li class="toc-d2"><a href="#总结">总结</a></li><li class="toc-d2"><a href="#参考资料">参考资料</a></li></ul></aside></div><div class="lightbox" id="lightbox" aria-hidden="true"><img alt=""></div><script type="module">var e=document.documentElement,t=document.getElementById(`themeToggle`),n={auto:`🖥️`,light:`☀️`,dark:`🌙`};function r(){var e=localStorage.getItem(`theme`);return e===`light`||e===`dark`?e:`auto`}function i(){var i=r();i===`auto`?e.removeAttribute(`data-theme`):e.setAttribute(`data-theme`,i),t.textContent=n[i]}i(),t.addEventListener(`click`,()=>{var e=[`auto`,`light`,`dark`],t=e[(e.indexOf(r())+1)%3];t===`auto`?localStorage.removeItem(`theme`):localStorage.setItem(`theme`,t),i()}),window.matchMedia(`(prefers-color-scheme: dark)`).addEventListener(`change`,()=>{r()===`auto`&&i()});var a=document.getElementById(`lightbox`),o=a.querySelector(`img`);document.querySelectorAll(`.prose img`).forEach(e=>{e.style.cursor=`zoom-in`,e.addEventListener(`click`,()=>{o.src=e.currentSrc||e.src,o.alt=e.alt,a.classList.add(`open`),a.setAttribute(`aria-hidden`,`false`)})}),a.addEventListener(`click`,()=>{a.classList.remove(`open`),a.setAttribute(`aria-hidden`,`true`)}),document.addEventListener(`keydown`,e=>{e.key===`Escape`&&a.click()});</script></body></html>
+</ul></main><aside class="toc"><p class="toc-title">本页目录</p><ul><li class="toc-d2"><a href="#一gc-的基本问题">一、GC 的基本问题</a></li><li class="toc-d2"><a href="#二一个完整-gc-cycle">二、一个完整 GC cycle</a></li><li class="toc-d2"><a href="#三写屏障并发正确性的核心">三、写屏障：并发正确性的核心</a></li><li class="toc-d2"><a href="#四green-teago-126-默认的新标记扫描路径">四、Green Tea：Go 1.26 默认的新标记扫描路径</a></li><li class="toc-d2"><a href="#五并行标记work-buffer-与-assist">五、并行标记、work buffer 与 assist</a></li><li class="toc-d2"><a href="#六pacer决定何时开始用多少-cpu">六、Pacer：决定何时开始、用多少 CPU</a></li><li class="toc-d2"><a href="#七栈扫描与-gc">七、栈扫描与 GC</a></li><li class="toc-d2"><a href="#八sweep-与-scavenger">八、Sweep 与 Scavenger</a></li><li class="toc-d2"><a href="#九finalizercleanup-与泄漏理解">九、Finalizer、Cleanup 与泄漏理解</a></li></ul></aside></div><div class="lightbox" id="lightbox" aria-hidden="true"><img alt=""></div><script type="module">var e=document.documentElement,t=document.getElementById(`themeToggle`),n={auto:`🖥️`,light:`☀️`,dark:`🌙`};function r(){var e=localStorage.getItem(`theme`);return e===`light`||e===`dark`?e:`auto`}function i(){var i=r();i===`auto`?e.removeAttribute(`data-theme`):e.setAttribute(`data-theme`,i),t.textContent=n[i]}i(),t.addEventListener(`click`,()=>{var e=[`auto`,`light`,`dark`],t=e[(e.indexOf(r())+1)%3];t===`auto`?localStorage.removeItem(`theme`):localStorage.setItem(`theme`,t),i()}),window.matchMedia(`(prefers-color-scheme: dark)`).addEventListener(`change`,()=>{r()===`auto`&&i()});var a=document.getElementById(`lightbox`),o=a.querySelector(`img`);document.querySelectorAll(`.prose img`).forEach(e=>{e.style.cursor=`zoom-in`,e.addEventListener(`click`,()=>{o.src=e.currentSrc||e.src,o.alt=e.alt,a.classList.add(`open`),a.setAttribute(`aria-hidden`,`false`)})}),a.addEventListener(`click`,()=>{a.classList.remove(`open`),a.setAttribute(`aria-hidden`,`true`)}),document.addEventListener(`keydown`,e=>{e.key===`Escape`&&a.click()});</script></body></html>
