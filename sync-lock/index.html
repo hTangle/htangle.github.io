@@ -516,6 +516,190 @@ Go 1.24 替换了 <code>sync.Map</code> 实现。Go 1.26.5 的公开 <a href="ht
 <p> 看 profile 时先优化临界区，再换锁
 缩小锁粒度、把慢 I/O 移出临界区、消除重复计算和减少共享状态，通常比盲目把 <code>Mutex</code> 换成 <code>RWMutex</code>/atomic 更有效。</p>
 </div>
+<h2 id="七并发限流实战">七、并发限流实战</h2>
+<p><strong>场景</strong>：一个安装器要并发装很多包，但同时只允许 N 个在跑（CPU/磁盘/带宽有限），一个失败最好能取消其余。这里要区分两类原语：</p>
+<ul>
+<li><code>WaitGroup</code> 解决”<strong>等一组任务全部结束</strong>”（Add/Done/Wait）；</li>
+<li>信号量（semaphore）解决”<strong>同时最多 N 个在跑</strong>”。两者配合使用。</li>
+</ul>
+<p>不要用 <code>Mutex</code> 做限流——Mutex 保证互斥（同一时刻只有一个），不是计数许可。</p>
+<p><strong>方案 1：buffered channel 当信号量</strong></p>
+<p>容量即并发上限。启动一个 worker 前往 channel 塞 token（满了就 park 住调用方），完成后取出：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">func</span><span style="color:#B392F0"> installAll</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">pkgs</span><span style="color:#E1E4E8"> []</span><span style="color:#F97583">string</span><span style="color:#E1E4E8">, </span><span style="color:#FFAB70">concurrency</span><span style="color:#F97583"> int</span><span style="color:#E1E4E8">) </span><span style="color:#F97583">error</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">    sem </span><span style="color:#F97583">:=</span><span style="color:#B392F0"> make</span><span style="color:#E1E4E8">(</span><span style="color:#F97583">chan</span><span style="color:#F97583"> struct</span><span style="color:#E1E4E8">{}, concurrency) </span><span style="color:#6A737D">// 计数信号量</span></span>
+<span class="line"><span style="color:#F97583">    var</span><span style="color:#E1E4E8"> wg </span><span style="color:#B392F0">sync</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">WaitGroup</span></span>
+<span class="line"><span style="color:#E1E4E8">    errCh </span><span style="color:#F97583">:=</span><span style="color:#B392F0"> make</span><span style="color:#E1E4E8">(</span><span style="color:#F97583">chan</span><span style="color:#F97583"> error</span><span style="color:#E1E4E8">, </span><span style="color:#79B8FF">1</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">    for</span><span style="color:#E1E4E8"> _, p </span><span style="color:#F97583">:=</span><span style="color:#F97583"> range</span><span style="color:#E1E4E8"> pkgs {</span></span>
+<span class="line"><span style="color:#E1E4E8">        wg.</span><span style="color:#B392F0">Add</span><span style="color:#E1E4E8">(</span><span style="color:#79B8FF">1</span><span style="color:#E1E4E8">)</span></span>
+<span class="line"><span style="color:#E1E4E8">        sem </span><span style="color:#F97583">&#x3C;-</span><span style="color:#F97583"> struct</span><span style="color:#E1E4E8">{}{} </span><span style="color:#6A737D">// 拿许可；满了阻塞</span></span>
+<span class="line"><span style="color:#F97583">        go</span><span style="color:#F97583"> func</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">pkg</span><span style="color:#F97583"> string</span><span style="color:#E1E4E8">) {</span></span>
+<span class="line"><span style="color:#F97583">            defer</span><span style="color:#E1E4E8"> wg.</span><span style="color:#B392F0">Done</span><span style="color:#E1E4E8">()</span></span>
+<span class="line"><span style="color:#F97583">            defer</span><span style="color:#F97583"> func</span><span style="color:#E1E4E8">() { </span><span style="color:#F97583">&#x3C;-</span><span style="color:#E1E4E8">sem }() </span><span style="color:#6A737D">// 还许可</span></span>
+<span class="line"><span style="color:#F97583">            if</span><span style="color:#E1E4E8"> err </span><span style="color:#F97583">:=</span><span style="color:#B392F0"> installOne</span><span style="color:#E1E4E8">(pkg); err </span><span style="color:#F97583">!=</span><span style="color:#79B8FF"> nil</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">                select</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">                case</span><span style="color:#E1E4E8"> errCh </span><span style="color:#F97583">&#x3C;-</span><span style="color:#E1E4E8"> err: </span><span style="color:#6A737D">// 只收第一个错误</span></span>
+<span class="line"><span style="color:#F97583">                default</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#E1E4E8">                }</span></span>
+<span class="line"><span style="color:#E1E4E8">            }</span></span>
+<span class="line"><span style="color:#E1E4E8">        }(p)</span></span>
+<span class="line"><span style="color:#E1E4E8">    }</span></span>
+<span class="line"><span style="color:#E1E4E8">    wg.</span><span style="color:#B392F0">Wait</span><span style="color:#E1E4E8">()</span></span>
+<span class="line"><span style="color:#B392F0">    close</span><span style="color:#E1E4E8">(errCh)</span></span>
+<span class="line"><span style="color:#F97583">    return</span><span style="color:#F97583"> &#x3C;-</span><span style="color:#E1E4E8">errCh</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>缺点：一个任务失败后，已经启动的其他任务<strong>不会停</strong>。安装器通常希望”一个失败就取消剩下的”，这就需要 context。</p>
+<p><strong>方案 2：<code>errgroup</code> + <code>SetLimit</code>（生产首选）</strong></p>
+<p><a href="https://pkg.go.dev/golang.org/x/sync/errgroup" rel="noopener noreferrer" target="_blank"><code>errgroup</code></a> 把 WaitGroup、错误回收、context 取消打包。Go 1.20+ 的 <code>SetLimit(n)</code> 直接给并发上限：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">import</span><span style="color:#9ECBFF"> "</span><span style="color:#B392F0">golang.org/x/sync/errgroup</span><span style="color:#9ECBFF">"</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">func</span><span style="color:#B392F0"> installAll</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">ctx</span><span style="color:#B392F0"> context</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">Context</span><span style="color:#E1E4E8">, </span><span style="color:#FFAB70">pkgs</span><span style="color:#E1E4E8"> []</span><span style="color:#F97583">string</span><span style="color:#E1E4E8">, </span><span style="color:#FFAB70">concurrency</span><span style="color:#F97583"> int</span><span style="color:#E1E4E8">) </span><span style="color:#F97583">error</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#E1E4E8">    g, ctx </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> errgroup.</span><span style="color:#B392F0">WithContext</span><span style="color:#E1E4E8">(ctx)</span></span>
+<span class="line"><span style="color:#E1E4E8">    g.</span><span style="color:#B392F0">SetLimit</span><span style="color:#E1E4E8">(concurrency) </span><span style="color:#6A737D">// 同时在跑的最多 concurrency 个</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F97583">    for</span><span style="color:#E1E4E8"> _, p </span><span style="color:#F97583">:=</span><span style="color:#F97583"> range</span><span style="color:#E1E4E8"> pkgs {</span></span>
+<span class="line"><span style="color:#E1E4E8">        pkg </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> p </span><span style="color:#6A737D">// Go 1.22 前避免循环变量陷阱</span></span>
+<span class="line"><span style="color:#E1E4E8">        g.</span><span style="color:#B392F0">Go</span><span style="color:#E1E4E8">(</span><span style="color:#F97583">func</span><span style="color:#E1E4E8">() </span><span style="color:#F97583">error</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#6A737D">            // 任务必须监听 ctx：某个任务失败后 ctx 被取消，其余应尽快返回</span></span>
+<span class="line"><span style="color:#F97583">            return</span><span style="color:#B392F0"> installOneCtx</span><span style="color:#E1E4E8">(ctx, pkg)</span></span>
+<span class="line"><span style="color:#E1E4E8">        })</span></span>
+<span class="line"><span style="color:#E1E4E8">    }</span></span>
+<span class="line"><span style="color:#F97583">    return</span><span style="color:#E1E4E8"> g.</span><span style="color:#B392F0">Wait</span><span style="color:#E1E4E8">() </span><span style="color:#6A737D">// 等全部完成，返回第一个非 nil error</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>关键行为：</p>
+<ul>
+<li><code>g.Go</code> 在达到上限时<strong>阻塞调用方</strong>，而不是预先起一堆 goroutine 干等，所以不会有 N 万个 goroutine；</li>
+<li>任一任务返回非 nil error，<code>ctx</code> 被取消；<strong>前提是任务真的检查 <code>ctx.Done()</code></strong>（下载用 <code>http.NewRequestWithContext</code>、长任务分段检查 <code>ctx.Err()</code>），取消才传得进去；</li>
+<li><code>TryGo</code> 在已满时返回 false，适合”丢任务”或自定义排队策略。</li>
+</ul>
+<p><strong>方案 3：加权信号量（任务大小不一时）</strong></p>
+<p>大包小包权重不同（CPU/磁盘/带宽占用不同）时用 <a href="https://pkg.go.dev/golang.org/x/sync/semaphore" rel="noopener noreferrer" target="_blank"><code>x/sync/semaphore</code></a>：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#E1E4E8">sem </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> semaphore.</span><span style="color:#B392F0">NewWeighted</span><span style="color:#E1E4E8">(</span><span style="color:#79B8FF">100</span><span style="color:#E1E4E8">) </span><span style="color:#6A737D">// 100 个资源单位</span></span>
+<span class="line"><span style="color:#E1E4E8">g, ctx </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> errgroup.</span><span style="color:#B392F0">WithContext</span><span style="color:#E1E4E8">(ctx)</span></span>
+<span class="line"><span style="color:#F97583">for</span><span style="color:#E1E4E8"> _, p </span><span style="color:#F97583">:=</span><span style="color:#F97583"> range</span><span style="color:#E1E4E8"> pkgs {</span></span>
+<span class="line"><span style="color:#E1E4E8">    w </span><span style="color:#F97583">:=</span><span style="color:#B392F0"> weightOf</span><span style="color:#E1E4E8">(p) </span><span style="color:#6A737D">// 大包权重大</span></span>
+<span class="line"><span style="color:#F97583">    if</span><span style="color:#E1E4E8"> err </span><span style="color:#F97583">:=</span><span style="color:#E1E4E8"> sem.</span><span style="color:#B392F0">Acquire</span><span style="color:#E1E4E8">(ctx, w); err </span><span style="color:#F97583">!=</span><span style="color:#79B8FF"> nil</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">        return</span><span style="color:#E1E4E8"> err</span></span>
+<span class="line"><span style="color:#E1E4E8">    }</span></span>
+<span class="line"><span style="color:#E1E4E8">    g.</span><span style="color:#B392F0">Go</span><span style="color:#E1E4E8">(</span><span style="color:#F97583">func</span><span style="color:#E1E4E8">() </span><span style="color:#F97583">error</span><span style="color:#E1E4E8"> { </span><span style="color:#F97583">defer</span><span style="color:#E1E4E8"> sem.</span><span style="color:#B392F0">Release</span><span style="color:#E1E4E8">(w); </span><span style="color:#F97583">return</span><span style="color:#B392F0"> installOneCtx</span><span style="color:#E1E4E8">(ctx, p) })</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p>等权任务用方案 2；权重差异大才上方案 3。</p>
+<p><strong>信号量 vs 固定 worker 池</strong></p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>模式</th><th>适用</th></tr></thead><tbody><tr><td>信号量（channel / SetLimit）</td><td>任务数已知、一个任务一个 goroutine——安装器绝大多数情况</td></tr><tr><td>固定 N 个 worker + task channel</td><td>任务持续到来的流、需要长期复用 worker、或要排队/重试/优先级</td></tr></tbody></table>
+<p>安装器的包清单通常是确定的，信号量更简单、错误传播更干净。若做成”常驻 daemon 从队列领任务”，才用固定 worker：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="go"><code><span class="line"><span style="color:#F97583">func</span><span style="color:#B392F0"> worker</span><span style="color:#E1E4E8">(</span><span style="color:#FFAB70">ctx</span><span style="color:#B392F0"> context</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">Context</span><span style="color:#E1E4E8">, </span><span style="color:#FFAB70">tasks</span><span style="color:#F97583"> &#x3C;-chan</span><span style="color:#F97583"> func</span><span style="color:#E1E4E8">(</span><span style="color:#B392F0">context</span><span style="color:#E1E4E8">.</span><span style="color:#B392F0">Context</span><span style="color:#E1E4E8">) </span><span style="color:#F97583">error</span><span style="color:#E1E4E8">, </span><span style="color:#FFAB70">errs</span><span style="color:#F97583"> chan&#x3C;-</span><span style="color:#F97583"> error</span><span style="color:#E1E4E8">) {</span></span>
+<span class="line"><span style="color:#F97583">    for</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">        select</span><span style="color:#E1E4E8"> {</span></span>
+<span class="line"><span style="color:#F97583">        case</span><span style="color:#F97583"> &#x3C;-</span><span style="color:#E1E4E8">ctx.</span><span style="color:#B392F0">Done</span><span style="color:#E1E4E8">():</span></span>
+<span class="line"><span style="color:#F97583">            return</span></span>
+<span class="line"><span style="color:#F97583">        case</span><span style="color:#E1E4E8"> t, ok </span><span style="color:#F97583">:=</span><span style="color:#F97583"> &#x3C;-</span><span style="color:#E1E4E8">tasks:</span></span>
+<span class="line"><span style="color:#F97583">            if</span><span style="color:#F97583"> !</span><span style="color:#E1E4E8">ok { </span><span style="color:#F97583">return</span><span style="color:#E1E4E8"> }</span></span>
+<span class="line"><span style="color:#E1E4E8">            errs </span><span style="color:#F97583">&#x3C;-</span><span style="color:#B392F0"> t</span><span style="color:#E1E4E8">(ctx)</span></span>
+<span class="line"><span style="color:#E1E4E8">        }</span></span>
+<span class="line"><span style="color:#E1E4E8">    }</span></span>
+<span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
+<p><strong>安装器常见的两个附加问题</strong></p>
+<ol>
+<li><strong>依赖顺序（拓扑）</strong>：包之间有依赖时不能全并发。按依赖图分层——同层无依赖的并发跑，层与层之间用 WaitGroup 做 barrier；或给每个包一个 <code>done chan</code>，依赖方 <code>&#x3C;-dep.done</code> 后再启动。</li>
+<li><strong>共享资源（下载缓存、apt/dpkg 锁、同一目录）</strong>：
+<ul>
+<li>相同资源只下载一次，用 <code>sync.Once</code> 或 <a href="https://pkg.go.dev/golang.org/x/sync/singleflight" rel="noopener noreferrer" target="_blank"><code>singleflight</code></a> 合并并发请求；</li>
+<li>互斥访问（如不能并发写同一目录）用 <code>Mutex</code>，但更好的做法是把该资源变成一个<strong>有界 channel / 单 worker</strong>，谁拿到谁用，天然排队。</li>
+</ul>
+</li>
+</ol>
+<div class="bm-diagram"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 898.192 253.55000000000004" width="898.192" height="253.55000000000004" style="--bg:var(--bm-bg);--fg:var(--bm-fg);--line:var(--bm-border);--accent:var(--bm-accent);--muted:var(--bm-muted);--surface:var(--bm-surface);--border:var(--bm-border)">
+<style>
+  text { font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif; }
+  svg {
+    /* Derived from --bg and --fg (overridable via --line, --accent, etc.) */
+    --_text:          var(--fg);
+    --_text-sec:      var(--muted, color-mix(in srgb, var(--fg) 60%, var(--bg)));
+    --_text-muted:    var(--muted, color-mix(in srgb, var(--fg) 40%, var(--bg)));
+    --_text-faint:    color-mix(in srgb, var(--fg) 25%, var(--bg));
+    --_line:          var(--line, color-mix(in srgb, var(--fg) 50%, var(--bg)));
+    --_arrow:         var(--accent, color-mix(in srgb, var(--fg) 85%, var(--bg)));
+    --_node-fill:     var(--surface, color-mix(in srgb, var(--fg) 3%, var(--bg)));
+    --_node-stroke:   var(--border, color-mix(in srgb, var(--fg) 20%, var(--bg)));
+    --_group-fill:    var(--bg);
+    --_group-hdr:     color-mix(in srgb, var(--fg) 5%, var(--bg));
+    --_inner-stroke:  color-mix(in srgb, var(--fg) 12%, var(--bg));
+    --_key-badge:     color-mix(in srgb, var(--fg) 10%, var(--bg));
+  }
+</style>
+<defs>
+  <marker id="arrowhead" markerWidth="8" markerHeight="5" refX="7" refY="2.5" orient="auto">
+    <polygon points="0 0, 8 2.5, 0 5" fill="var(--_arrow)" stroke="var(--_arrow)" stroke-width="0.75" stroke-linejoin="round"></polygon>
+  </marker>
+  <marker id="arrowhead-start" markerWidth="8" markerHeight="5" refX="1" refY="2.5" orient="auto-start-reverse">
+    <polygon points="8 0, 0 2.5, 8 5" fill="var(--_arrow)" stroke="var(--_arrow)" stroke-width="0.75" stroke-linejoin="round"></polygon>
+  </marker>
+</defs>
+<polyline class="edge" data-from="JOBS" data-to="SL" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="316.395,132.31666666666666 364.395,132.31666666666666" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)"></polyline>
+<polyline class="edge" data-from="SL" data-to="W1" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="523.423,123.35000000000001 554.905,123.35000000000001 554.905,188.25 586.387,188.25" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)"></polyline>
+<polyline class="edge" data-from="SL" data-to="W2" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="523.423,123.35000000000001 554.905,123.35000000000001 554.905,58.45 586.387,58.45" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)"></polyline>
+<polyline class="edge" data-from="SL" data-to="WK" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="523.423,123.35000000000001 554.905,123.35000000000001 554.905,123.35000000000001 586.387,123.35000000000001" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)"></polyline>
+<polyline class="edge" data-from="W1" data-to="DONE" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="676.502,188.25 698.948,188.25 698.948,123.35000000000001 715.466,123.35000000000001" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)"></polyline>
+<polyline class="edge" data-from="W2" data-to="DONE" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="680.948,58.45 698.948,58.45 698.948,123.35000000000001 715.466,123.35000000000001" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)"></polyline>
+<polyline class="edge" data-from="WK" data-to="DONE" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="682.43,123.35000000000001 698.948,123.35000000000001 698.948,123.35000000000001 715.466,123.35000000000001" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)"></polyline>
+<polyline class="edge" data-from="ERR" data-to="SL" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="cancel ctx" points="141.23,148.24166666666667 177.23,148.24166666666667 177.23,75.56666666666668 352.395,75.56666666666668 352.395,114.38333333333334 364.395,114.38333333333334" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)"></polyline>
+<polyline class="edge" data-from="ERR" data-to="W1" data-style="dotted" data-arrow-start="false" data-arrow-end="true" data-label="通知在跑任务退出" points="141.23,160.54166666666669 430.73300000000006,160.54166666666669 430.73300000000006,194.40000000000003 586.387,194.4" fill="none" stroke="var(--_line)" stroke-width="1" stroke-dasharray="4 4" marker-end="url(#arrowhead)"></polyline>
+<g class="edge-label" data-from="ERR" data-to="SL" data-label="cancel ctx">
+  <rect x="254.63099999999997" y="59.566666666666684" width="65.76400000000001" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1"></rect>
+  <text x="287.513" y="74.71666666666668" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">cancel ctx</text>
+</g>
+<g class="edge-label" data-from="ERR" data-to="W1" data-label="通知在跑任务退出">
+  <rect x="438.733" y="178.40000000000003" width="112.69000000000001" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1"></rect>
+  <text x="495.07800000000003" y="193.55000000000004" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">通知在跑任务退出</text>
+</g>
+<g class="node" data-id="JOBS" data-label="N 个安装任务" data-shape="rectangle">
+  <rect x="189.23" y="113.86666666666667" width="127.16499999999999" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></rect>
+  <text x="252.8125" y="132.31666666666666" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">N 个安装任务</text>
+</g>
+<g class="node" data-id="SL" data-label="SetLimit 信号量
+同时最多 K 个在跑" data-shape="rectangle">
+  <rect x="364.395" y="96.45" width="159.028" height="53.800000000000004" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></rect>
+  <text x="443.909" y="123.35000000000001" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)"><tspan x="443.909" dy="-3.9000000000000012">SetLimit 信号量</tspan><tspan x="443.909" dy="16.900000000000002">同时最多 K 个在跑</tspan></text>
+</g>
+<g class="node" data-id="W1" data-label="worker 1" data-shape="rectangle">
+  <rect x="586.387" y="169.8" width="90.11500000000001" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></rect>
+  <text x="631.4445" y="188.25" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">worker 1</text>
+</g>
+<g class="node" data-id="W2" data-label="worker 2" data-shape="rectangle">
+  <rect x="586.387" y="40" width="94.561" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></rect>
+  <text x="633.6674999999999" y="58.45" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">worker 2</text>
+</g>
+<g class="node" data-id="WK" data-label="worker K" data-shape="rectangle">
+  <rect x="586.387" y="104.9" width="96.04299999999999" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></rect>
+  <text x="634.4084999999999" y="123.35000000000001" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">worker K</text>
+</g>
+<g class="node" data-id="DONE" data-label="Wait 等全部结束" data-shape="rectangle">
+  <rect x="715.466" y="104.9" width="142.726" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></rect>
+  <text x="786.829" y="123.35000000000001" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">Wait 等全部结束</text>
+</g>
+<g class="node" data-id="ERR" data-label="任一失败" data-shape="rectangle">
+  <rect x="40" y="135.94166666666666" width="101.22999999999999" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></rect>
+  <text x="90.615" y="154.39166666666665" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">任一失败</text>
+</g>
+</svg></div>
+<p>一句话：<strong><code>WaitGroup</code> 管等待，channel/<code>SetLimit</code> 管并发，<code>context</code> 管取消，<code>Mutex</code> 只管共享状态保护。</strong> 限流别用锁。</p>
 <p><strong>附录</strong></p>
 <p><strong>总结</strong></p>
 <ol>
@@ -537,4 +721,4 @@ Go 1.24 替换了 <code>sync.Map</code> 实现。Go 1.26.5 的公开 <a href="ht
 <li><a href="https://pkg.go.dev/sync/atomic" rel="noopener noreferrer" target="_blank">sync/atomic 包文档（Go 1.26.5）</a></li>
 <li><a href="https://go.dev/ref/mem" rel="noopener noreferrer" target="_blank">The Go Memory Model</a></li>
 <li><a href="https://github.com/golang/go/tree/c19862e5f8415b4f24b189d065ed739517c548ba/src" rel="noopener noreferrer" target="_blank">Go 1.26.5 源码树</a></li>
-</ul></main><aside class="toc"><p class="toc-title">本页目录</p><ul><li class="toc-d2"><a href="#一基础内存模型与原语地图">一、基础：内存模型与原语地图</a></li><li class="toc-d2"><a href="#二互斥mutex-与-rwmutex">二、互斥：Mutex 与 RWMutex</a></li><li class="toc-d2"><a href="#三协同等待waitgroup--once--cond">三、协同等待：WaitGroup / Once / Cond</a></li><li class="toc-d2"><a href="#四并发容器与对象复用">四、并发容器与对象复用</a></li><li class="toc-d2"><a href="#五原子操作syncatomic">五、原子操作：sync/atomic</a></li><li class="toc-d2"><a href="#六选型与实践">六、选型与实践</a></li></ul></aside></div><div class="lightbox" id="lightbox" aria-hidden="true"><img alt=""></div><script type="module">var e=document.documentElement,t=document.getElementById(`themeToggle`),n={auto:`🖥️`,light:`☀️`,dark:`🌙`};function r(){var e=localStorage.getItem(`theme`);return e===`light`||e===`dark`?e:`auto`}function i(){var i=r();i===`auto`?e.removeAttribute(`data-theme`):e.setAttribute(`data-theme`,i),t.textContent=n[i]}i(),t.addEventListener(`click`,()=>{var e=[`auto`,`light`,`dark`],t=e[(e.indexOf(r())+1)%3];t===`auto`?localStorage.removeItem(`theme`):localStorage.setItem(`theme`,t),i()}),window.matchMedia(`(prefers-color-scheme: dark)`).addEventListener(`change`,()=>{r()===`auto`&&i()});var a=document.getElementById(`lightbox`),o=a.querySelector(`img`);document.querySelectorAll(`.prose img`).forEach(e=>{e.style.cursor=`zoom-in`,e.addEventListener(`click`,()=>{o.src=e.currentSrc||e.src,o.alt=e.alt,a.classList.add(`open`),a.setAttribute(`aria-hidden`,`false`)})}),a.addEventListener(`click`,()=>{a.classList.remove(`open`),a.setAttribute(`aria-hidden`,`true`)}),document.addEventListener(`keydown`,e=>{e.key===`Escape`&&a.click()});</script></body></html>
+</ul></main><aside class="toc"><p class="toc-title">本页目录</p><ul><li class="toc-d2"><a href="#一基础内存模型与原语地图">一、基础：内存模型与原语地图</a></li><li class="toc-d2"><a href="#二互斥mutex-与-rwmutex">二、互斥：Mutex 与 RWMutex</a></li><li class="toc-d2"><a href="#三协同等待waitgroup--once--cond">三、协同等待：WaitGroup / Once / Cond</a></li><li class="toc-d2"><a href="#四并发容器与对象复用">四、并发容器与对象复用</a></li><li class="toc-d2"><a href="#五原子操作syncatomic">五、原子操作：sync/atomic</a></li><li class="toc-d2"><a href="#六选型与实践">六、选型与实践</a></li><li class="toc-d2"><a href="#七并发限流实战">七、并发限流实战</a></li></ul></aside></div><div class="lightbox" id="lightbox" aria-hidden="true"><img alt=""></div><script type="module">var e=document.documentElement,t=document.getElementById(`themeToggle`),n={auto:`🖥️`,light:`☀️`,dark:`🌙`};function r(){var e=localStorage.getItem(`theme`);return e===`light`||e===`dark`?e:`auto`}function i(){var i=r();i===`auto`?e.removeAttribute(`data-theme`):e.setAttribute(`data-theme`,i),t.textContent=n[i]}i(),t.addEventListener(`click`,()=>{var e=[`auto`,`light`,`dark`],t=e[(e.indexOf(r())+1)%3];t===`auto`?localStorage.removeItem(`theme`):localStorage.setItem(`theme`,t),i()}),window.matchMedia(`(prefers-color-scheme: dark)`).addEventListener(`change`,()=>{r()===`auto`&&i()});var a=document.getElementById(`lightbox`),o=a.querySelector(`img`);document.querySelectorAll(`.prose img`).forEach(e=>{e.style.cursor=`zoom-in`,e.addEventListener(`click`,()=>{o.src=e.currentSrc||e.src,o.alt=e.alt,a.classList.add(`open`),a.setAttribute(`aria-hidden`,`false`)})}),a.addEventListener(`click`,()=>{a.classList.remove(`open`),a.setAttribute(`aria-hidden`,`true`)}),document.addEventListener(`keydown`,e=>{e.key===`Escape`&&a.click()});</script></body></html>
