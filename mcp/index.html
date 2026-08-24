@@ -5,162 +5,24 @@
           document.documentElement.setAttribute('data-theme', s);
         }
       })();
-    </script><link rel="stylesheet" href="/_astro/Base.C6O8tc7V.css"></head><body><header class="topbar"><a href="/" class="brand">HLDay</a><nav><a href="/">专题</a><a href="/posts/">博客</a><a href="https://github.com/hTangle" class="nav-github" aria-label="GitHub">GitHub</a></nav><button class="theme-toggle" id="themeToggle" type="button" title="切换主题（自动/浅色/深色）" aria-label="切换主题">🖥️</button></header><div class="layout"><aside class="booknav"><ul class="nav-tree"><li><p class="nav-group">Go</p><ul><li><p class="nav-subgroup">运行时基础</p><ul><li class><a href="/source-map/">源码环境与目录地图</a></li><li class><a href="/bootstrap/">程序启动流程</a></li></ul></li><li><p class="nav-subgroup">并发编程</p><ul><li class><a href="/gmp/">GMP 调度器</a></li><li class><a href="/netpoll/">网络轮询器</a></li><li class><a href="/timer/">定时器</a></li><li class><a href="/sync-lock/">同步和锁</a></li><li class><a href="/channel/">Channel</a></li><li class><a href="/context/">Context</a></li><li class><a href="/defer-panic/">defer/panic/recover</a></li></ul></li><li><p class="nav-subgroup">内存管理</p><ul><li class><a href="/memory-alloc/">内存分配器</a></li><li class><a href="/gc/">垃圾收集器</a></li><li class><a href="/stack/">栈空间管理</a></li></ul></li><li><p class="nav-subgroup">数据结构</p><ul><li class><a href="/type-metadata/">类型元数据与对象布局</a></li><li class><a href="/iface/">Interface 与动态调用</a></li><li class><a href="/generics/">泛型与字典传递</a></li><li class><a href="/array/">数组</a></li><li class><a href="/slice/">切片</a></li><li class><a href="/swiss-map/">哈希表 (Swiss Table)</a></li><li class><a href="/string/">字符串</a></li></ul></li></ul></li><li><p class="nav-group">Agent 开发</p><ul><li><p class="nav-subgroup">核心协议与机制</p><ul><li class="active"><a href="/mcp/">MCP</a></li><li class><a href="/skill/">Skill</a></li><li class><a href="/tool-call/">Tool Call</a></li></ul></li></ul></li></ul></aside><main class="prose"><h1>MCP：连接模型与外部世界的标准协议</h1><p><strong>📋 一句话定义</strong></p>
-<p>**MCP（Model Context Protocol，模型上下文协议）是一套让 AI 应用以统一方式发现、读取和调用外部能力的客户端—服务器协议。**它解决的不是“模型会不会思考”，而是“模型应用怎样用同一种接口接入文件、数据库、搜索、业务系统等不同能力”。</p>
-<p><img src="/images/agent/mcp-architecture.png" alt="mcp-architecture.png"></p>
+    </script><link rel="stylesheet" href="/_astro/Base.C6O8tc7V.css"></head><body><header class="topbar"><a href="/" class="brand">HLDay</a><nav><a href="/">专题</a><a href="/posts/">博客</a><a href="https://github.com/hTangle" class="nav-github" aria-label="GitHub">GitHub</a></nav><button class="theme-toggle" id="themeToggle" type="button" title="切换主题（自动/浅色/深色）" aria-label="切换主题">🖥️</button></header><div class="layout"><aside class="booknav"><ul class="nav-tree"><li><p class="nav-group">Go</p><ul><li><p class="nav-subgroup">运行时基础</p><ul><li class><a href="/source-map/">源码环境与目录地图</a></li><li class><a href="/bootstrap/">程序启动流程</a></li></ul></li><li><p class="nav-subgroup">并发编程</p><ul><li class><a href="/gmp/">GMP 调度器</a></li><li class><a href="/netpoll/">网络轮询器</a></li><li class><a href="/timer/">定时器</a></li><li class><a href="/sync-lock/">同步和锁</a></li><li class><a href="/channel/">Channel</a></li><li class><a href="/context/">Context</a></li><li class><a href="/defer-panic/">defer/panic/recover</a></li></ul></li><li><p class="nav-subgroup">内存管理</p><ul><li class><a href="/memory-alloc/">内存分配器</a></li><li class><a href="/gc/">垃圾收集器</a></li><li class><a href="/stack/">栈空间管理</a></li></ul></li><li><p class="nav-subgroup">数据结构</p><ul><li class><a href="/type-metadata/">类型元数据与对象布局</a></li><li class><a href="/iface/">Interface 与动态调用</a></li><li class><a href="/generics/">泛型与字典传递</a></li><li class><a href="/array/">数组</a></li><li class><a href="/slice/">切片</a></li><li class><a href="/swiss-map/">哈希表 (Swiss Table)</a></li><li class><a href="/string/">字符串</a></li></ul></li></ul></li><li><p class="nav-group">Agent 开发</p><ul><li><p class="nav-subgroup">协议与调用</p><ul><li class="active"><a href="/mcp/">MCP</a></li><li class><a href="/tool-call/">Tool Call</a></li><li class><a href="/skill/">Skill</a></li><li class><a href="/memory/">Memory</a></li></ul></li><li><p class="nav-subgroup">检索与排序</p><ul><li class><a href="/rag/">RAG</a></li><li class><a href="/retrieval/">Retrieval</a></li><li class><a href="/recall/">Recall</a></li><li class><a href="/ranking/">Ranking</a></li></ul></li></ul></li></ul></aside><main class="prose"><h1>MCP：连接模型与外部世界的标准协议</h1><blockquote>
+<p>[!abstract] 一句话定义
+**MCP（Model Context Protocol，模型上下文协议）是一套让 AI 应用以统一方式发现、读取和调用外部能力的客户端—服务器协议。**它解决的不是“模型会不会思考”，而是“模型应用怎样用同一种接口接入文件、数据库、搜索、业务系统等不同能力”。</p>
+</blockquote>
+<img src="/images/go/mcp-architecture.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
 <p>把 AI 应用想成一台笔记本电脑：每个外部系统原本都有不同插头，接一个系统就要写一套适配代码。MCP 更像 <strong>USB-C 标准</strong>——它规定连接、握手、能力发现、请求与响应的共同语言。设备仍由各自厂商实现，MCP 只让“怎么接”变得一致。</p>
 <h2 id="1-mcp-到底解决什么问题">1. MCP 到底解决什么问题</h2>
 <p>没有 MCP 时，AI 应用接入 <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>N</mi></mrow><annotation encoding="application/x-tex">N</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.109em;">N</span></span></span></span> 个模型和 <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>M</mi></mrow><annotation encoding="application/x-tex">M</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.109em;">M</span></span></span></span> 个数据/工具系统，最坏可能维护接近 <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>N</mi><mo>×</mo><mi>M</mi></mrow><annotation encoding="application/x-tex">N \times M</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.7667em;vertical-align:-0.0833em;"></span><span class="mord mathnormal" style="margin-right:0.109em;">N</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.109em;">M</span></span></span></span> 套定制集成：</p>
-<div class="bm-diagram"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 385.294 441.4" width="385.294" height="441.4" style="--bg:var(--bm-bg);--fg:var(--bm-fg);--line:var(--bm-border);--accent:var(--bm-accent);--muted:var(--bm-muted);--surface:var(--bm-surface);--border:var(--bm-border)">
-<style>
-  text { font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif; }
-  svg {
-    /* Derived from --bg and --fg (overridable via --line, --accent, etc.) */
-    --_text:          var(--fg);
-    --_text-sec:      var(--muted, color-mix(in srgb, var(--fg) 60%, var(--bg)));
-    --_text-muted:    var(--muted, color-mix(in srgb, var(--fg) 40%, var(--bg)));
-    --_text-faint:    color-mix(in srgb, var(--fg) 25%, var(--bg));
-    --_line:          var(--line, color-mix(in srgb, var(--fg) 50%, var(--bg)));
-    --_arrow:         var(--accent, color-mix(in srgb, var(--fg) 85%, var(--bg)));
-    --_node-fill:     var(--surface, color-mix(in srgb, var(--fg) 3%, var(--bg)));
-    --_node-stroke:   var(--border, color-mix(in srgb, var(--fg) 20%, var(--bg)));
-    --_group-fill:    var(--bg);
-    --_group-hdr:     color-mix(in srgb, var(--fg) 5%, var(--bg));
-    --_inner-stroke:  color-mix(in srgb, var(--fg) 12%, var(--bg));
-    --_key-badge:     color-mix(in srgb, var(--fg) 10%, var(--bg));
-  }
-</style>
-<defs>
-  <marker id="arrowhead" markerWidth="8" markerHeight="5" refX="7" refY="2.5" orient="auto">
-    <polygon points="0 0, 8 2.5, 0 5" fill="var(--_arrow)" stroke="var(--_arrow)" stroke-width="0.75" stroke-linejoin="round"></polygon>
-  </marker>
-  <marker id="arrowhead-start" markerWidth="8" markerHeight="5" refX="1" refY="2.5" orient="auto-start-reverse">
-    <polygon points="8 0, 0 2.5, 8 5" fill="var(--_arrow)" stroke="var(--_arrow)" stroke-width="0.75" stroke-linejoin="round"></polygon>
-  </marker>
-</defs>
-<polyline class="edge" data-from="A1" data-to="X1" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="136.784,123.35 154.784,123.35 154.784,58.45 172.784,58.45" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)"></polyline>
-<polyline class="edge" data-from="A1" data-to="X2" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="136.784,123.35 154.784,123.35 154.784,123.35 172.784,123.35" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)"></polyline>
-<polyline class="edge" data-from="A1" data-to="X3" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="136.784,123.35 154.784,123.35 154.784,188.25 172.784,188.25" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)"></polyline>
-<polyline class="edge" data-from="A2" data-to="Y1" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="136.784,318.05 154.784,318.05 154.784,253.14999999999998 172.784,253.14999999999998" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)"></polyline>
-<polyline class="edge" data-from="A2" data-to="Y2" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="136.784,318.05 154.784,318.05 154.784,318.05 172.784,318.05" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)"></polyline>
-<polyline class="edge" data-from="A2" data-to="Y3" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="136.784,318.05 154.784,318.05 154.784,382.95 172.784,382.95" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)"></polyline>
-<g class="node" data-id="A1" data-label="AI 应用 A" data-shape="rectangle">
-  <rect x="40" y="104.89999999999999" width="96.78399999999999" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></rect>
-  <text x="88.392" y="123.35" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">AI 应用 A</text>
-</g>
-<g class="node" data-id="X1" data-label="文件系统专用适配" data-shape="rectangle">
-  <rect x="172.784" y="40" width="160.51" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></rect>
-  <text x="253.039" y="58.45" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">文件系统专用适配</text>
-</g>
-<g class="node" data-id="X2" data-label="数据库专用适配" data-shape="rectangle">
-  <rect x="172.784" y="104.89999999999999" width="145.69" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></rect>
-  <text x="245.629" y="123.35" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">数据库专用适配</text>
-</g>
-<g class="node" data-id="X3" data-label="搜索服务专用适配" data-shape="rectangle">
-  <rect x="172.784" y="169.8" width="160.51" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></rect>
-  <text x="253.039" y="188.25" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">搜索服务专用适配</text>
-</g>
-<g class="node" data-id="A2" data-label="AI 应用 B" data-shape="rectangle">
-  <rect x="40" y="299.6" width="96.78399999999999" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></rect>
-  <text x="88.392" y="318.05" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">AI 应用 B</text>
-</g>
-<g class="node" data-id="Y1" data-label="另一套文件适配" data-shape="rectangle">
-  <rect x="172.784" y="234.7" width="145.69" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></rect>
-  <text x="245.629" y="253.14999999999998" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">另一套文件适配</text>
-</g>
-<g class="node" data-id="Y2" data-label="另一套数据库适配" data-shape="rectangle">
-  <rect x="172.784" y="299.6" width="160.51" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></rect>
-  <text x="253.039" y="318.05" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">另一套数据库适配</text>
-</g>
-<g class="node" data-id="Y3" data-label="另一套搜索适配" data-shape="rectangle">
-  <rect x="172.784" y="364.5" width="145.69" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></rect>
-  <text x="245.629" y="382.95" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">另一套搜索适配</text>
-</g>
-</svg></div>
+<img src="/images/go/01-mcp-client-server-topology.png" alt="" loading="lazy" width="500" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
 <p>MCP 把集成边界收敛成协议：AI 应用实现 MCP 客户端，能力提供方实现 MCP 服务器。只要双方遵循同一契约，就可以组合使用。</p>
-<div class="bm-diagram"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 771.239 209.8" width="771.239" height="209.8" style="--bg:var(--bm-bg);--fg:var(--bm-fg);--line:var(--bm-border);--accent:var(--bm-accent);--muted:var(--bm-muted);--surface:var(--bm-surface);--border:var(--bm-border)">
-<style>
-  text { font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif; }
-  svg {
-    /* Derived from --bg and --fg (overridable via --line, --accent, etc.) */
-    --_text:          var(--fg);
-    --_text-sec:      var(--muted, color-mix(in srgb, var(--fg) 60%, var(--bg)));
-    --_text-muted:    var(--muted, color-mix(in srgb, var(--fg) 40%, var(--bg)));
-    --_text-faint:    color-mix(in srgb, var(--fg) 25%, var(--bg));
-    --_line:          var(--line, color-mix(in srgb, var(--fg) 50%, var(--bg)));
-    --_arrow:         var(--accent, color-mix(in srgb, var(--fg) 85%, var(--bg)));
-    --_node-fill:     var(--surface, color-mix(in srgb, var(--fg) 3%, var(--bg)));
-    --_node-stroke:   var(--border, color-mix(in srgb, var(--fg) 20%, var(--bg)));
-    --_group-fill:    var(--bg);
-    --_group-hdr:     color-mix(in srgb, var(--fg) 5%, var(--bg));
-    --_inner-stroke:  color-mix(in srgb, var(--fg) 12%, var(--bg));
-    --_key-badge:     color-mix(in srgb, var(--fg) 10%, var(--bg));
-  }
-</style>
-<defs>
-  <marker id="arrowhead" markerWidth="8" markerHeight="5" refX="7" refY="2.5" orient="auto">
-    <polygon points="0 0, 8 2.5, 0 5" fill="var(--_arrow)" stroke="var(--_arrow)" stroke-width="0.75" stroke-linejoin="round"></polygon>
-  </marker>
-  <marker id="arrowhead-start" markerWidth="8" markerHeight="5" refX="1" refY="2.5" orient="auto-start-reverse">
-    <polygon points="8 0, 0 2.5, 8 5" fill="var(--_arrow)" stroke="var(--_arrow)" stroke-width="0.75" stroke-linejoin="round"></polygon>
-  </marker>
-</defs>
-<polyline class="edge" data-from="Host" data-to="C1" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="139.748,104.9 163.748,104.9 163.748,65.45 187.748,65.45" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)"></polyline>
-<polyline class="edge" data-from="Host" data-to="C2" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="139.748,104.9 163.748,104.9 163.748,144.35000000000002 187.7480000000001,144.35000000000002" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)"></polyline>
-<polyline class="edge" data-from="C1" data-to="S1" data-style="solid" data-arrow-start="true" data-arrow-end="true" data-label="MCP" points="293.424,65.45 422.23999999999995,65.45" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" marker-start="url(#arrowhead-start)"></polyline>
-<polyline class="edge" data-from="C2" data-to="S2" data-style="solid" data-arrow-start="true" data-arrow-end="true" data-label="MCP" points="293.4240000000001,144.35000000000002 422.24000000000007,144.35000000000002" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" marker-start="url(#arrowhead-start)"></polyline>
-<polyline class="edge" data-from="S1" data-to="FS" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="538.29,65.45 586.29,65.45" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)"></polyline>
-<polyline class="edge" data-from="S2" data-to="API" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="567.9300000000001,144.35000000000002 615.9300000000001,144.35000000000002" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)"></polyline>
-<g class="edge-label" data-from="C1" data-to="S1" data-label="MCP">
-  <rect x="337.424" y="49.45000000000001" width="40.816" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1"></rect>
-  <text x="357.832" y="64.60000000000001" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">MCP</text>
-</g>
-<g class="edge-label" data-from="C2" data-to="S2" data-label="MCP">
-  <rect x="337.4240000000001" y="128.35000000000002" width="40.816" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1"></rect>
-  <text x="357.8320000000001" y="143.50000000000003" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">MCP</text>
-</g>
-<g class="node" data-id="Host" data-label="MCP Host
-AI 应用" data-shape="rectangle">
-  <rect x="40" y="78" width="99.748" height="53.800000000000004" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></rect>
-  <text x="89.874" y="104.9" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)"><tspan x="89.874" dy="-3.9000000000000012">MCP Host</tspan><tspan x="89.874" dy="16.900000000000002">AI 应用</tspan></text>
-</g>
-<g class="node" data-id="C1" data-label="MCP Client" data-shape="rectangle">
-  <rect x="187.748" y="47" width="105.676" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></rect>
-  <text x="240.58599999999998" y="65.45" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">MCP Client</text>
-</g>
-<g class="node" data-id="C2" data-label="MCP Client" data-shape="rectangle">
-  <rect x="187.7480000000001" y="125.9" width="105.676" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></rect>
-  <text x="240.5860000000001" y="144.35000000000002" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">MCP Client</text>
-</g>
-<g class="node" data-id="S1" data-label="文件服务器" data-shape="rectangle">
-  <rect x="422.23999999999995" y="47" width="116.05" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></rect>
-  <text x="480.26499999999993" y="65.45" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">文件服务器</text>
-</g>
-<g class="node" data-id="S2" data-label="业务系统服务器" data-shape="rectangle">
-  <rect x="422.24000000000007" y="125.9" width="145.69" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></rect>
-  <text x="495.08500000000004" y="144.35000000000002" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">业务系统服务器</text>
-</g>
-<g class="node" data-id="FS" data-label="本地文件" data-shape="cylinder">
-  <rect x="586.29" y="47" width="101.22999999999999" height="36.900000000000006" fill="var(--_node-fill)" stroke="none"></rect>
-  <line x1="586.29" y1="47" x2="586.29" y2="83.9" stroke="var(--_node-stroke)" stroke-width="0.75"></line>
-  <line x1="687.52" y1="47" x2="687.52" y2="83.9" stroke="var(--_node-stroke)" stroke-width="0.75"></line>
-  <ellipse cx="636.905" cy="83.9" rx="50.614999999999995" ry="7" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></ellipse>
-  <ellipse cx="636.905" cy="47" rx="50.614999999999995" ry="7" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></ellipse>
-  <text x="636.905" y="65.45" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">本地文件</text>
-</g>
-<g class="node" data-id="API" data-label="数据库 / API" data-shape="cylinder">
-  <rect x="615.9300000000001" y="125.9" width="115.30899999999998" height="36.900000000000006" fill="var(--_node-fill)" stroke="none"></rect>
-  <line x1="615.9300000000001" y1="125.9" x2="615.9300000000001" y2="162.8" stroke="var(--_node-stroke)" stroke-width="0.75"></line>
-  <line x1="731.239" y1="125.9" x2="731.239" y2="162.8" stroke="var(--_node-stroke)" stroke-width="0.75"></line>
-  <ellipse cx="673.5845" cy="162.8" rx="57.65449999999999" ry="7" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></ellipse>
-  <ellipse cx="673.5845" cy="125.9" rx="57.65449999999999" ry="7" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></ellipse>
-  <text x="673.5845" y="144.35000000000002" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">数据库 / API</text>
-</g>
-</svg></div>
-<p><strong>💡 关键价值</strong></p>
-<p>MCP 降低的是<strong>集成的组合复杂度</strong>，同时给能力发现、权限边界、错误返回和生命周期管理提供共同语义。</p>
+<img src="/images/go/02-host-protocol-boundary.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
+<div class="markdown-alert markdown-alert-tip" dir="auto">
+<p class="markdown-alert-title" dir="auto"><svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8 1.5c-2.363 0-4 1.69-4 3.75 0 .984.424 1.625.984 2.304l.214.253c.223.264.47.556.673.848.284.411.537.896.621 1.49a.75.75 0 0 1-1.484.211c-.04-.282-.163-.547-.37-.847a8.456 8.456 0 0 0-.542-.68c-.084-.1-.173-.205-.268-.32C3.201 7.75 2.5 6.766 2.5 5.25 2.5 2.31 4.863 0 8 0s5.5 2.31 5.5 5.25c0 1.516-.701 2.5-1.328 3.259-.095.115-.184.22-.268.319-.207.245-.383.453-.541.681-.208.3-.33.565-.37.847a.751.751 0 0 1-1.485-.212c.084-.593.337-1.078.621-1.489.203-.292.45-.584.673-.848.075-.088.147-.173.213-.253.561-.679.985-1.32.985-2.304 0-2.06-1.637-3.75-4-3.75ZM5.75 12h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1 0-1.5ZM6 15.25a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1-.75-.75Z"></path></svg>TIP</p>
+<p> 关键价值
+MCP 降低的是<strong>集成的组合复杂度</strong>，同时给能力发现、权限边界、错误返回和生命周期管理提供共同语义。</p>
+</div>
 <h2 id="2-三个核心角色hostclientserver">2. 三个核心角色：Host、Client、Server</h2>
-<h3 id="21-host承载用户体验与决策">2.1 Host：承载用户体验与决策</h3>
+<p><strong>2.1 Host：承载用户体验与决策</strong></p>
 <p>Host 是用户真正使用的 AI 应用，例如桌面助手、IDE、聊天应用或 Agent Runtime。它通常负责：</p>
 <ul>
 <li>管理对话、模型与用户授权；</li>
@@ -168,12 +30,15 @@ AI 应用" data-shape="rectangle">
 <li>汇总上下文并把结果交给模型；</li>
 <li>隔离不同服务器，避免无意共享敏感信息。</li>
 </ul>
-<h3 id="22-client一条连接的协议代理">2.2 Client：一条连接的协议代理</h3>
+<p><strong>2.2 Client：一条连接的协议代理</strong></p>
 <p>MCP Client 位于 Host 内部，负责与某个 Server 建立并维护会话、协商能力、收发协议消息。概念上通常是<strong>一个 Client 对应一个 Server 连接</strong>。</p>
-<h3 id="23-server对外暴露能力">2.3 Server：对外暴露能力</h3>
+<p><strong>2.3 Server：对外暴露能力</strong></p>
 <p>MCP Server 把某个本地或远程系统包装成标准能力。它可以只是一个很薄的适配层，也可以包含鉴权、缓存、审计和业务逻辑。</p>
-<p><strong>⚠️ Server 不等于数据源</strong></p>
-<p>MCP Server 是协议边界；真正的数据或动作可能位于文件系统、数据库、SaaS API 或企业内网服务中。</p>
+<div class="markdown-alert markdown-alert-warning" dir="auto">
+<p class="markdown-alert-title" dir="auto"><svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>WARNING</p>
+<p> Server 不等于数据源
+MCP Server 是协议边界；真正的数据或动作可能位于文件系统、数据库、SaaS API 或企业内网服务中。</p>
+</div>
 <h2 id="3-server-暴露的三类核心原语">3. Server 暴露的三类核心原语</h2>
 
 
@@ -208,102 +73,7 @@ AI 应用" data-shape="rectangle">
 <p>可以把它们记成：<strong>Tool 是动词，Resource 是名词，Prompt 是做事的模板。</strong></p>
 <p>部分实现还会支持由 Server 向 Host 请求模型推理或用户补充信息等能力。它们仍然需要 Host 控制授权，Server 不应绕过用户直接获得无限模型或数据访问权。</p>
 <h2 id="4-一次完整-mcp-会话怎样发生">4. 一次完整 MCP 会话怎样发生</h2>
-<div class="bm-diagram"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 570.1179999999999 600" width="570.1179999999999" height="600" style="--bg:var(--bm-bg);--fg:var(--bm-fg);--line:var(--bm-border);--accent:var(--bm-accent);--muted:var(--bm-muted);--surface:var(--bm-surface);--border:var(--bm-border)">
-<style>
-  text { font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif; }
-  svg {
-    /* Derived from --bg and --fg (overridable via --line, --accent, etc.) */
-    --_text:          var(--fg);
-    --_text-sec:      var(--muted, color-mix(in srgb, var(--fg) 60%, var(--bg)));
-    --_text-muted:    var(--muted, color-mix(in srgb, var(--fg) 40%, var(--bg)));
-    --_text-faint:    color-mix(in srgb, var(--fg) 25%, var(--bg));
-    --_line:          var(--line, color-mix(in srgb, var(--fg) 50%, var(--bg)));
-    --_arrow:         var(--accent, color-mix(in srgb, var(--fg) 85%, var(--bg)));
-    --_node-fill:     var(--surface, color-mix(in srgb, var(--fg) 3%, var(--bg)));
-    --_node-stroke:   var(--border, color-mix(in srgb, var(--fg) 20%, var(--bg)));
-    --_group-fill:    var(--bg);
-    --_group-hdr:     color-mix(in srgb, var(--fg) 5%, var(--bg));
-    --_inner-stroke:  color-mix(in srgb, var(--fg) 12%, var(--bg));
-    --_key-badge:     color-mix(in srgb, var(--fg) 10%, var(--bg));
-  }
-</style>
-<defs>
-  <marker id="seq-arrow" markerWidth="8" markerHeight="5" refX="8" refY="2.5" orient="auto-start-reverse">
-    <polygon points="0 0, 8 2.5, 0 5" fill="var(--_arrow)"></polygon>
-  </marker>
-  <marker id="seq-arrow-open" markerWidth="8" markerHeight="5" refX="8" refY="2.5" orient="auto-start-reverse">
-    <polyline points="0 0, 8 2.5, 0 5" fill="none" stroke="var(--_arrow)" stroke-width="1"></polyline>
-  </marker>
-</defs>
-<line class="lifeline" data-actor="H" x1="70" y1="70" x2="70" y2="570" stroke="var(--_line)" stroke-width="0.75" stroke-dasharray="6 4"></line>
-<line class="lifeline" data-actor="C" x1="210" y1="70" x2="210" y2="570" stroke="var(--_line)" stroke-width="0.75" stroke-dasharray="6 4"></line>
-<line class="lifeline" data-actor="S" x1="352.863" y1="70" x2="352.863" y2="570" stroke="var(--_line)" stroke-width="0.75" stroke-dasharray="6 4"></line>
-<line class="lifeline" data-actor="D" x1="493.503" y1="70" x2="493.503" y2="570" stroke="var(--_line)" stroke-width="0.75" stroke-dasharray="6 4"></line>
-<g class="message" data-from="H" data-to="C" data-label="创建连接" data-line-style="solid" data-arrow-head="filled" data-self="false">
-  <line x1="70" y1="90" x2="210" y2="90" stroke="var(--_line)" stroke-width="1" marker-end="url(#seq-arrow)"></line>
-  <text x="140" y="80" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">创建连接</text>
-</g>
-<g class="message" data-from="C" data-to="S" data-label="initialize（协议版本与能力）" data-line-style="solid" data-arrow-head="filled" data-self="false">
-  <line x1="210" y1="130" x2="352.863" y2="130" stroke="var(--_line)" stroke-width="1" marker-end="url(#seq-arrow)"></line>
-  <text x="281.4315" y="120" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">initialize（协议版本与能力）</text>
-</g>
-<g class="message" data-from="S" data-to="C" data-label="Server 能力" data-line-style="dashed" data-arrow-head="filled" data-self="false">
-  <line x1="352.863" y1="170" x2="210" y2="170" stroke="var(--_line)" stroke-width="1" stroke-dasharray="6 4" marker-end="url(#seq-arrow)"></line>
-  <text x="281.4315" y="160" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">Server 能力</text>
-</g>
-<g class="message" data-from="C" data-to="S" data-label="initialized" data-line-style="solid" data-arrow-head="filled" data-self="false">
-  <line x1="210" y1="210" x2="352.863" y2="210" stroke="var(--_line)" stroke-width="1" marker-end="url(#seq-arrow)"></line>
-  <text x="281.4315" y="200" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">initialized</text>
-</g>
-<g class="message" data-from="C" data-to="S" data-label="tools/list" data-line-style="solid" data-arrow-head="filled" data-self="false">
-  <line x1="210" y1="250" x2="352.863" y2="250" stroke="var(--_line)" stroke-width="1" marker-end="url(#seq-arrow)"></line>
-  <text x="281.4315" y="240" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">tools/list</text>
-</g>
-<g class="message" data-from="S" data-to="C" data-label="工具及输入 Schema" data-line-style="dashed" data-arrow-head="filled" data-self="false">
-  <line x1="352.863" y1="290" x2="210" y2="290" stroke="var(--_line)" stroke-width="1" stroke-dasharray="6 4" marker-end="url(#seq-arrow)"></line>
-  <text x="281.4315" y="280" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">工具及输入 Schema</text>
-</g>
-<g class="message" data-from="H" data-to="C" data-label="请求调用 search_docs" data-line-style="solid" data-arrow-head="filled" data-self="false">
-  <line x1="70" y1="330" x2="210" y2="330" stroke="var(--_line)" stroke-width="1" marker-end="url(#seq-arrow)"></line>
-  <text x="140" y="320" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">请求调用 search_docs</text>
-</g>
-<g class="message" data-from="C" data-to="S" data-label="tools/call + 参数" data-line-style="solid" data-arrow-head="filled" data-self="false">
-  <line x1="210" y1="370" x2="352.863" y2="370" stroke="var(--_line)" stroke-width="1" marker-end="url(#seq-arrow)"></line>
-  <text x="281.4315" y="360" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">tools/call + 参数</text>
-</g>
-<g class="message" data-from="S" data-to="D" data-label="执行真实查询" data-line-style="solid" data-arrow-head="filled" data-self="false">
-  <line x1="352.863" y1="410" x2="493.503" y2="410" stroke="var(--_line)" stroke-width="1" marker-end="url(#seq-arrow)"></line>
-  <text x="423.183" y="400" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">执行真实查询</text>
-</g>
-<g class="message" data-from="D" data-to="S" data-label="查询结果" data-line-style="dashed" data-arrow-head="filled" data-self="false">
-  <line x1="493.503" y1="450" x2="352.863" y2="450" stroke="var(--_line)" stroke-width="1" stroke-dasharray="6 4" marker-end="url(#seq-arrow)"></line>
-  <text x="423.183" y="440" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">查询结果</text>
-</g>
-<g class="message" data-from="S" data-to="C" data-label="结构化结果或错误" data-line-style="dashed" data-arrow-head="filled" data-self="false">
-  <line x1="352.863" y1="490" x2="210" y2="490" stroke="var(--_line)" stroke-width="1" stroke-dasharray="6 4" marker-end="url(#seq-arrow)"></line>
-  <text x="281.4315" y="480" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">结构化结果或错误</text>
-</g>
-<g class="message" data-from="C" data-to="H" data-label="交给模型继续推理" data-line-style="dashed" data-arrow-head="filled" data-self="false">
-  <line x1="210" y1="530" x2="70" y2="530" stroke="var(--_line)" stroke-width="1" stroke-dasharray="6 4" marker-end="url(#seq-arrow)"></line>
-  <text x="140" y="520" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">交给模型继续推理</text>
-</g>
-<g class="actor" data-id="H" data-label="Host" datatype="participant">
-  <rect x="30" y="30" width="80" height="40" rx="4" ry="4" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="1"></rect>
-  <text x="70" y="50" font-size="13" text-anchor="middle" font-weight="500" fill="var(--_text)" dy="4.55">Host</text>
-</g>
-<g class="actor" data-id="C" data-label="MCP Client" datatype="participant">
-  <rect x="161.162" y="30" width="97.676" height="40" rx="4" ry="4" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="1"></rect>
-  <text x="210" y="50" font-size="13" text-anchor="middle" font-weight="500" fill="var(--_text)" dy="4.55">MCP Client</text>
-</g>
-<g class="actor" data-id="S" data-label="MCP Server" datatype="participant">
-  <rect x="298.838" y="30" width="108.05" height="40" rx="4" ry="4" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="1"></rect>
-  <text x="352.863" y="50" font-size="13" text-anchor="middle" font-weight="500" fill="var(--_text)" dy="4.55">MCP Server</text>
-</g>
-<g class="actor" data-id="D" data-label="外部系统" datatype="participant">
-  <rect x="446.888" y="30" width="93.22999999999999" height="40" rx="4" ry="4" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="1"></rect>
-  <text x="493.503" y="50" font-size="13" text-anchor="middle" font-weight="500" fill="var(--_text)" dy="4.55">外部系统</text>
-</g>
-</svg></div>
+<img src="/images/go/03-session-lifecycle.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
 <p>这条链路可拆成四个阶段：</p>
 <ol>
 <li><strong>初始化</strong>：协商协议版本与双方能力；</li>
@@ -334,73 +104,7 @@ AI 应用" data-shape="rectangle">
 <p>因此，MCP 不是“只能跑本地”的协议，也不是某个固定网络服务。Transport 决定消息怎么运送，协议决定消息表达什么。</p>
 <h2 id="6-能力发现为何重要">6. 能力发现为何重要</h2>
 <p>传统工具集成常把工具列表写死在应用代码里。MCP 允许 Client 在运行时询问 Server：</p>
-<div class="bm-diagram"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 722.011 371.6" width="722.011" height="371.6" style="--bg:var(--bm-bg);--fg:var(--bm-fg);--line:var(--bm-border);--accent:var(--bm-accent);--muted:var(--bm-muted);--surface:var(--bm-surface);--border:var(--bm-border)">
-<style>
-  text { font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif; }
-  svg {
-    /* Derived from --bg and --fg (overridable via --line, --accent, etc.) */
-    --_text:          var(--fg);
-    --_text-sec:      var(--muted, color-mix(in srgb, var(--fg) 60%, var(--bg)));
-    --_text-muted:    var(--muted, color-mix(in srgb, var(--fg) 40%, var(--bg)));
-    --_text-faint:    color-mix(in srgb, var(--fg) 25%, var(--bg));
-    --_line:          var(--line, color-mix(in srgb, var(--fg) 50%, var(--bg)));
-    --_arrow:         var(--accent, color-mix(in srgb, var(--fg) 85%, var(--bg)));
-    --_node-fill:     var(--surface, color-mix(in srgb, var(--fg) 3%, var(--bg)));
-    --_node-stroke:   var(--border, color-mix(in srgb, var(--fg) 20%, var(--bg)));
-    --_group-fill:    var(--bg);
-    --_group-hdr:     color-mix(in srgb, var(--fg) 5%, var(--bg));
-    --_inner-stroke:  color-mix(in srgb, var(--fg) 12%, var(--bg));
-    --_key-badge:     color-mix(in srgb, var(--fg) 10%, var(--bg));
-  }
-</style>
-<defs>
-  <marker id="arrowhead" markerWidth="8" markerHeight="5" refX="7" refY="2.5" orient="auto">
-    <polygon points="0 0, 8 2.5, 0 5" fill="var(--_arrow)" stroke="var(--_arrow)" stroke-width="0.75" stroke-linejoin="round"></polygon>
-  </marker>
-  <marker id="arrowhead-start" markerWidth="8" markerHeight="5" refX="1" refY="2.5" orient="auto-start-reverse">
-    <polygon points="8 0, 0 2.5, 8 5" fill="var(--_arrow)" stroke="var(--_arrow)" stroke-width="0.75" stroke-linejoin="round"></polygon>
-  </marker>
-</defs>
-<polyline class="edge" data-from="A" data-to="B" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="415.46899999999994,76.9 415.469,124.9" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)"></polyline>
-<polyline class="edge" data-from="B" data-to="C" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="415.469,161.8 415.469,179.8 174.71849999999995,179.8 174.71849999999995,197.8" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)"></polyline>
-<polyline class="edge" data-from="B" data-to="D" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="415.469,161.8 415.469,179.8 415.46899999999994,179.8 415.46899999999994,197.8" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)"></polyline>
-<polyline class="edge" data-from="B" data-to="E" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="415.469,161.8 415.469,179.8 601.756,179.8 601.756,197.8" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)"></polyline>
-<polyline class="edge" data-from="C" data-to="F" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="174.71849999999995,234.70000000000002 174.71849999999998,282.70000000000005" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)"></polyline>
-<polyline class="edge" data-from="D" data-to="G" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="415.46899999999994,234.70000000000002 415.46899999999994,282.70000000000005" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)"></polyline>
-<polyline class="edge" data-from="E" data-to="H" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="601.756,234.70000000000002 601.756,282.70000000000005" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)"></polyline>
-<g class="node" data-id="A" data-label="连接 Server" data-shape="rectangle">
-  <rect x="357.07349999999997" y="40" width="116.791" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></rect>
-  <text x="415.46899999999994" y="58.45" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">连接 Server</text>
-</g>
-<g class="node" data-id="B" data-label="协商 capabilities" data-shape="rectangle">
-  <rect x="345.2175" y="124.9" width="140.50300000000001" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></rect>
-  <text x="415.469" y="143.35000000000002" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">协商 capabilities</text>
-</g>
-<g class="node" data-id="C" data-label="tools/list" data-shape="rectangle">
-  <rect x="129.66099999999994" y="197.8" width="90.11500000000001" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></rect>
-  <text x="174.71849999999995" y="216.25" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">tools/list</text>
-</g>
-<g class="node" data-id="D" data-label="resources/list" data-shape="rectangle">
-  <rect x="352.62749999999994" y="197.8" width="125.68299999999999" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></rect>
-  <text x="415.46899999999994" y="216.25" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">resources/list</text>
-</g>
-<g class="node" data-id="E" data-label="prompts/list" data-shape="rectangle">
-  <rect x="547.0654999999999" y="197.8" width="109.381" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></rect>
-  <text x="601.756" y="216.25" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">prompts/list</text>
-</g>
-<g class="node" data-id="F" data-label="把名称、描述、Schema 提供给模型" data-shape="rectangle">
-  <rect x="40" y="282.70000000000005" width="269.43699999999995" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></rect>
-  <text x="174.71849999999998" y="301.15000000000003" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">把名称、描述、Schema 提供给模型</text>
-</g>
-<g class="node" data-id="G" data-label="按 URI 选择上下文" data-shape="rectangle">
-  <rect x="337.43699999999995" y="282.70000000000005" width="156.06400000000002" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></rect>
-  <text x="415.46899999999994" y="301.15000000000003" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">按 URI 选择上下文</text>
-</g>
-<g class="node" data-id="H" data-label="按需获取工作模板" data-shape="rectangle">
-  <rect x="521.501" y="282.70000000000005" width="160.51" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></rect>
-  <text x="601.756" y="301.15000000000003" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">按需获取工作模板</text>
-</g>
-</svg></div>
+<img src="/images/go/04-capability-discovery.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
 <p>这使工具可以独立升级，但也带来一个工程要求：**描述与 Schema 必须稳定、精确、可理解。**如果两个工具描述含糊，模型就可能选错；如果 Schema 太宽松，错误会延迟到真实执行阶段。</p>
 <h2 id="7-安全边界标准连接不等于自动可信">7. 安全边界：标准连接不等于自动可信</h2>
 <p>MCP 统一了接口，却不会自动解决所有安全问题。至少要控制：</p>
@@ -413,8 +117,10 @@ AI 应用" data-shape="rectangle">
 <li><strong>审计追踪</strong>：记录谁在何时调用了什么能力，但对敏感参数做脱敏；</li>
 <li><strong>网络防护</strong>：远程 Server 要防 SSRF、越权访问、重放与会话劫持。</li>
 </ul>
-<p><strong>‼️ 最常见的误解</strong></p>
-<p>“接入了 MCP”只表示双方能按共同协议通信，不表示 Server 是可信的，也不表示工具可以跳过审批直接执行。</p>
+<blockquote>
+<p>[!danger] 最常见的误解
+“接入了 MCP”只表示双方能按共同协议通信，不表示 Server 是可信的，也不表示工具可以跳过审批直接执行。</p>
+</blockquote>
 <h2 id="8-什么时候值得使用-mcp">8. 什么时候值得使用 MCP</h2>
 <p>适合：</p>
 <ul>
@@ -431,14 +137,22 @@ AI 应用" data-shape="rectangle">
 </ul>
 <p>此时普通函数调用或内部 Tool API 可能更直接。</p>
 <h2 id="9-常见误区">9. 常见误区</h2>
-<p><strong>❓ - MCP 是一个 Agent 框架吗？</strong></p>
-<p>不是。它不规定 Agent 怎样规划、记忆或反思，只规定应用与能力提供方怎样交换上下文和调用能力。</p>
-<p><strong>❓ - MCP Server 自己一定包含大模型吗？</strong></p>
-<p>不一定。多数 Server 只是把外部系统包装成协议能力，本身可以完全不运行模型。</p>
-<p><strong>❓ - MCP Tool 和普通 Tool 是两种完全不同的东西吗？</strong></p>
-<p>语义上都表示可调用能力；区别在于 MCP Tool 通过 MCP 的发现、Schema 和调用消息暴露，普通 Tool 可能只是进程内函数或框架私有接口。</p>
-<p><strong>❓ - 模型会直接连接 MCP Server 吗？</strong></p>
-<p>通常不会。Host/Client 才负责连接、权限与真实 I/O；模型看到的是整理后的工具描述、上下文与调用结果。</p>
+<blockquote>
+<p>[!faq] - MCP 是一个 Agent 框架吗？
+不是。它不规定 Agent 怎样规划、记忆或反思，只规定应用与能力提供方怎样交换上下文和调用能力。</p>
+</blockquote>
+<blockquote>
+<p>[!faq] - MCP Server 自己一定包含大模型吗？
+不一定。多数 Server 只是把外部系统包装成协议能力，本身可以完全不运行模型。</p>
+</blockquote>
+<blockquote>
+<p>[!faq] - MCP Tool 和普通 Tool 是两种完全不同的东西吗？
+语义上都表示可调用能力；区别在于 MCP Tool 通过 MCP 的发现、Schema 和调用消息暴露，普通 Tool 可能只是进程内函数或框架私有接口。</p>
+</blockquote>
+<blockquote>
+<p>[!faq] - 模型会直接连接 MCP Server 吗？
+通常不会。Host/Client 才负责连接、权限与真实 I/O；模型看到的是整理后的工具描述、上下文与调用结果。</p>
+</blockquote>
 <h2 id="10-协议层深挖requestresponse-与-notification">10. 协议层深挖：Request、Response 与 Notification</h2>
 <p>截至 2026-08，MCP 当前正式协议修订版是 <code>2025-11-25</code>。它以 JSON-RPC 2.0 为消息基础，但面试时不能只回答“就是 JSON-RPC”：JSON-RPC 解决消息相关性，MCP 在其上定义了生命周期、能力、领域方法和安全语义。</p>
 
@@ -471,14 +185,14 @@ AI 应用" data-shape="rectangle">
 
 
 <table><thead><tr><th>消息类型</th><th align="right">是否有 <code>id</code></th><th align="right">是否期待响应</th><th>示例</th></tr></thead><tbody><tr><td>Request</td><td align="right">是</td><td align="right">是</td><td><code>initialize</code>、<code>tools/list</code>、<code>tools/call</code></td></tr><tr><td>Response</td><td align="right">与 Request 相同</td><td align="right">—</td><td><code>result</code> 或协议级 <code>error</code></td></tr><tr><td>Notification</td><td align="right">否</td><td align="right">否</td><td><code>notifications/initialized</code>、<code>notifications/tools/list_changed</code></td></tr></tbody></table>
-<h3 id="101-协议错误与工具执行错误必须分开">10.1 协议错误与工具执行错误必须分开</h3>
+<p><strong>10.1 协议错误与工具执行错误必须分开</strong></p>
 <p>这是高级面试的高频点：</p>
 <ul>
 <li><strong>Protocol Error</strong>：方法不存在、JSON-RPC 参数结构不合法、协议状态不允许。调用方通常不应让模型“猜着重试”。</li>
 <li><strong>Tool Execution Error</strong>：工具已被正确路由，但业务参数、权限、依赖或执行过程失败。应以工具结果中的错误语义返回，让模型能够修正参数、换策略或向用户解释。</li>
 </ul>
 <p>例如，<code>tools/call</code> 缺少协议要求的 <code>name</code> 属于协议/参数错误；<code>name=book_flight</code> 合法，但座位售罄属于工具执行错误。把两者都返回 <code>-32603 Internal error</code> 会损害可恢复性和可观测性。</p>
-<h3 id="102-notification-不是无所谓的消息">10.2 Notification 不是“无所谓的消息”</h3>
+<p><strong>10.2 Notification 不是“无所谓的消息”</strong></p>
 <p>通知没有响应通道，因此适合表达状态变化，而不适合需要确认的关键业务动作。典型用途包括：</p>
 <ul>
 <li>工具、资源、Prompt 列表变化；</li>
@@ -490,88 +204,7 @@ AI 应用" data-shape="rectangle">
 <p>Server 声明 <code>listChanged</code> 后才应发送对应列表变化通知；Client 收到后重新拉取并更新缓存。==Capability 是契约，Notification 是契约允许后的事件。==</p>
 <h2 id="11-初始化状态机与能力协商">11. 初始化状态机与能力协商</h2>
 <p>MCP 连接不是“连上就调用”，而是一个严格状态机：</p>
-<div class="bm-diagram"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 313.8450000000001 881.7" width="313.8450000000001" height="881.7" style="--bg:var(--bm-bg);--fg:var(--bm-fg);--line:var(--bm-border);--accent:var(--bm-accent);--muted:var(--bm-muted);--surface:var(--bm-surface);--border:var(--bm-border)">
-<style>
-  text { font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif; }
-  svg {
-    /* Derived from --bg and --fg (overridable via --line, --accent, etc.) */
-    --_text:          var(--fg);
-    --_text-sec:      var(--muted, color-mix(in srgb, var(--fg) 60%, var(--bg)));
-    --_text-muted:    var(--muted, color-mix(in srgb, var(--fg) 40%, var(--bg)));
-    --_text-faint:    color-mix(in srgb, var(--fg) 25%, var(--bg));
-    --_line:          var(--line, color-mix(in srgb, var(--fg) 50%, var(--bg)));
-    --_arrow:         var(--accent, color-mix(in srgb, var(--fg) 85%, var(--bg)));
-    --_node-fill:     var(--surface, color-mix(in srgb, var(--fg) 3%, var(--bg)));
-    --_node-stroke:   var(--border, color-mix(in srgb, var(--fg) 20%, var(--bg)));
-    --_group-fill:    var(--bg);
-    --_group-hdr:     color-mix(in srgb, var(--fg) 5%, var(--bg));
-    --_inner-stroke:  color-mix(in srgb, var(--fg) 12%, var(--bg));
-    --_key-badge:     color-mix(in srgb, var(--fg) 10%, var(--bg));
-  }
-</style>
-<defs>
-  <marker id="arrowhead" markerWidth="8" markerHeight="5" refX="7" refY="2.5" orient="auto">
-    <polygon points="0 0, 8 2.5, 0 5" fill="var(--_arrow)" stroke="var(--_arrow)" stroke-width="0.75" stroke-linejoin="round"></polygon>
-  </marker>
-  <marker id="arrowhead-start" markerWidth="8" markerHeight="5" refX="1" refY="2.5" orient="auto-start-reverse">
-    <polygon points="8 0, 0 2.5, 8 5" fill="var(--_arrow)" stroke="var(--_arrow)" stroke-width="0.75" stroke-linejoin="round"></polygon>
-  </marker>
-</defs>
-<polyline class="edge" data-from="_start" data-to="Disconnected" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="207.04900000000004,68 207.04900000000004,116" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)"></polyline>
-<polyline class="edge" data-from="Disconnected" data-to="Initializing" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="建立 transport" points="207.04900000000004,152.9 207.04900000000004,269.20000000000005" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)"></polyline>
-<polyline class="edge" data-from="Initializing" data-to="Negotiated" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="initialize / InitializeResult" points="207.04900000000004,306.1 207.04900000000004,422.40000000000003" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)"></polyline>
-<polyline class="edge" data-from="Negotiated" data-to="Ready" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="notifications/initialized" points="207.04900000000004,459.3 207.04900000000004,575.6000000000001" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)"></polyline>
-<polyline class="edge" data-from="Ready" data-to="Ready" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="requests / notifications" points="166.80800000000005,587.9000000000001 156.80800000000005,587.9000000000001 156.80800000000005,600.2 166.80800000000005,600.2" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)"></polyline>
-<polyline class="edge" data-from="Ready" data-to="Closing" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="EOF / DELETE / fatal error" points="207.04900000000004,612.5 207.04900000000004,728.8" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)"></polyline>
-<polyline class="edge" data-from="Closing" data-to="_end" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="207.04900000000004,765.7 207.04900000000004,813.7" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)"></polyline>
-<g class="edge-label" data-from="Disconnected" data-to="Initializing" data-label="建立 transport">
-  <rect x="163.04900000000004" y="195.9" width="87.14800000000002" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1"></rect>
-  <text x="206.62300000000005" y="211.05" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">建立 transport</text>
-</g>
-<g class="edge-label" data-from="Initializing" data-to="Negotiated" data-label="initialize / InitializeResult">
-  <rect x="142.04900000000004" y="349.1" width="129.916" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1"></rect>
-  <text x="207.00700000000003" y="364.25" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">initialize / InitializeResult</text>
-</g>
-<g class="edge-label" data-from="Negotiated" data-to="Ready" data-label="notifications/initialized">
-  <rect x="146.54900000000004" y="502.30000000000007" width="120.41200000000003" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1"></rect>
-  <text x="206.75500000000005" y="517.45" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">notifications/initialized</text>
-</g>
-<g class="edge-label" data-from="Ready" data-to="Ready" data-label="requests / notifications">
-  <rect x="36.019999999999996" y="578.9000000000001" width="122.78800000000004" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1"></rect>
-  <text x="97.41400000000002" y="594.0500000000001" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">requests / notifications</text>
-</g>
-<g class="edge-label" data-from="Ready" data-to="Closing" data-label="EOF / DELETE / fatal error">
-  <rect x="136.04900000000004" y="655.5" width="141.79600000000005" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1"></rect>
-  <text x="206.94700000000006" y="670.65" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">EOF / DELETE / fatal error</text>
-</g>
-<g class="node" data-id="_start" data-label="" data-shape="state-start">
-  <circle cx="207.04900000000004" cy="54" r="12" fill="var(--_text)" stroke="none"></circle>
-</g>
-<g class="node" data-id="Disconnected" data-label="Disconnected" data-shape="rounded">
-  <rect x="145.31900000000005" y="116" width="123.46" height="36.900000000000006" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></rect>
-  <text x="207.04900000000004" y="134.45" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">Disconnected</text>
-</g>
-<g class="node" data-id="Initializing" data-label="Initializing" data-shape="rounded">
-  <rect x="157.17500000000004" y="269.20000000000005" width="99.74799999999999" height="36.900000000000006" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></rect>
-  <text x="207.04900000000004" y="287.65000000000003" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">Initializing</text>
-</g>
-<g class="node" data-id="Negotiated" data-label="Negotiated" data-shape="rounded">
-  <rect x="154.95200000000003" y="422.40000000000003" width="104.19400000000002" height="36.900000000000006" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></rect>
-  <text x="207.04900000000004" y="440.85" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">Negotiated</text>
-</g>
-<g class="node" data-id="Ready" data-label="Ready" data-shape="rounded">
-  <rect x="166.80800000000005" y="575.6000000000001" width="80.482" height="36.900000000000006" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></rect>
-  <text x="207.04900000000004" y="594.0500000000002" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">Ready</text>
-</g>
-<g class="node" data-id="Closing" data-label="Closing" data-shape="rounded">
-  <rect x="163.84400000000005" y="728.8" width="86.41" height="36.900000000000006" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></rect>
-  <text x="207.04900000000004" y="747.25" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">Closing</text>
-</g>
-<g class="node" data-id="_end" data-label="" data-shape="state-end">
-  <circle cx="207.04900000000004" cy="827.7" r="12" fill="none" stroke="var(--_text)" stroke-width="1.5"></circle>
-  <circle cx="207.04900000000004" cy="827.7" r="8" fill="var(--_text)" stroke="none"></circle>
-</g>
-</svg></div>
+<img src="/images/go/05-initialization-state-machine.png" alt="" loading="lazy" width="500" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
 <p><code>initialize</code> 至少交换：</p>
 <ul>
 <li><code>protocolVersion</code>：Client 提议版本，Server 返回希望采用的版本；Client 不支持则断开；</li>
@@ -589,150 +222,16 @@ AI 应用" data-shape="rectangle">
 </ol>
 <h2 id="12-mcp-是双向协议不只是server-给模型工具">12. MCP 是双向协议，不只是“Server 给模型工具”</h2>
 <p>基础介绍容易只讲 Server Features。完整心智模型还包括 Client 向 Server 提供的能力：</p>
-<div class="bm-diagram"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 573.193 626.3000000000001" width="573.193" height="626.3000000000001" style="--bg:var(--bm-bg);--fg:var(--bm-fg);--line:var(--bm-border);--accent:var(--bm-accent);--muted:var(--bm-muted);--surface:var(--bm-surface);--border:var(--bm-border)">
-<style>
-  text { font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif; }
-  svg {
-    /* Derived from --bg and --fg (overridable via --line, --accent, etc.) */
-    --_text:          var(--fg);
-    --_text-sec:      var(--muted, color-mix(in srgb, var(--fg) 60%, var(--bg)));
-    --_text-muted:    var(--muted, color-mix(in srgb, var(--fg) 40%, var(--bg)));
-    --_text-faint:    color-mix(in srgb, var(--fg) 25%, var(--bg));
-    --_line:          var(--line, color-mix(in srgb, var(--fg) 50%, var(--bg)));
-    --_arrow:         var(--accent, color-mix(in srgb, var(--fg) 85%, var(--bg)));
-    --_node-fill:     var(--surface, color-mix(in srgb, var(--fg) 3%, var(--bg)));
-    --_node-stroke:   var(--border, color-mix(in srgb, var(--fg) 20%, var(--bg)));
-    --_group-fill:    var(--bg);
-    --_group-hdr:     color-mix(in srgb, var(--fg) 5%, var(--bg));
-    --_inner-stroke:  color-mix(in srgb, var(--fg) 12%, var(--bg));
-    --_key-badge:     color-mix(in srgb, var(--fg) 10%, var(--bg));
-  }
-</style>
-<defs>
-  <marker id="arrowhead" markerWidth="8" markerHeight="5" refX="7" refY="2.5" orient="auto">
-    <polygon points="0 0, 8 2.5, 0 5" fill="var(--_arrow)" stroke="var(--_arrow)" stroke-width="0.75" stroke-linejoin="round"></polygon>
-  </marker>
-  <marker id="arrowhead-start" markerWidth="8" markerHeight="5" refX="1" refY="2.5" orient="auto-start-reverse">
-    <polygon points="8 0, 0 2.5, 8 5" fill="var(--_arrow)" stroke="var(--_arrow)" stroke-width="0.75" stroke-linejoin="round"></polygon>
-  </marker>
-</defs>
-<g class="subgraph" data-id="ServerFeatures" data-label="Server → Client">
-  <rect x="204.05" y="40" width="140.64" height="291.6" rx="0" ry="0" fill="var(--_group-fill)" stroke="var(--_node-stroke)" stroke-width="1"></rect>
-  <rect x="204.05" y="40" width="140.64" height="28" rx="0" ry="0" fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="1"></rect>
-  <text x="216.05" y="54" font-size="12" font-weight="600" fill="var(--_text-sec)" dy="4.199999999999999">Server → Client</text>
-</g>
-<g class="subgraph" data-id="ClientFeatures" data-label="Client → Server">
-  <rect x="238.42399999999998" y="359.6" width="130.26600000000002" height="226.70000000000002" rx="0" ry="0" fill="var(--_group-fill)" stroke="var(--_node-stroke)" stroke-width="1"></rect>
-  <rect x="238.42399999999998" y="359.6" width="130.26600000000002" height="28" rx="0" ry="0" fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="1"></rect>
-  <text x="250.42399999999998" y="373.6" font-size="12" font-weight="600" fill="var(--_text-sec)" dy="4.199999999999999">Client → Server</text>
-</g>
-<polyline class="edge" data-from="Srv" data-to="ServerFeatures" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="156.05,323.225 192.05,323.225 192.05,185.8 204.05,185.8" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)"></polyline>
-<polyline class="edge" data-from="ServerFeatures" data-to="Cli" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="344.69,185.8 380.69,185.8 380.69,323.225 392.69,323.225" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)"></polyline>
-<polyline class="edge" data-from="Srv" data-to="ClientFeatures" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="156.05,335.52500000000003 192.05,335.52500000000003 192.05,472.95000000000005 238.42399999999998,472.95000000000005" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)"></polyline>
-<polyline class="edge" data-from="ClientFeatures" data-to="Cli" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="368.69,472.95000000000005 380.69,472.95000000000005 380.69,335.52500000000003 392.69,335.52500000000003" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)"></polyline>
-<g class="node" data-id="Srv" data-label="MCP Server" data-shape="rectangle">
-  <rect x="40" y="310.925" width="116.05" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></rect>
-  <text x="98.025" y="329.375" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">MCP Server</text>
-</g>
-<g class="node" data-id="Cli" data-label="MCP Client / Host" data-shape="rectangle">
-  <rect x="392.69" y="310.925" width="140.50300000000001" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></rect>
-  <text x="462.9415" y="329.375" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">MCP Client / Host</text>
-</g>
-<g class="node" data-id="T" data-label="Tools" data-shape="rectangle">
-  <rect x="242.7945" y="148.9" width="76.036" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></rect>
-  <text x="280.8125" y="167.35000000000002" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">Tools</text>
-</g>
-<g class="node" data-id="R" data-label="Resources" data-shape="rectangle">
-  <rect x="242.7945" y="213.8" width="108.64" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></rect>
-  <text x="297.1145" y="232.25" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">Resources</text>
-</g>
-<g class="node" data-id="P" data-label="Prompts" data-shape="rectangle">
-  <rect x="242.7945" y="84" width="90.856" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></rect>
-  <text x="288.22249999999997" y="102.45" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">Prompts</text>
-</g>
-<g class="node" data-id="L" data-label="Logging" data-shape="rectangle">
-  <rect x="242.7945" y="278.70000000000005" width="90.856" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></rect>
-  <text x="288.22249999999997" y="297.15000000000003" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">Logging</text>
-</g>
-<g class="node" data-id="RO" data-label="Roots" data-shape="rectangle">
-  <rect x="242.7945" y="468.5" width="76.036" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></rect>
-  <text x="280.8125" y="486.95" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">Roots</text>
-</g>
-<g class="node" data-id="S" data-label="Sampling" data-shape="rectangle">
-  <rect x="242.7945" y="533.4000000000001" width="95.30199999999999" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></rect>
-  <text x="290.4455" y="551.8500000000001" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">Sampling</text>
-</g>
-<g class="node" data-id="E" data-label="Elicitation" data-shape="rectangle">
-  <rect x="242.7945" y="403.6" width="98.266" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></rect>
-  <text x="291.9275" y="422.05" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">Elicitation</text>
-</g>
-</svg></div>
-<h3 id="121-roots">12.1 Roots</h3>
+<img src="/images/go/06-bidirectional-capabilities.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
+<p><strong>12.1 Roots</strong></p>
 <p>Roots 告诉 Server：Host 愿意暴露哪些文件系统边界。它是<strong>可见范围提示与协作边界</strong>，不是操作系统级沙箱。Server 仍应被进程权限、容器挂载和路径校验限制；不能因为 URI 在 Root 下就跳过授权。</p>
-<h3 id="122-sampling">12.2 Sampling</h3>
+<p><strong>12.2 Sampling</strong></p>
 <p>Sampling 允许 Server 请求 Client 侧模型生成内容。好处是 Server 不必绑定某个模型供应商，模型选择与凭证仍由 Host 控制。风险是递归调用、成本失控和数据泄露，因此要限制：最大递归深度、token 预算、可用工具、可见上下文和用户审批。</p>
-<h3 id="123-elicitation">12.3 Elicitation</h3>
+<p><strong>12.3 Elicitation</strong></p>
 <p>Elicitation 允许 Server 请求额外用户输入。适合缺少字段或需要业务确认的场景。敏感凭证不应通过普通表单随意收集；URL 模式需要防止钓鱼、开放重定向与不可信域跳转。</p>
-<h3 id="124-tasks实验能力">12.4 Tasks（实验能力）</h3>
+<p><strong>12.4 Tasks（实验能力）</strong></p>
 <p><code>2025-11-25</code> 引入实验性 Tasks，用于长耗时、可轮询、可延迟取结果的请求。典型状态是：</p>
-<div class="bm-diagram"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 410.04999999999995 286.70000000000005" width="410.04999999999995" height="286.70000000000005" style="--bg:var(--bm-bg);--fg:var(--bm-fg);--line:var(--bm-border);--accent:var(--bm-accent);--muted:var(--bm-muted);--surface:var(--bm-surface);--border:var(--bm-border)">
-<style>
-  text { font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif; }
-  svg {
-    /* Derived from --bg and --fg (overridable via --line, --accent, etc.) */
-    --_text:          var(--fg);
-    --_text-sec:      var(--muted, color-mix(in srgb, var(--fg) 60%, var(--bg)));
-    --_text-muted:    var(--muted, color-mix(in srgb, var(--fg) 40%, var(--bg)));
-    --_text-faint:    color-mix(in srgb, var(--fg) 25%, var(--bg));
-    --_line:          var(--line, color-mix(in srgb, var(--fg) 50%, var(--bg)));
-    --_arrow:         var(--accent, color-mix(in srgb, var(--fg) 85%, var(--bg)));
-    --_node-fill:     var(--surface, color-mix(in srgb, var(--fg) 3%, var(--bg)));
-    --_node-stroke:   var(--border, color-mix(in srgb, var(--fg) 20%, var(--bg)));
-    --_group-fill:    var(--bg);
-    --_group-hdr:     color-mix(in srgb, var(--fg) 5%, var(--bg));
-    --_inner-stroke:  color-mix(in srgb, var(--fg) 12%, var(--bg));
-    --_key-badge:     color-mix(in srgb, var(--fg) 10%, var(--bg));
-  }
-</style>
-<defs>
-  <marker id="arrowhead" markerWidth="8" markerHeight="5" refX="7" refY="2.5" orient="auto">
-    <polygon points="0 0, 8 2.5, 0 5" fill="var(--_arrow)" stroke="var(--_arrow)" stroke-width="0.75" stroke-linejoin="round"></polygon>
-  </marker>
-  <marker id="arrowhead-start" markerWidth="8" markerHeight="5" refX="1" refY="2.5" orient="auto-start-reverse">
-    <polygon points="8 0, 0 2.5, 8 5" fill="var(--_arrow)" stroke="var(--_arrow)" stroke-width="0.75" stroke-linejoin="round"></polygon>
-  </marker>
-</defs>
-<polyline class="edge" data-from="_start" data-to="working" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="152.41899999999998,72.45 152.41899999999998,112.9 183.42249999999999,112.9 183.42249999999999,124.9" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)"></polyline>
-<polyline class="edge" data-from="working" data-to="input_required" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="205.76599999999996,124.9 205.76599999999996,112.9 226.76599999999996,112.9 226.76599999999996,81.35000000000001" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)"></polyline>
-<polyline class="edge" data-from="input_required" data-to="working" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="259.113,81.35000000000001 259.113,103.125 205.76599999999996,103.125 205.76599999999996,124.9" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)"></polyline>
-<polyline class="edge" data-from="working" data-to="completed" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="205.76599999999996,161.8 205.76599999999996,179.8 90.615,179.8 90.615,197.8" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)"></polyline>
-<polyline class="edge" data-from="working" data-to="failed" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="205.76599999999996,161.8 205.76599999999996,179.8 205.766,179.8 205.766,197.8" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)"></polyline>
-<polyline class="edge" data-from="working" data-to="cancelled" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="205.76599999999996,161.8 205.76599999999996,179.8 320.17600000000004,179.8 320.17600000000004,197.8" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)"></polyline>
-<polyline class="edge" data-from="input_required" data-to="cancelled" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="259.113,81.35000000000001 259.113,103.125 320.17600000000004,103.125 320.17600000000004,197.8" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)"></polyline>
-<g class="node" data-id="_start" data-label="" data-shape="state-start">
-  <circle cx="152.41899999999998" cy="58.45" r="12" fill="var(--_text)" stroke="none"></circle>
-</g>
-<g class="node" data-id="working" data-label="working" data-shape="rounded">
-  <rect x="161.07899999999998" y="124.9" width="89.374" height="36.900000000000006" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></rect>
-  <text x="205.76599999999996" y="143.35000000000002" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">working</text>
-</g>
-<g class="node" data-id="input_required" data-label="input_required" data-shape="rounded">
-  <rect x="194.41899999999998" y="44.45" width="129.388" height="36.900000000000006" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></rect>
-  <text x="259.113" y="62.900000000000006" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">input_required</text>
-</g>
-<g class="node" data-id="completed" data-label="completed" data-shape="rounded">
-  <rect x="40" y="197.8" width="101.22999999999999" height="36.900000000000006" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></rect>
-  <text x="90.615" y="216.25" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">completed</text>
-</g>
-<g class="node" data-id="failed" data-label="failed" data-shape="rounded">
-  <rect x="169.23" y="197.8" width="73.072" height="36.900000000000006" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></rect>
-  <text x="205.766" y="216.25" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">failed</text>
-</g>
-<g class="node" data-id="cancelled" data-label="cancelled" data-shape="rounded">
-  <rect x="270.302" y="197.8" width="99.748" height="36.900000000000006" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></rect>
-  <text x="320.17600000000004" y="216.25" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">cancelled</text>
-</g>
-</svg></div>
+<img src="/images/go/07-task-state-machine.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
 <p>面试时应强调：Tasks 不是把所有同步 Tool Call 自动变成异步任务。双方先协商 task capability，具体 Tool 还可声明 <code>required</code>、<code>optional</code> 或 <code>forbidden</code>；同时要处理 TTL、任务 ID 授权、轮询退避和结果清理。</p>
 <h2 id="13-toolresourceprompt-的高级建模">13. Tool、Resource、Prompt 的高级建模</h2>
 <p>三类原语的差异不只在“动词/名词”：</p>
@@ -784,15 +283,15 @@ AI 应用" data-shape="rectangle">
 
 
 <table><thead><tr><th>设计维度</th><th>Tool</th><th>Resource</th><th>Prompt</th></tr></thead><tbody><tr><td>控制模型</td><td>倾向模型选择</td><td>倾向应用选择</td><td>倾向用户选择</td></tr><tr><td>寻址方式</td><td>工具名</td><td>URI / URI Template</td><td>Prompt 名称 + 参数</td></tr><tr><td>副作用</td><td>可能有</td><td>应以读取上下文为主</td><td>无直接副作用</td></tr><tr><td>更新模型</td><td><code>tools/list_changed</code></td><td>list changed、subscribe/update</td><td><code>prompts/list_changed</code></td></tr><tr><td>返回形态</td><td>text/image/audio/resource/structuredContent</td><td>text 或 blob</td><td>一组角色消息</td></tr><tr><td>典型缓存</td><td>工具清单与 Schema</td><td>内容按 URI/etag/版本</td><td>模板按名称/版本</td></tr></tbody></table>
-<h3 id="131-什么应建模成-resource而不是-tool">13.1 什么应建模成 Resource，而不是 Tool</h3>
+<p><strong>13.1 什么应建模成 Resource，而不是 Tool</strong></p>
 <p>若核心语义是“按稳定标识读取上下文”，优先 Resource，例如 <code>repo://project/README.md</code>。如果建成 <code>read_file(path)</code> Tool，模型需要生成路径，权限和缓存都更难做；但当读取过程需要复杂查询、权限决策或计算时，Tool 可能更合适。</p>
-<h3 id="132-tool-的输入与输出-schema">13.2 Tool 的输入与输出 Schema</h3>
+<p><strong>13.2 Tool 的输入与输出 Schema</strong></p>
 <p>生产级 Tool 不只定义 <code>inputSchema</code>，还应在适用时定义 <code>outputSchema</code> 并返回 <code>structuredContent</code>。结构化输出可让 Host 做二次校验、UI 渲染和下游组合。为兼容旧 Client，Server 可能还需返回序列化后的 text content。</p>
 <p>Tool annotations（例如只读、破坏性、幂等倾向）只能帮助 UI 与调度，<strong>不能当作安全证明</strong>。真正权限必须在执行路径验证。</p>
 <h2 id="14-transport-与生产级会话设计">14. Transport 与生产级会话设计</h2>
-<h3 id="141-stdio-的真实边界">14.1 stdio 的真实边界</h3>
+<p><strong>14.1 stdio 的真实边界</strong></p>
 <p>stdio 适合本地进程：Client 启动 Server，stdout 只能输出合法协议消息，日志走 stderr。其风险不是互联网攻击面，而是本地进程继承了过多环境变量、文件权限或网络权限。</p>
-<h3 id="142-streamable-http-的状态模型">14.2 Streamable HTTP 的状态模型</h3>
+<p><strong>14.2 Streamable HTTP 的状态模型</strong></p>
 <p>Streamable HTTP 使用单一 MCP Endpoint 支持 POST/GET，可借 SSE 传递流式消息。Server 可在初始化响应中签发 <code>MCP-Session-Id</code>；后续请求携带该 ID。生产实现需考虑：</p>
 <ul>
 <li>Session ID 高熵、不可预测、禁止写入 URL；</li>
@@ -802,85 +301,11 @@ AI 应用" data-shape="rectangle">
 <li>每个后续 HTTP 请求携带协商后的 <code>MCP-Protocol-Version</code>；</li>
 <li>校验 <code>Origin</code>，本地 Server 只绑定 loopback，防 DNS rebinding。</li>
 </ul>
-<h3 id="143-断线重连不是简单重放">14.3 断线重连不是简单重放</h3>
+<p><strong>14.3 断线重连不是简单重放</strong></p>
 <p>只读请求可重新发起；有副作用 Tool 的请求若在“Server 已执行、响应丢失”处断线，客户端无法仅凭超时判断是否执行。解决思路与分布式系统一致：业务幂等键、状态查询、去重存储和补偿动作，而不是寄希望于传输层提供 exactly-once。</p>
 <h2 id="15-authorization-与威胁模型">15. Authorization 与威胁模型</h2>
 <p>HTTP MCP 的授权框架把受保护 MCP Server 视为 OAuth Resource Server，MCP Client 是 OAuth Client，Authorization Server 负责发 token。高级回答应覆盖：</p>
-<div class="bm-diagram"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 616.0550000000001 470" width="616.0550000000001" height="470" style="--bg:var(--bm-bg);--fg:var(--bm-fg);--line:var(--bm-border);--accent:var(--bm-accent);--muted:var(--bm-muted);--surface:var(--bm-surface);--border:var(--bm-border)">
-<style>
-  text { font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif; }
-  svg {
-    /* Derived from --bg and --fg (overridable via --line, --accent, etc.) */
-    --_text:          var(--fg);
-    --_text-sec:      var(--muted, color-mix(in srgb, var(--fg) 60%, var(--bg)));
-    --_text-muted:    var(--muted, color-mix(in srgb, var(--fg) 40%, var(--bg)));
-    --_text-faint:    color-mix(in srgb, var(--fg) 25%, var(--bg));
-    --_line:          var(--line, color-mix(in srgb, var(--fg) 50%, var(--bg)));
-    --_arrow:         var(--accent, color-mix(in srgb, var(--fg) 85%, var(--bg)));
-    --_node-fill:     var(--surface, color-mix(in srgb, var(--fg) 3%, var(--bg)));
-    --_node-stroke:   var(--border, color-mix(in srgb, var(--fg) 20%, var(--bg)));
-    --_group-fill:    var(--bg);
-    --_group-hdr:     color-mix(in srgb, var(--fg) 5%, var(--bg));
-    --_inner-stroke:  color-mix(in srgb, var(--fg) 12%, var(--bg));
-    --_key-badge:     color-mix(in srgb, var(--fg) 10%, var(--bg));
-  }
-</style>
-<defs>
-  <marker id="seq-arrow" markerWidth="8" markerHeight="5" refX="8" refY="2.5" orient="auto-start-reverse">
-    <polygon points="0 0, 8 2.5, 0 5" fill="var(--_arrow)"></polygon>
-  </marker>
-  <marker id="seq-arrow-open" markerWidth="8" markerHeight="5" refX="8" refY="2.5" orient="auto-start-reverse">
-    <polyline points="0 0, 8 2.5, 0 5" fill="none" stroke="var(--_arrow)" stroke-width="1"></polyline>
-  </marker>
-</defs>
-<line class="lifeline" data-actor="C" x1="78.838" y1="70" x2="78.838" y2="440" stroke="var(--_line)" stroke-width="0.75" stroke-dasharray="6 4"></line>
-<line class="lifeline" data-actor="R" x1="278.017" y1="70" x2="278.017" y2="440" stroke="var(--_line)" stroke-width="0.75" stroke-dasharray="6 4"></line>
-<line class="lifeline" data-actor="A" x1="507.2065" y1="70" x2="507.2065" y2="440" stroke="var(--_line)" stroke-width="0.75" stroke-dasharray="6 4"></line>
-<g class="message" data-from="C" data-to="R" data-label="未授权请求" data-line-style="solid" data-arrow-head="filled" data-self="false">
-  <line x1="78.838" y1="90" x2="278.017" y2="90" stroke="var(--_line)" stroke-width="1" marker-end="url(#seq-arrow)"></line>
-  <text x="178.4275" y="80" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">未授权请求</text>
-</g>
-<g class="message" data-from="R" data-to="C" data-label="401 + Protected Resource Metadata 位置" data-line-style="dashed" data-arrow-head="filled" data-self="false">
-  <line x1="278.017" y1="130" x2="78.838" y2="130" stroke="var(--_line)" stroke-width="1" stroke-dasharray="6 4" marker-end="url(#seq-arrow)"></line>
-  <text x="178.4275" y="120" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">401 + Protected Resource Metadata 位置</text>
-</g>
-<g class="message" data-from="C" data-to="R" data-label="读取 Resource Metadata" data-line-style="solid" data-arrow-head="filled" data-self="false">
-  <line x1="78.838" y1="170" x2="278.017" y2="170" stroke="var(--_line)" stroke-width="1" marker-end="url(#seq-arrow)"></line>
-  <text x="178.4275" y="160" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">读取 Resource Metadata</text>
-</g>
-<g class="message" data-from="R" data-to="C" data-label="authorization_servers + scopes" data-line-style="dashed" data-arrow-head="filled" data-self="false">
-  <line x1="278.017" y1="210" x2="78.838" y2="210" stroke="var(--_line)" stroke-width="1" stroke-dasharray="6 4" marker-end="url(#seq-arrow)"></line>
-  <text x="178.4275" y="200" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">authorization_servers + scopes</text>
-</g>
-<g class="message" data-from="C" data-to="A" data-label="Authorization Code + PKCE + resource" data-line-style="solid" data-arrow-head="filled" data-self="false">
-  <line x1="78.838" y1="250" x2="507.2065" y2="250" stroke="var(--_line)" stroke-width="1" marker-end="url(#seq-arrow)"></line>
-  <text x="293.02225" y="240" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">Authorization Code + PKCE + resource</text>
-</g>
-<g class="message" data-from="A" data-to="C" data-label="audience-bound access token" data-line-style="dashed" data-arrow-head="filled" data-self="false">
-  <line x1="507.2065" y1="290" x2="78.838" y2="290" stroke="var(--_line)" stroke-width="1" stroke-dasharray="6 4" marker-end="url(#seq-arrow)"></line>
-  <text x="293.02225" y="280" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">audience-bound access token</text>
-</g>
-<g class="message" data-from="C" data-to="R" data-label="Bearer token" data-line-style="solid" data-arrow-head="filled" data-self="false">
-  <line x1="78.838" y1="330" x2="278.017" y2="330" stroke="var(--_line)" stroke-width="1" marker-end="url(#seq-arrow)"></line>
-  <text x="178.4275" y="320" font-size="11" text-anchor="middle" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">Bearer token</text>
-</g>
-<g class="message" data-from="R" data-to="R" data-label="校验 issuer / audience / expiry / scope" data-line-style="solid" data-arrow-head="filled" data-self="true">
-  <polyline points="278.017,370 308.017,370 308.017,390 278.017,390" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#seq-arrow)"></polyline>
-  <text x="316.017" y="380" font-size="11" text-anchor="start" font-weight="400" fill="var(--_text-muted)" dy="3.8499999999999996">校验 issuer / audience / expiry / scope</text>
-</g>
-<g class="actor" data-id="C" data-label="MCP Client" datatype="participant">
-  <rect x="29.999999999999993" y="30" width="97.676" height="40" rx="4" ry="4" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="1"></rect>
-  <text x="78.838" y="50" font-size="13" text-anchor="middle" font-weight="500" fill="var(--_text)" dy="4.55">MCP Client</text>
-</g>
-<g class="actor" data-id="R" data-label="MCP Server / Resource Server" datatype="participant">
-  <rect x="167.676" y="30" width="220.682" height="40" rx="4" ry="4" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="1"></rect>
-  <text x="278.017" y="50" font-size="13" text-anchor="middle" font-weight="500" fill="var(--_text)" dy="4.55">MCP Server / Resource Server</text>
-</g>
-<g class="actor" data-id="A" data-label="Authorization Server" datatype="participant">
-  <rect x="428.358" y="30" width="157.697" height="40" rx="4" ry="4" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="1"></rect>
-  <text x="507.2065" y="50" font-size="13" text-anchor="middle" font-weight="500" fill="var(--_text)" dy="4.55">Authorization Server</text>
-</g>
-</svg></div>
+<img src="/images/go/08-authorization-flow.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
 <p>关键安全结论：</p>
 <ul>
 <li><strong>禁止 token passthrough</strong>：MCP Server 不能把 Client 给它的 token 原样转发给下游 API；下游 token 应是另一条独立授权关系。</li>
@@ -890,77 +315,11 @@ AI 应用" data-shape="rectangle">
 <li><strong>提示注入隔离</strong>：Tool/Resource 返回的是不可信数据，不得把其中“忽略规则、发送密钥”等文本当系统指令。</li>
 <li><strong>Server 身份与供应链</strong>：安装本地 Server 等价于运行第三方代码，要固定版本、校验来源并最小化进程权限。</li>
 </ul>
-<h2 id="16-生产架构缓存与可观测性">16. 生产架构、缓存与可观测性</h2>
-<h3 id="161-mcp-gateway-什么时候有价值">16.1 MCP Gateway 什么时候有价值</h3>
+<p><strong>16. 生产架构、缓存与可观测性</strong></p>
+<p><strong>16.1 MCP Gateway 什么时候有价值</strong></p>
 <p>企业环境常在 Host 与 Servers 之间增加 Gateway，用于统一认证、策略、审计、配额和服务发现。但 Gateway 不能只做透明转发：它需要保持 request ID、session、流式消息与取消语义，并防止不同租户的工具列表、缓存和凭证串用。</p>
-<div class="bm-diagram"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 515.258 376.5" width="515.258" height="376.5" style="--bg:var(--bm-bg);--fg:var(--bm-fg);--line:var(--bm-border);--accent:var(--bm-accent);--muted:var(--bm-muted);--surface:var(--bm-surface);--border:var(--bm-border)">
-<style>
-  text { font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif; }
-  svg {
-    /* Derived from --bg and --fg (overridable via --line, --accent, etc.) */
-    --_text:          var(--fg);
-    --_text-sec:      var(--muted, color-mix(in srgb, var(--fg) 60%, var(--bg)));
-    --_text-muted:    var(--muted, color-mix(in srgb, var(--fg) 40%, var(--bg)));
-    --_text-faint:    color-mix(in srgb, var(--fg) 25%, var(--bg));
-    --_line:          var(--line, color-mix(in srgb, var(--fg) 50%, var(--bg)));
-    --_arrow:         var(--accent, color-mix(in srgb, var(--fg) 85%, var(--bg)));
-    --_node-fill:     var(--surface, color-mix(in srgb, var(--fg) 3%, var(--bg)));
-    --_node-stroke:   var(--border, color-mix(in srgb, var(--fg) 20%, var(--bg)));
-    --_group-fill:    var(--bg);
-    --_group-hdr:     color-mix(in srgb, var(--fg) 5%, var(--bg));
-    --_inner-stroke:  color-mix(in srgb, var(--fg) 12%, var(--bg));
-    --_key-badge:     color-mix(in srgb, var(--fg) 10%, var(--bg));
-  }
-</style>
-<defs>
-  <marker id="arrowhead" markerWidth="8" markerHeight="5" refX="7" refY="2.5" orient="auto">
-    <polygon points="0 0, 8 2.5, 0 5" fill="var(--_arrow)" stroke="var(--_arrow)" stroke-width="0.75" stroke-linejoin="round"></polygon>
-  </marker>
-  <marker id="arrowhead-start" markerWidth="8" markerHeight="5" refX="1" refY="2.5" orient="auto-start-reverse">
-    <polygon points="8 0, 0 2.5, 8 5" fill="var(--_arrow)" stroke="var(--_arrow)" stroke-width="0.75" stroke-linejoin="round"></polygon>
-  </marker>
-</defs>
-<polyline class="edge" data-from="H1" data-to="G" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="134.561,155.8 163.007,155.8 163.007,188.25 185.525,188.25" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)"></polyline>
-<polyline class="edge" data-from="H2" data-to="G" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="140.489,220.7 163.007,220.7 163.007,188.25 185.525,188.25" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)"></polyline>
-<polyline class="edge" data-from="G" data-to="P" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="308.985,188.25 326.985,188.25 326.985,58.45 344.985,58.45" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)"></polyline>
-<polyline class="edge" data-from="G" data-to="O" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="308.985,188.25 326.985,188.25 326.985,123.35000000000001 344.985,123.35000000000001" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)"></polyline>
-<polyline class="edge" data-from="G" data-to="S1" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="308.985,188.25 326.985,188.25 326.985,188.25 344.985,188.25" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)"></polyline>
-<polyline class="edge" data-from="G" data-to="S2" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="308.985,188.25 326.985,188.25 326.985,253.15000000000003 344.985,253.15000000000003" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)"></polyline>
-<polyline class="edge" data-from="G" data-to="S3" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="308.985,188.25 326.985,188.25 326.985,318.05 344.985,318.05" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)"></polyline>
-<g class="node" data-id="H1" data-label="IDE Host" data-shape="rectangle">
-  <rect x="42.964" y="137.35000000000002" width="91.59700000000001" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></rect>
-  <text x="88.7625" y="155.8" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">IDE Host</text>
-</g>
-<g class="node" data-id="G" data-label="MCP Gateway" data-shape="rectangle">
-  <rect x="185.525" y="169.8" width="123.46" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></rect>
-  <text x="247.255" y="188.25" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">MCP Gateway</text>
-</g>
-<g class="node" data-id="H2" data-label="Chat Host" data-shape="rectangle">
-  <rect x="42.964" y="202.25" width="97.525" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></rect>
-  <text x="91.7265" y="220.7" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">Chat Host</text>
-</g>
-<g class="node" data-id="P" data-label="Policy / AuthZ" data-shape="rectangle">
-  <rect x="344.985" y="40" width="122.71900000000001" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></rect>
-  <text x="406.34450000000004" y="58.45" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">Policy / AuthZ</text>
-</g>
-<g class="node" data-id="O" data-label="Audit / Trace" data-shape="rectangle">
-  <rect x="344.985" y="104.9" width="116.79099999999998" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></rect>
-  <text x="403.3805" y="123.35000000000001" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">Audit / Trace</text>
-</g>
-<g class="node" data-id="S1" data-label="Repo Server" data-shape="rectangle">
-  <rect x="344.985" y="169.8" width="118.273" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></rect>
-  <text x="404.1215" y="188.25" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">Repo Server</text>
-</g>
-<g class="node" data-id="S2" data-label="Ticket Server" data-shape="rectangle">
-  <rect x="344.985" y="234.70000000000002" width="124.20100000000001" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></rect>
-  <text x="407.0855" y="253.15000000000003" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">Ticket Server</text>
-</g>
-<g class="node" data-id="S3" data-label="Data Server" data-shape="rectangle">
-  <rect x="344.985" y="299.6" width="113.827" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75"></rect>
-  <text x="401.8985" y="318.05" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">Data Server</text>
-</g>
-</svg></div>
-<h3 id="162-缓存策略">16.2 缓存策略</h3>
+<img src="/images/go/09-gateway-architecture.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
+<p><strong>16.2 缓存策略</strong></p>
 <ul>
 <li>工具/资源/Prompt 列表按 <code>server identity + user/tenant + scope + protocol version</code> 缓存；</li>
 <li>收到 <code>list_changed</code> 后失效，而不是静默长期缓存；</li>
@@ -968,7 +327,7 @@ AI 应用" data-shape="rectangle">
 <li>不缓存短期 token、用户确认结果或跨租户敏感数据；</li>
 <li>稳定排序工具列表可提升模型 prompt cache 命中率。</li>
 </ul>
-<h3 id="163-可观测性">16.3 可观测性</h3>
+<p><strong>16.3 可观测性</strong></p>
 <p>至少记录以下关联字段：</p>
 
 
@@ -1001,9 +360,9 @@ AI 应用" data-shape="rectangle">
 
 <table><thead><tr><th>层级</th><th>关键字段/指标</th></tr></thead><tbody><tr><td>连接</td><td>server、transport、protocol_version、session_id_hash、初始化耗时</td></tr><tr><td>发现</td><td>tool_count、list latency、cache hit、list_changed 次数</td></tr><tr><td>调用</td><td>request_id、tool_name、argument_hash、审批状态、耗时、结果类型</td></tr><tr><td>可靠性</td><td>协议错误率、执行错误率、超时率、取消率、重试次数</td></tr><tr><td>安全</td><td>scope、策略决策、拒绝原因、脱敏审计事件</td></tr></tbody></table>
 <p>不要默认记录完整参数与结果；可观测性必须与数据分级和脱敏策略一起设计。</p>
-<h2 id="17-生产环境落地从-demo-到可运营服务">17. 生产环境落地：从 Demo 到可运营服务</h2>
+<p><strong>17. 生产环境落地：从 Demo 到可运营服务</strong></p>
 <p>Demo 通常只需要“Server 能启动、Client 能列出 Tool”；生产环境还必须回答：谁能调用、调用了什么、失败能否恢复、版本是否兼容、资源是否隔离。</p>
-<h3 id="171-本地-stdio-server-的部署经验">17.1 本地 stdio Server 的部署经验</h3>
+<p><strong>17.1 本地 stdio Server 的部署经验</strong></p>
 <p>stdio 最常见的问题不是协议，而是<strong>进程生命周期</strong>：</p>
 <ul>
 <li>Host 启动 Server 时设置启动超时，例如 10 秒；超过阈值杀掉整个进程组，避免残留子进程；</li>
@@ -1057,7 +416,7 @@ AI 应用" data-shape="rectangle">
 
 <table><thead><tr><th>项目</th><th align="right">建议起始值</th><th>说明</th></tr></thead><tbody><tr><td>启动超时</td><td align="right">10s</td><td>超时视为不可用，不无限等待</td></tr><tr><td>连续崩溃阈值</td><td align="right">5 次/5min</td><td>触发熔断并提示用户修配置</td></tr><tr><td>重启退避</td><td align="right">1s → 30s</td><td>加随机抖动</td></tr><tr><td>单次调用默认超时</td><td align="right">30s</td><td>每个 Tool 可单独覆盖</td></tr><tr><td>stdout 单消息上限</td><td align="right">8–16 MiB</td><td>防内存爆炸，按业务调整</td></tr><tr><td>优雅退出窗口</td><td align="right">5s</td><td>随后杀进程组</td></tr></tbody></table>
 <p>这些不是协议强制值，而是上线时可讨论、可压测的基线。</p>
-<h3 id="172-远程-streamable-http-的部署经验">17.2 远程 Streamable HTTP 的部署经验</h3>
+<p><strong>17.2 远程 Streamable HTTP 的部署经验</strong></p>
 <p>远程 MCP 常被普通 API Gateway 或负载均衡器“好心破坏”：</p>
 <ul>
 <li>代理缓冲 SSE，导致 Server 已发送进度但 Client 长时间收不到；</li>
@@ -1076,7 +435,7 @@ AI 应用" data-shape="rectangle">
 <span class="line"><span>  → MCP Server</span></span>
 <span class="line"><span>  → 下游系统</span></span></code></pre>
 <p>如果 Session 存内存，使用粘性路由且明确实例摘除行为；更稳妥的是把必要会话状态放共享存储，但不要把完整敏感上下文无期限持久化。扩容、滚动升级和故障迁移时必须测试 Session 404 后的重新初始化。</p>
-<h3 id="173-工具目录不能无界增长">17.3 工具目录不能无界增长</h3>
+<p><strong>17.3 工具目录不能无界增长</strong></p>
 <p>生产系统常在 <code>tools/list</code> 堆积几百个工具，结果是 prompt 成本上涨、模型选错、缓存频繁失效。经验上应：</p>
 <ol>
 <li>按用户 scope 过滤，不把无权限工具暴露给模型；</li>
@@ -1087,7 +446,7 @@ AI 应用" data-shape="rectangle">
 <li>对大工具集使用分层发现或 tool search；</li>
 <li>记录每个 Tool 的曝光次数、选择次数、成功率和误选率，长期不用的 Tool 下线。</li>
 </ol>
-<h3 id="174-下游依赖必须做隔离">17.4 下游依赖必须做隔离</h3>
+<p><strong>17.4 下游依赖必须做隔离</strong></p>
 <p>一个 Server 往往连接多个下游。不要让慢数据库拖死所有 Tool：</p>
 <ul>
 <li>每个下游独立连接池、超时、并发上限和熔断器；</li>
@@ -1097,8 +456,8 @@ AI 应用" data-shape="rectangle">
 <li>取消信号尽量传播到下游，避免 Client 已离开但任务继续消耗资源；</li>
 <li>对长任务使用 Tasks 或业务异步任务，不长期占用 HTTP 请求。</li>
 </ul>
-<h2 id="18-生产事故模式与排障-runbook">18. 生产事故模式与排障 Runbook</h2>
-<h3 id="181-server-一直显示连接失败">18.1 Server 一直显示“连接失败”</h3>
+<p><strong>18. 生产事故模式与排障 Runbook</strong></p>
+<p><strong>18.1 Server 一直显示“连接失败”</strong></p>
 <p>按层排查：</p>
 <ol>
 <li>进程是否启动、工作目录和可执行文件是否正确；</li>
@@ -1109,9 +468,11 @@ AI 应用" data-shape="rectangle">
 <li>远程链路是否被代理、TLS、Origin、WAF 拦截；</li>
 <li>用 request ID 对齐 Client 与 Server 日志。</li>
 </ol>
-<p><strong>🐛 高频事故：stdout 污染</strong></p>
-<p>Python/Node 依赖在启动时输出一行提示，Client 把它当 JSON-RPC 解析，表现为“初始化随机失败”。修复是日志统一走 stderr，并在 CI 做协议流纯净性测试。</p>
-<h3 id="182-调用偶发重复执行">18.2 调用偶发重复执行</h3>
+<blockquote>
+<p>[!bug] 高频事故：stdout 污染
+Python/Node 依赖在启动时输出一行提示，Client 把它当 JSON-RPC 解析，表现为“初始化随机失败”。修复是日志统一走 stderr，并在 CI 做协议流纯净性测试。</p>
+</blockquote>
+<p><strong>18.2 调用偶发重复执行</strong></p>
 <p>典型链路：Tool 已完成写操作 → 响应在代理层丢失 → Client 超时重试 → 重复创建。排查时不要只看 Client timeout；用业务幂等键、MCP request ID 与下游 transaction ID 串联日志。</p>
 <p>修复优先级：</p>
 <ol>
@@ -1121,9 +482,9 @@ AI 应用" data-shape="rectangle">
 <li>超时后先查询业务状态；</li>
 <li>为无法幂等的动作提供补偿与人工处理入口。</li>
 </ol>
-<h3 id="183-sse-在测试环境正常生产环境卡住">18.3 SSE 在测试环境正常、生产环境卡住</h3>
+<p><strong>18.3 SSE 在测试环境正常、生产环境卡住</strong></p>
 <p>检查 LB/Ingress 是否启用响应缓冲、idle timeout、最大连接时长、HTTP/2 转换和压缩。用定期进度或 ping 验证连接存活，但 heartbeat 不能掩盖真正卡死的下游。监控“Server 写出时间”和“Client 收到时间”的差值，才能定位缓冲发生在哪一层。</p>
-<h3 id="184-更新-server-后模型仍调用旧参数">18.4 更新 Server 后模型仍调用旧参数</h3>
+<p><strong>18.4 更新 Server 后模型仍调用旧参数</strong></p>
 <p>原因通常是 Tool Schema 缓存、prompt cache 或滚动升级期间新旧实例并存。处理方式：</p>
 <ul>
 <li>兼容期内新增字段而不立刻删除旧字段；</li>
@@ -1132,7 +493,7 @@ AI 应用" data-shape="rectangle">
 <li>确保同一服务池实例返回一致工具清单；</li>
 <li>灰度时按 Host/tenant 固定版本，不让一次会话跨版本漂移。</li>
 </ul>
-<h3 id="185-返回没有数据其实是下游失败">18.5 返回“没有数据”，其实是下游失败</h3>
+<p><strong>18.5 返回“没有数据”，其实是下游失败</strong></p>
 <p>不要把 timeout、403、解析失败统一转换为空数组。Dashboard 上“Tool 调用成功率 99.9%”可能只是错误被吞掉。Tool Result 必须区分：</p>
 <ul>
 <li><code>success + empty</code>：真实空数据；</li>
@@ -1141,8 +502,8 @@ AI 应用" data-shape="rectangle">
 <li><code>cancelled/timeout</code>：执行未完成；</li>
 <li><code>partial</code>：只得到部分数据。</li>
 </ul>
-<h2 id="19-发布灰度slo-与上线检查单">19. 发布、灰度、SLO 与上线检查单</h2>
-<h3 id="191-推荐发布顺序">19.1 推荐发布顺序</h3>
+<p><strong>19. 发布、灰度、SLO 与上线检查单</strong></p>
+<p><strong>19.1 推荐发布顺序</strong></p>
 <ol>
 <li>在 CI 校验 Schema、协议用例和安全扫描；</li>
 <li>用录制的 Client 会话做兼容回放；</li>
@@ -1153,7 +514,7 @@ AI 应用" data-shape="rectangle">
 <li>保留可快速回滚的旧 Server 和 Schema；</li>
 <li>稳定后再清理兼容字段。</li>
 </ol>
-<h3 id="192-建议-slo">19.2 建议 SLO</h3>
+<p><strong>19.2 建议 SLO</strong></p>
 <p>SLO 必须按 Tool 类型拆分，不能用一个平均值掩盖长任务：</p>
 
 
@@ -1197,7 +558,7 @@ AI 应用" data-shape="rectangle">
 
 <table><thead><tr><th>SLI</th><th align="right">示例目标</th><th>备注</th></tr></thead><tbody><tr><td>initialize 成功率</td><td align="right">≥ 99.9%</td><td>排除用户主动取消</td></tr><tr><td>tools/list p95</td><td align="right">&#x3C; 500ms</td><td>命中缓存时应更低</td></tr><tr><td>只读 Tool 可用性</td><td align="right">≥ 99.9%</td><td>以业务成功定义</td></tr><tr><td>写 Tool 重复副作用率</td><td align="right">接近 0</td><td>单独作为安全指标</td></tr><tr><td>Tool p95</td><td align="right">按工具设定</td><td>不用全局平均</td></tr><tr><td>非用户原因取消率</td><td align="right">&#x3C; 0.1%</td><td>反映代理/会话稳定性</td></tr></tbody></table>
 <p>错误预算耗尽时，停止扩大发布，优先修复可靠性；不要通过放宽“成功”定义维持漂亮数字。</p>
-<h3 id="193-上线前检查单">19.3 上线前检查单</h3>
+<p><strong>19.3 上线前检查单</strong></p>
 <ul class="contains-task-list">
 <li class="task-list-item"><input type="checkbox" disabled> 协议版本和 capabilities 在连接日志中可见；</li>
 <li class="task-list-item"><input type="checkbox" disabled> stdio stdout 纯净，日志只走 stderr；</li>
@@ -1212,22 +573,36 @@ AI 应用" data-shape="rectangle">
 <li class="task-list-item"><input type="checkbox" disabled> 高风险 Tool 有明确审批 UI 与审计；</li>
 <li class="task-list-item"><input type="checkbox" disabled> 有灰度、回滚、故障演练和 On-call Runbook。</li>
 </ul>
-<h2 id="20-一些额外的qa">20. 一些额外的QA</h2>
-<p><strong>❓ - Q1：MCP 与 REST API 的本质区别是什么？</strong></p>
-<p>REST 主要规范资源型 HTTP 接口；MCP 是面向 AI Host 的有状态能力协议，包含初始化、能力发现、双向请求、通知、上下文原语与多种 Transport。MCP Server 背后仍可调用 REST。若只有一个固定服务和明确调用方，REST 更简单；若要让多个 AI Host 动态发现并统一使用能力，MCP 更有价值。</p>
-<p><strong>❓ - Q2：为什么 MCP 不能替代 Agent Framework？</strong></p>
-<p>MCP 不负责计划、记忆、停止条件、模型选择和多 Agent 协作。它提供能力与上下文的标准边界；Agent Framework 决定何时使用这些能力以及如何形成执行循环。</p>
-<p><strong>❓ - Q3：如何做多租户 MCP Server？</strong></p>
-<p>身份必须来自经过验证的请求凭证，而不是模型参数；工具列表、Resource、缓存和限流都以 tenant/user/scope 分区；下游凭证独立交换；审计保留 request/session 关联；任何连接级状态都不能成为跨租户身份来源。</p>
-<p><strong>❓ - Q4：如何处理 tools/list 很大导致上下文昂贵？</strong></p>
-<p>先按权限和任务域裁剪，再做分层发现或工具搜索；Schema 保持短而精确、排序稳定；缓存清单但响应 list_changed；用离线 eval 评估召回率与误选率，而不是简单把几百个工具全塞给模型。</p>
-<p><strong>❓ - Q5：一次 tools/call 超时，能否直接重试？</strong></p>
-<p>先区分只读、幂等写和非幂等写。非幂等动作可能已经生效但响应丢失，应使用业务幂等键或查询状态；只有明确可重试的暂时性错误才指数退避，并设置次数和总预算。</p>
-<p><strong>❓ - Q6：Capability negotiation 和 API versioning 各解决什么？</strong></p>
-<p>协议版本描述消息契约的共同基线；Capability 描述该连接上双方实际支持的可选功能。相同协议版本的两个实现仍可能拥有不同能力，因此两者都必须检查。</p>
-<p><strong>❓ - Q7：MCP 最危险的安全误区是什么？</strong></p>
-<p>把“协议兼容”误认为“服务可信”。Server 描述、Tool annotation 和返回内容都可能恶意；Host 仍需建立来源信任、沙箱、最小权限、用户确认、token audience 校验与提示注入隔离。</p>
-<h2 id="21-参考资料">21. 参考资料</h2>
+<p><strong>20. 一些额外的QA</strong></p>
+<blockquote>
+<p>[!question] - Q1：MCP 与 REST API 的本质区别是什么？
+REST 主要规范资源型 HTTP 接口；MCP 是面向 AI Host 的有状态能力协议，包含初始化、能力发现、双向请求、通知、上下文原语与多种 Transport。MCP Server 背后仍可调用 REST。若只有一个固定服务和明确调用方，REST 更简单；若要让多个 AI Host 动态发现并统一使用能力，MCP 更有价值。</p>
+</blockquote>
+<blockquote>
+<p>[!question] - Q2：为什么 MCP 不能替代 Agent Framework？
+MCP 不负责计划、记忆、停止条件、模型选择和多 Agent 协作。它提供能力与上下文的标准边界；Agent Framework 决定何时使用这些能力以及如何形成执行循环。</p>
+</blockquote>
+<blockquote>
+<p>[!question] - Q3：如何做多租户 MCP Server？
+身份必须来自经过验证的请求凭证，而不是模型参数；工具列表、Resource、缓存和限流都以 tenant/user/scope 分区；下游凭证独立交换；审计保留 request/session 关联；任何连接级状态都不能成为跨租户身份来源。</p>
+</blockquote>
+<blockquote>
+<p>[!question] - Q4：如何处理 tools/list 很大导致上下文昂贵？
+先按权限和任务域裁剪，再做分层发现或工具搜索；Schema 保持短而精确、排序稳定；缓存清单但响应 list_changed；用离线 eval 评估召回率与误选率，而不是简单把几百个工具全塞给模型。</p>
+</blockquote>
+<blockquote>
+<p>[!question] - Q5：一次 tools/call 超时，能否直接重试？
+先区分只读、幂等写和非幂等写。非幂等动作可能已经生效但响应丢失，应使用业务幂等键或查询状态；只有明确可重试的暂时性错误才指数退避，并设置次数和总预算。</p>
+</blockquote>
+<blockquote>
+<p>[!question] - Q6：Capability negotiation 和 API versioning 各解决什么？
+协议版本描述消息契约的共同基线；Capability 描述该连接上双方实际支持的可选功能。相同协议版本的两个实现仍可能拥有不同能力，因此两者都必须检查。</p>
+</blockquote>
+<blockquote>
+<p>[!question] - Q7：MCP 最危险的安全误区是什么？
+把“协议兼容”误认为“服务可信”。Server 描述、Tool annotation 和返回内容都可能恶意；Host 仍需建立来源信任、沙箱、最小权限、用户确认、token audience 校验与提示注入隔离。</p>
+</blockquote>
+<p><strong>21. 参考资料</strong></p>
 <ul>
 <li><a href="https://modelcontextprotocol.io/specification/2025-11-25" rel="noopener noreferrer" target="_blank">MCP 2025-11-25 规范总览</a></li>
 <li><a href="https://modelcontextprotocol.io/specification/2025-11-25/schema" rel="noopener noreferrer" target="_blank">MCP Schema Reference</a></li>
@@ -1235,8 +610,8 @@ AI 应用" data-shape="rectangle">
 <li><a href="https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization" rel="noopener noreferrer" target="_blank">MCP Authorization</a></li>
 <li><a href="https://modelcontextprotocol.io/docs/tutorials/security/security_best_practices" rel="noopener noreferrer" target="_blank">MCP Security Best Practices</a></li>
 </ul>
-<h2 id="22-与-skilltool-call-的对比">22. 与 Skill、Tool Call 的对比</h2>
-<p>相关笔记：<a href="/skill/">Skill - 给 Agent 的可复用工作手册</a> · <a href="/tool-call/">Tool Call - 模型调用工具的一次结构化握手</a></p>
+<p><strong>22. 与 Skill、Tool Call 的对比</strong></p>
+<p>相关笔记：Skill - 给 Agent 的可复用工作手册 · Tool Call - 模型调用工具的一次结构化握手</p>
 
 
 
@@ -1285,5 +660,7 @@ AI 应用" data-shape="rectangle">
 
 
 <table><thead><tr><th>维度</th><th>MCP</th><th>Skill</th><th>Tool Call</th></tr></thead><tbody><tr><td>本质</td><td>跨进程/跨系统的<strong>标准协议与集成边界</strong></td><td>注入给 Agent 的<strong>可复用知识与工作流程</strong></td><td>模型在某一时刻发出的<strong>一次结构化调用请求</strong></td></tr><tr><td>解决的问题</td><td>不同 Host 如何统一接入外部能力</td><td>Agent 应该按什么方法、规范和步骤做事</td><td>这一步要调用哪个工具、传什么参数</td></tr><tr><td>是否直接执行动作</td><td>协议本身不执行；Server 的实现执行</td><td>不执行，只指导模型与运行时</td><td>调用请求本身不执行；Runtime/Tool 执行</td></tr><tr><td>生命周期</td><td>连接建立到关闭，可持续多轮</td><td>被发现、加载并在任务期间影响行为</td><td>单次请求 → 执行 → 单次结果</td></tr><tr><td>典型载体</td><td>JSON-RPC 消息、Schema、Transport</td><td><code>SKILL.md</code>、脚本、模板、参考资料</td><td><code>tool_name + arguments + call_id</code></td></tr><tr><td>三者关系</td><td>MCP 可以<strong>暴露 Tool</strong>，承载 Tool Call 的远程执行</td><td>Skill 可以指导 Agent <strong>何时、怎样调用 Tool</strong></td><td>Tool Call 是把计划变成实际外部操作的那一次握手</td></tr></tbody></table>
-<p><strong>📝 最短记忆法</strong></p>
-<p><strong>MCP 是插座标准，Skill 是操作手册，Tool Call 是按下某个按钮的一次动作请求。</strong></p></main><aside class="toc"><p class="toc-title">本页目录</p><ul><li class="toc-d2"><a href="#1-mcp-到底解决什么问题">1. MCP 到底解决什么问题</a></li><li class="toc-d2"><a href="#2-三个核心角色hostclientserver">2. 三个核心角色：Host、Client、Server</a></li><li class="toc-d3"><a href="#21-host承载用户体验与决策">2.1 Host：承载用户体验与决策</a></li><li class="toc-d3"><a href="#22-client一条连接的协议代理">2.2 Client：一条连接的协议代理</a></li><li class="toc-d3"><a href="#23-server对外暴露能力">2.3 Server：对外暴露能力</a></li><li class="toc-d2"><a href="#3-server-暴露的三类核心原语">3. Server 暴露的三类核心原语</a></li><li class="toc-d2"><a href="#4-一次完整-mcp-会话怎样发生">4. 一次完整 MCP 会话怎样发生</a></li><li class="toc-d2"><a href="#5-transport消息怎样从-client-到-server">5. Transport：消息怎样从 Client 到 Server</a></li><li class="toc-d2"><a href="#6-能力发现为何重要">6. 能力发现为何重要</a></li><li class="toc-d2"><a href="#7-安全边界标准连接不等于自动可信">7. 安全边界：标准连接不等于自动可信</a></li><li class="toc-d2"><a href="#8-什么时候值得使用-mcp">8. 什么时候值得使用 MCP</a></li><li class="toc-d2"><a href="#9-常见误区">9. 常见误区</a></li><li class="toc-d2"><a href="#10-协议层深挖requestresponse-与-notification">10. 协议层深挖：Request、Response 与 Notification</a></li><li class="toc-d3"><a href="#101-协议错误与工具执行错误必须分开">10.1 协议错误与工具执行错误必须分开</a></li><li class="toc-d3"><a href="#102-notification-不是无所谓的消息">10.2 Notification 不是“无所谓的消息”</a></li><li class="toc-d2"><a href="#11-初始化状态机与能力协商">11. 初始化状态机与能力协商</a></li><li class="toc-d2"><a href="#12-mcp-是双向协议不只是server-给模型工具">12. MCP 是双向协议，不只是“Server 给模型工具”</a></li><li class="toc-d3"><a href="#121-roots">12.1 Roots</a></li><li class="toc-d3"><a href="#122-sampling">12.2 Sampling</a></li><li class="toc-d3"><a href="#123-elicitation">12.3 Elicitation</a></li><li class="toc-d3"><a href="#124-tasks实验能力">12.4 Tasks（实验能力）</a></li><li class="toc-d2"><a href="#13-toolresourceprompt-的高级建模">13. Tool、Resource、Prompt 的高级建模</a></li><li class="toc-d3"><a href="#131-什么应建模成-resource而不是-tool">13.1 什么应建模成 Resource，而不是 Tool</a></li><li class="toc-d3"><a href="#132-tool-的输入与输出-schema">13.2 Tool 的输入与输出 Schema</a></li><li class="toc-d2"><a href="#14-transport-与生产级会话设计">14. Transport 与生产级会话设计</a></li><li class="toc-d3"><a href="#141-stdio-的真实边界">14.1 stdio 的真实边界</a></li><li class="toc-d3"><a href="#142-streamable-http-的状态模型">14.2 Streamable HTTP 的状态模型</a></li><li class="toc-d3"><a href="#143-断线重连不是简单重放">14.3 断线重连不是简单重放</a></li><li class="toc-d2"><a href="#15-authorization-与威胁模型">15. Authorization 与威胁模型</a></li><li class="toc-d2"><a href="#16-生产架构缓存与可观测性">16. 生产架构、缓存与可观测性</a></li><li class="toc-d3"><a href="#161-mcp-gateway-什么时候有价值">16.1 MCP Gateway 什么时候有价值</a></li><li class="toc-d3"><a href="#162-缓存策略">16.2 缓存策略</a></li><li class="toc-d3"><a href="#163-可观测性">16.3 可观测性</a></li><li class="toc-d2"><a href="#17-生产环境落地从-demo-到可运营服务">17. 生产环境落地：从 Demo 到可运营服务</a></li><li class="toc-d3"><a href="#171-本地-stdio-server-的部署经验">17.1 本地 stdio Server 的部署经验</a></li><li class="toc-d3"><a href="#172-远程-streamable-http-的部署经验">17.2 远程 Streamable HTTP 的部署经验</a></li><li class="toc-d3"><a href="#173-工具目录不能无界增长">17.3 工具目录不能无界增长</a></li><li class="toc-d3"><a href="#174-下游依赖必须做隔离">17.4 下游依赖必须做隔离</a></li><li class="toc-d2"><a href="#18-生产事故模式与排障-runbook">18. 生产事故模式与排障 Runbook</a></li><li class="toc-d3"><a href="#181-server-一直显示连接失败">18.1 Server 一直显示“连接失败”</a></li><li class="toc-d3"><a href="#182-调用偶发重复执行">18.2 调用偶发重复执行</a></li><li class="toc-d3"><a href="#183-sse-在测试环境正常生产环境卡住">18.3 SSE 在测试环境正常、生产环境卡住</a></li><li class="toc-d3"><a href="#184-更新-server-后模型仍调用旧参数">18.4 更新 Server 后模型仍调用旧参数</a></li><li class="toc-d3"><a href="#185-返回没有数据其实是下游失败">18.5 返回“没有数据”，其实是下游失败</a></li><li class="toc-d2"><a href="#19-发布灰度slo-与上线检查单">19. 发布、灰度、SLO 与上线检查单</a></li><li class="toc-d3"><a href="#191-推荐发布顺序">19.1 推荐发布顺序</a></li><li class="toc-d3"><a href="#192-建议-slo">19.2 建议 SLO</a></li><li class="toc-d3"><a href="#193-上线前检查单">19.3 上线前检查单</a></li><li class="toc-d2"><a href="#20-一些额外的qa">20. 一些额外的QA</a></li><li class="toc-d2"><a href="#21-参考资料">21. 参考资料</a></li><li class="toc-d2"><a href="#22-与-skilltool-call-的对比">22. 与 Skill、Tool Call 的对比</a></li></ul></aside></div><div class="lightbox" id="lightbox" aria-hidden="true"><img alt=""></div><script type="module">var e=document.documentElement,t=document.getElementById(`themeToggle`),n={auto:`🖥️`,light:`☀️`,dark:`🌙`};function r(){var e=localStorage.getItem(`theme`);return e===`light`||e===`dark`?e:`auto`}function i(){var i=r();i===`auto`?e.removeAttribute(`data-theme`):e.setAttribute(`data-theme`,i),t.textContent=n[i]}i(),t.addEventListener(`click`,()=>{var e=[`auto`,`light`,`dark`],t=e[(e.indexOf(r())+1)%3];t===`auto`?localStorage.removeItem(`theme`):localStorage.setItem(`theme`,t),i()}),window.matchMedia(`(prefers-color-scheme: dark)`).addEventListener(`change`,()=>{r()===`auto`&&i()});var a=document.getElementById(`lightbox`),o=a.querySelector(`img`);document.querySelectorAll(`.prose img`).forEach(e=>{e.style.cursor=`zoom-in`,e.addEventListener(`click`,()=>{o.src=e.currentSrc||e.src,o.alt=e.alt,a.classList.add(`open`),a.setAttribute(`aria-hidden`,`false`)})}),a.addEventListener(`click`,()=>{a.classList.remove(`open`),a.setAttribute(`aria-hidden`,`true`)}),document.addEventListener(`keydown`,e=>{e.key===`Escape`&&a.click()});</script></body></html>
+<blockquote>
+<p>[!summary] 最短记忆法
+<strong>MCP 是插座标准，Skill 是操作手册，Tool Call 是按下某个按钮的一次动作请求。</strong></p>
+</blockquote></main><aside class="toc"><p class="toc-title">本页目录</p><ul><li class="toc-d2"><a href="#1-mcp-到底解决什么问题">1. MCP 到底解决什么问题</a></li><li class="toc-d2"><a href="#2-三个核心角色hostclientserver">2. 三个核心角色：Host、Client、Server</a></li><li class="toc-d2"><a href="#3-server-暴露的三类核心原语">3. Server 暴露的三类核心原语</a></li><li class="toc-d2"><a href="#4-一次完整-mcp-会话怎样发生">4. 一次完整 MCP 会话怎样发生</a></li><li class="toc-d2"><a href="#5-transport消息怎样从-client-到-server">5. Transport：消息怎样从 Client 到 Server</a></li><li class="toc-d2"><a href="#6-能力发现为何重要">6. 能力发现为何重要</a></li><li class="toc-d2"><a href="#7-安全边界标准连接不等于自动可信">7. 安全边界：标准连接不等于自动可信</a></li><li class="toc-d2"><a href="#8-什么时候值得使用-mcp">8. 什么时候值得使用 MCP</a></li><li class="toc-d2"><a href="#9-常见误区">9. 常见误区</a></li><li class="toc-d2"><a href="#10-协议层深挖requestresponse-与-notification">10. 协议层深挖：Request、Response 与 Notification</a></li><li class="toc-d2"><a href="#11-初始化状态机与能力协商">11. 初始化状态机与能力协商</a></li><li class="toc-d2"><a href="#12-mcp-是双向协议不只是server-给模型工具">12. MCP 是双向协议，不只是“Server 给模型工具”</a></li><li class="toc-d2"><a href="#13-toolresourceprompt-的高级建模">13. Tool、Resource、Prompt 的高级建模</a></li><li class="toc-d2"><a href="#14-transport-与生产级会话设计">14. Transport 与生产级会话设计</a></li><li class="toc-d2"><a href="#15-authorization-与威胁模型">15. Authorization 与威胁模型</a></li></ul></aside></div><div class="lightbox" id="lightbox" aria-hidden="true"><img alt=""></div><script type="module">var e=document.documentElement,t=document.getElementById(`themeToggle`),n={auto:`🖥️`,light:`☀️`,dark:`🌙`};function r(){var e=localStorage.getItem(`theme`);return e===`light`||e===`dark`?e:`auto`}function i(){var i=r();i===`auto`?e.removeAttribute(`data-theme`):e.setAttribute(`data-theme`,i),t.textContent=n[i]}i(),t.addEventListener(`click`,()=>{var e=[`auto`,`light`,`dark`],t=e[(e.indexOf(r())+1)%3];t===`auto`?localStorage.removeItem(`theme`):localStorage.setItem(`theme`,t),i()}),window.matchMedia(`(prefers-color-scheme: dark)`).addEventListener(`change`,()=>{r()===`auto`&&i()});var a=document.getElementById(`lightbox`),o=a.querySelector(`img`);document.querySelectorAll(`.prose img`).forEach(e=>{e.style.cursor=`zoom-in`,e.addEventListener(`click`,()=>{o.src=e.currentSrc||e.src,o.alt=e.alt,a.classList.add(`open`),a.setAttribute(`aria-hidden`,`false`)})}),a.addEventListener(`click`,()=>{a.classList.remove(`open`),a.setAttribute(`aria-hidden`,`true`)}),document.addEventListener(`keydown`,e=>{e.key===`Escape`&&a.click()});</script></body></html>

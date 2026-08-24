@@ -1,0 +1,413 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Memory：Agent 如何记住、更新与遗忘</title><script>
+      (function () {
+        var s = localStorage.getItem('theme');
+        if (s === 'light' || s === 'dark') {
+          document.documentElement.setAttribute('data-theme', s);
+        }
+      })();
+    </script><link rel="stylesheet" href="/_astro/Base.C6O8tc7V.css"></head><body><header class="topbar"><a href="/" class="brand">HLDay</a><nav><a href="/">专题</a><a href="/posts/">博客</a><a href="https://github.com/hTangle" class="nav-github" aria-label="GitHub">GitHub</a></nav><button class="theme-toggle" id="themeToggle" type="button" title="切换主题（自动/浅色/深色）" aria-label="切换主题">🖥️</button></header><div class="layout"><aside class="booknav"><ul class="nav-tree"><li><p class="nav-group">Go</p><ul><li><p class="nav-subgroup">运行时基础</p><ul><li class><a href="/source-map/">源码环境与目录地图</a></li><li class><a href="/bootstrap/">程序启动流程</a></li></ul></li><li><p class="nav-subgroup">并发编程</p><ul><li class><a href="/gmp/">GMP 调度器</a></li><li class><a href="/netpoll/">网络轮询器</a></li><li class><a href="/timer/">定时器</a></li><li class><a href="/sync-lock/">同步和锁</a></li><li class><a href="/channel/">Channel</a></li><li class><a href="/context/">Context</a></li><li class><a href="/defer-panic/">defer/panic/recover</a></li></ul></li><li><p class="nav-subgroup">内存管理</p><ul><li class><a href="/memory-alloc/">内存分配器</a></li><li class><a href="/gc/">垃圾收集器</a></li><li class><a href="/stack/">栈空间管理</a></li></ul></li><li><p class="nav-subgroup">数据结构</p><ul><li class><a href="/type-metadata/">类型元数据与对象布局</a></li><li class><a href="/iface/">Interface 与动态调用</a></li><li class><a href="/generics/">泛型与字典传递</a></li><li class><a href="/array/">数组</a></li><li class><a href="/slice/">切片</a></li><li class><a href="/swiss-map/">哈希表 (Swiss Table)</a></li><li class><a href="/string/">字符串</a></li></ul></li></ul></li><li><p class="nav-group">Agent 开发</p><ul><li><p class="nav-subgroup">协议与调用</p><ul><li class><a href="/mcp/">MCP</a></li><li class><a href="/tool-call/">Tool Call</a></li><li class><a href="/skill/">Skill</a></li><li class="active"><a href="/memory/">Memory</a></li></ul></li><li><p class="nav-subgroup">检索与排序</p><ul><li class><a href="/rag/">RAG</a></li><li class><a href="/retrieval/">Retrieval</a></li><li class><a href="/recall/">Recall</a></li><li class><a href="/ranking/">Ranking</a></li></ul></li></ul></li></ul></aside><main class="prose"><h1>Memory：Agent 如何记住、更新与遗忘</h1><blockquote>
+<p>[!abstract] 一句话定义
+**Agent Memory 是一套跨轮次保存、组织、更新、检索和遗忘信息的系统机制。**它不是简单保存聊天记录，而是把经历、事实、用户偏好与可复用流程转化为未来任务可安全调用的状态。</p>
+</blockquote>
+<img src="/images/go/agent-memory-system.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
+<p>把模型想成一次只拿到一张工作台的工程师：Context Window 是当前桌面，Memory Store 是档案室，Memory Writer 决定什么值得归档，Retrieval - 从大规模信息中找到候选 找档案，Recall - 召回阶段与 Recall@K 指标 衡量有没有漏掉，Ranking - 从候选集合到最优顺序 决定先看什么。==档案越多不等于记忆越好；错误、过时或越权的记忆会让 Agent 稳定地做错事。==</p>
+<h2 id="1-memory-解决的不是上下文不够长这么简单">1. Memory 解决的不是“上下文不够长”这么简单</h2>
+<p>长上下文只能暂时容纳更多 token，Memory 还要解决：</p>
+<ul>
+<li>跨会话保持用户偏好、项目事实和历史决策；</li>
+<li>从大量经历中选择当前相关内容；</li>
+<li>合并重复信息、处理冲突和版本变化；</li>
+<li>把原始轨迹压缩为可复用知识；</li>
+<li>遵守租户、用户、项目和数据保留边界；</li>
+<li>支持纠正、删除、审计和过期；</li>
+<li>控制写入噪声与检索成本。</li>
+</ul>
+<img src="/images/go/01-memory-write-read-flow.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
+<h2 id="2-memorycontexthistoryrag-的边界">2. Memory、Context、History、RAG 的边界</h2>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>概念</th><th>本质</th><th>生命周期</th><th>典型内容</th></tr></thead><tbody><tr><td>Context Window</td><td>当前模型调用的输入</td><td>一次或若干轮调用</td><td>系统指令、当前消息、工具结果</td></tr><tr><td>Conversation History</td><td>原始对话事件流</td><td>一个会话或更久</td><td>用户/助手完整消息</td></tr><tr><td>Agent Memory</td><td>经选择和治理的可复用状态</td><td>跨轮次、跨会话</td><td>偏好、事实、经历、总结、流程</td></tr><tr><td>RAG - 从检索到可信生成的完整系统</td><td>用外部证据增强一次生成的架构</td><td>查询时临时装配</td><td>文档、知识库、网页证据</td></tr><tr><td>Skill - 给 Agent 的可复用工作手册</td><td>维护者提供的程序性知识</td><td>版本化发布</td><td>SOP、脚本、模板、边界</td></tr></tbody></table>
+<p>Memory 可以用 RAG 技术实现检索，但两者目的不同：RAG 通常面向共享知识语料，Memory 更关注某个 Agent、用户或任务随时间形成的状态。</p>
+<h2 id="3-记忆类型按用途而不是按数据库分类">3. 记忆类型：按用途而不是按数据库分类</h2>
+<p><strong>3.1 Working Memory：当前工作状态</strong></p>
+<p>包含当前目标、未完成步骤、中间变量、最近工具结果和约束。它通常位于 Context 或短期状态存储中。</p>
+<p>生产要求：</p>
+<ul>
+<li>明确任务 ID 和步骤状态；</li>
+<li>大结果只保存 artifact 引用；</li>
+<li>与模型自然语言摘要分离保存结构化状态；</li>
+<li>会话结束或任务完成后清理临时数据。</li>
+</ul>
+<p><strong>3.2 Episodic Memory：发生过什么</strong></p>
+<p>记录带时间、主体、动作和结果的经历，例如“2026-08-08 用户拒绝了自动发布”。它适合回答“上次怎么做的”“哪种方案失败过”。</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="yaml"><code><span class="line"><span style="color:#85E89D">memory_id</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">ep_01</span></span>
+<span class="line"><span style="color:#85E89D">type</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">episodic</span></span>
+<span class="line"><span style="color:#85E89D">subject</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">user_123</span></span>
+<span class="line"><span style="color:#85E89D">event</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">deployment_attempt</span></span>
+<span class="line"><span style="color:#85E89D">timestamp</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">2026-08-08T10:20:00+08:00</span></span>
+<span class="line"><span style="color:#85E89D">context</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">project_alpha</span></span>
+<span class="line"><span style="color:#85E89D">action</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">deploy_to_production</span></span>
+<span class="line"><span style="color:#85E89D">outcome</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">rejected_by_user</span></span>
+<span class="line"><span style="color:#85E89D">evidence_refs</span><span style="color:#E1E4E8">: [</span><span style="color:#9ECBFF">conversation:abc#turn-17</span><span style="color:#E1E4E8">]</span></span></code></pre>
+<p><strong>3.3 Semantic Memory：长期事实与概念</strong></p>
+<p>保存经过归纳的事实，例如“项目 Alpha 的发布分支是 <code>release/2.4</code>”。它应带来源、适用范围、版本和置信度，而不是一段脱离上下文的断言。</p>
+<p><strong>3.4 Procedural Memory：怎么做</strong></p>
+<p>保存重复任务的方法、策略与习惯。稳定的团队程序性知识更适合沉淀为 Skill - 给 Agent 的可复用工作手册；运行时从具体经历学习到的轻量策略可以先保存在 Memory，验证稳定后再升级为受审查的 Skill。</p>
+<p><strong>3.5 User/Profile Memory：关于谁</strong></p>
+<p>包括语言、输出格式和长期偏好。必须区分：</p>
+<ul>
+<li>用户明确声明：“以后都用中文”；</li>
+<li>系统观察推断：“用户可能偏好简洁”；</li>
+<li>敏感属性推断：通常不应自动持久化。</li>
+</ul>
+<p>显式声明和模型推断不能赋予相同置信度。</p>
+<h2 id="4-memory-生命周期">4. Memory 生命周期</h2>
+<img src="/images/go/02-memory-lifecycle.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
+<p>高级工程师要能解释每个状态：写入不是终点；后续需要 reinforce、supersede、expire、delete 和 audit。</p>
+<h2 id="5-写入策略什么值得记住">5. 写入策略：什么值得记住</h2>
+<p><strong>5.1 Memory Writer 的输入</strong></p>
+<ul>
+<li>用户明确要求记住的内容；</li>
+<li>对未来任务稳定有用的偏好或约束；</li>
+<li>已确认的项目决策；</li>
+<li>可复用的成功/失败经验；</li>
+<li>任务状态和未完成承诺；</li>
+<li>工具返回的结构化事实。</li>
+</ul>
+<p><strong>5.2 默认不写入</strong></p>
+<ul>
+<li>寒暄和一次性措辞；</li>
+<li>未验证的模型推断；</li>
+<li>密码、token、身份证号等秘密或高敏数据；</li>
+<li>只在当前轮有效的中间推理；</li>
+<li>大段原始日志和可重新获取的文档；</li>
+<li>来源不明或包含提示注入的内容。</li>
+</ul>
+<p><strong>5.3 写入效用函数</strong></p>
+<p>可以用一个可解释的启发式，而不是让 LLM 无条件决定：</p>
+<span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mi>W</mi><mi>r</mi><mi>i</mi><mi>t</mi><mi>e</mi><mi>U</mi><mi>t</mi><mi>i</mi><mi>l</mi><mi>i</mi><mi>t</mi><mi>y</mi><mo stretchy="false">(</mo><mi>m</mi><mo stretchy="false">)</mo><mo>=</mo><msub><mi>w</mi><mi>i</mi></msub><mi>I</mi><mi>m</mi><mi>p</mi><mi>o</mi><mi>r</mi><mi>t</mi><mi>a</mi><mi>n</mi><mi>c</mi><mi>e</mi><mo>+</mo><msub><mi>w</mi><mi>f</mi></msub><mi>F</mi><mi>u</mi><mi>t</mi><mi>u</mi><mi>r</mi><mi>e</mi><mi>U</mi><mi>s</mi><mi>e</mi><mo>+</mo><msub><mi>w</mi><mi>c</mi></msub><mi>C</mi><mi>o</mi><mi>n</mi><mi>f</mi><mi>i</mi><mi>d</mi><mi>e</mi><mi>n</mi><mi>c</mi><mi>e</mi><mo>−</mo><msub><mi>w</mi><mi>s</mi></msub><mi>S</mi><mi>e</mi><mi>n</mi><mi>s</mi><mi>i</mi><mi>t</mi><mi>i</mi><mi>v</mi><mi>i</mi><mi>t</mi><mi>y</mi><mo>−</mo><msub><mi>w</mi><mi>d</mi></msub><mi>D</mi><mi>u</mi><mi>p</mi><mi>l</mi><mi>i</mi><mi>c</mi><mi>a</mi><mi>t</mi><mi>i</mi><mi>o</mi><mi>n</mi></mrow><annotation encoding="application/x-tex">WriteUtility(m)=w_i Importance + w_f FutureUse + w_c Confidence - w_s Sensitivity - w_d Duplication</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.1389em;">W</span><span class="mord mathnormal" style="margin-right:0.0278em;">r</span><span class="mord mathnormal">i</span><span class="mord mathnormal">t</span><span class="mord mathnormal">e</span><span class="mord mathnormal" style="margin-right:0.109em;">U</span><span class="mord mathnormal">t</span><span class="mord mathnormal">i</span><span class="mord mathnormal" style="margin-right:0.0197em;">l</span><span class="mord mathnormal">i</span><span class="mord mathnormal">t</span><span class="mord mathnormal" style="margin-right:0.0359em;">y</span><span class="mopen">(</span><span class="mord mathnormal">m</span><span class="mclose">)</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.8778em;vertical-align:-0.1944em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.0269em;">w</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3117em;"><span style="top:-2.55em;margin-left:-0.0269em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">i</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mord mathnormal" style="margin-right:0.0785em;">I</span><span class="mord mathnormal">m</span><span class="mord mathnormal">p</span><span class="mord mathnormal" style="margin-right:0.0278em;">or</span><span class="mord mathnormal">t</span><span class="mord mathnormal">an</span><span class="mord mathnormal">ce</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:0.9694em;vertical-align:-0.2861em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.0269em;">w</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3361em;"><span style="top:-2.55em;margin-left:-0.0269em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight" style="margin-right:0.1076em;">f</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2861em;"><span></span></span></span></span></span></span><span class="mord mathnormal" style="margin-right:0.1389em;">F</span><span class="mord mathnormal">u</span><span class="mord mathnormal">t</span><span class="mord mathnormal">u</span><span class="mord mathnormal" style="margin-right:0.0278em;">r</span><span class="mord mathnormal">e</span><span class="mord mathnormal" style="margin-right:0.109em;">U</span><span class="mord mathnormal">se</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:0.8889em;vertical-align:-0.1944em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.0269em;">w</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.1514em;"><span style="top:-2.55em;margin-left:-0.0269em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">c</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mord mathnormal" style="margin-right:0.0715em;">C</span><span class="mord mathnormal">o</span><span class="mord mathnormal">n</span><span class="mord mathnormal" style="margin-right:0.1076em;">f</span><span class="mord mathnormal">i</span><span class="mord mathnormal">d</span><span class="mord mathnormal">e</span><span class="mord mathnormal">n</span><span class="mord mathnormal">ce</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">−</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:0.8778em;vertical-align:-0.1944em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.0269em;">w</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.1514em;"><span style="top:-2.55em;margin-left:-0.0269em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">s</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mord mathnormal" style="margin-right:0.0576em;">S</span><span class="mord mathnormal">e</span><span class="mord mathnormal">n</span><span class="mord mathnormal">s</span><span class="mord mathnormal">i</span><span class="mord mathnormal">t</span><span class="mord mathnormal">i</span><span class="mord mathnormal" style="margin-right:0.0359em;">v</span><span class="mord mathnormal">i</span><span class="mord mathnormal">t</span><span class="mord mathnormal" style="margin-right:0.0359em;">y</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">−</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:0.8889em;vertical-align:-0.1944em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.0269em;">w</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3361em;"><span style="top:-2.55em;margin-left:-0.0269em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">d</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mord mathnormal" style="margin-right:0.0278em;">D</span><span class="mord mathnormal">u</span><span class="mord mathnormal" style="margin-right:0.0197em;">pl</span><span class="mord mathnormal">i</span><span class="mord mathnormal">c</span><span class="mord mathnormal">a</span><span class="mord mathnormal">t</span><span class="mord mathnormal">i</span><span class="mord mathnormal">o</span><span class="mord mathnormal">n</span></span></span></span></span>
+<p>当用户明确要求“记住”时提高 FutureUse，但仍不能绕过敏感数据策略。</p>
+<p><strong>5.4 提交前校验</strong></p>
+<img src="/images/go/03-memory-write-validation.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
+<h2 id="6-生产级-memory-schema">6. 生产级 Memory Schema</h2>
+<p>只存 <code>text + embedding</code> 很快会遇到治理问题。建议至少包含：</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>字段</th><th>作用</th></tr></thead><tbody><tr><td><code>memory_id</code></td><td>稳定身份，不用文本作主键</td></tr><tr><td><code>tenant_id/user_id/project_id</code></td><td>隔离与作用域</td></tr><tr><td><code>type</code></td><td>episodic/semantic/profile/procedural</td></tr><tr><td><code>canonical_fact</code></td><td>规范化内容</td></tr><tr><td><code>source_refs</code></td><td>可追溯证据</td></tr><tr><td><code>created_at/valid_from/valid_to</code></td><td>写入时间与事实有效时间</td></tr><tr><td><code>last_accessed_at/access_count</code></td><td>使用统计</td></tr><tr><td><code>confidence</code></td><td>证据强度，不等于相似度</td></tr><tr><td><code>sensitivity</code></td><td>数据分级</td></tr><tr><td><code>status/version</code></td><td>active/superseded/deleted</td></tr><tr><td><code>embedding_model/version</code></td><td>索引兼容与迁移</td></tr><tr><td><code>content_hash</code></td><td>去重与变更检测</td></tr></tbody></table>
+<div class="markdown-alert markdown-alert-warning" dir="auto">
+<p class="markdown-alert-title" dir="auto"><svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>WARNING</p>
+<p> 双时间模型
+<code>created_at</code> 表示系统何时知道，<code>valid_from/valid_to</code> 表示事实何时成立。“昨天改了发布分支”如果只按写入时间排序，会错误回答历史问题。</p>
+</div>
+<h2 id="7-检索相关不等于应该使用">7. 检索：相关不等于应该使用</h2>
+<p>Memory Retrieval 通常组合：</p>
+<span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mi>S</mi><mi>c</mi><mi>o</mi><mi>r</mi><mi>e</mi><mo stretchy="false">(</mo><mi>m</mi><mo separator="true">,</mo><mi>q</mi><mo stretchy="false">)</mo><mo>=</mo><mi>α</mi><mi>R</mi><mi>e</mi><mi>l</mi><mo stretchy="false">(</mo><mi>m</mi><mo separator="true">,</mo><mi>q</mi><mo stretchy="false">)</mo><mo>+</mo><mi>β</mi><mi>R</mi><mi>e</mi><mi>c</mi><mi>e</mi><mi>n</mi><mi>c</mi><mi>y</mi><mo stretchy="false">(</mo><mi>m</mi><mo stretchy="false">)</mo><mo>+</mo><mi>γ</mi><mi>I</mi><mi>m</mi><mi>p</mi><mi>o</mi><mi>r</mi><mi>t</mi><mi>a</mi><mi>n</mi><mi>c</mi><mi>e</mi><mo stretchy="false">(</mo><mi>m</mi><mo stretchy="false">)</mo><mo>+</mo><mi>δ</mi><mi>S</mi><mi>c</mi><mi>o</mi><mi>p</mi><mi>e</mi><mi>M</mi><mi>a</mi><mi>t</mi><mi>c</mi><mi>h</mi><mo stretchy="false">(</mo><mi>m</mi><mo stretchy="false">)</mo><mo>−</mo><mi>λ</mi><mi>S</mi><mi>t</mi><mi>a</mi><mi>l</mi><mi>e</mi><mi>n</mi><mi>e</mi><mi>s</mi><mi>s</mi><mo stretchy="false">(</mo><mi>m</mi><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">Score(m,q)=\alpha Rel(m,q)+\beta Recency(m)+\gamma Importance(m)+\delta ScopeMatch(m)-\lambda Staleness(m)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.0576em;">S</span><span class="mord mathnormal" style="margin-right:0.0278em;">cor</span><span class="mord mathnormal">e</span><span class="mopen">(</span><span class="mord mathnormal">m</span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal" style="margin-right:0.0359em;">q</span><span class="mclose">)</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.0037em;">α</span><span class="mord mathnormal" style="margin-right:0.0077em;">R</span><span class="mord mathnormal">e</span><span class="mord mathnormal" style="margin-right:0.0197em;">l</span><span class="mopen">(</span><span class="mord mathnormal">m</span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal" style="margin-right:0.0359em;">q</span><span class="mclose">)</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.0528em;">β</span><span class="mord mathnormal" style="margin-right:0.0077em;">R</span><span class="mord mathnormal">ece</span><span class="mord mathnormal">n</span><span class="mord mathnormal" style="margin-right:0.0359em;">cy</span><span class="mopen">(</span><span class="mord mathnormal">m</span><span class="mclose">)</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.0556em;">γ</span><span class="mord mathnormal" style="margin-right:0.0785em;">I</span><span class="mord mathnormal">m</span><span class="mord mathnormal">p</span><span class="mord mathnormal" style="margin-right:0.0278em;">or</span><span class="mord mathnormal">t</span><span class="mord mathnormal">an</span><span class="mord mathnormal">ce</span><span class="mopen">(</span><span class="mord mathnormal">m</span><span class="mclose">)</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.0379em;">δ</span><span class="mord mathnormal" style="margin-right:0.0576em;">S</span><span class="mord mathnormal">co</span><span class="mord mathnormal">p</span><span class="mord mathnormal">e</span><span class="mord mathnormal" style="margin-right:0.109em;">M</span><span class="mord mathnormal">a</span><span class="mord mathnormal">t</span><span class="mord mathnormal">c</span><span class="mord mathnormal">h</span><span class="mopen">(</span><span class="mord mathnormal">m</span><span class="mclose">)</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">−</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal">λ</span><span class="mord mathnormal" style="margin-right:0.0576em;">S</span><span class="mord mathnormal">t</span><span class="mord mathnormal">a</span><span class="mord mathnormal" style="margin-right:0.0197em;">l</span><span class="mord mathnormal">e</span><span class="mord mathnormal">n</span><span class="mord mathnormal">ess</span><span class="mopen">(</span><span class="mord mathnormal">m</span><span class="mclose">)</span></span></span></span></span>
+<ul>
+<li><code>Rel</code>：语义或词法相关；</li>
+<li><code>Recency</code>：时间衰减；</li>
+<li><code>Importance</code>：长期价值；</li>
+<li><code>ScopeMatch</code>：当前 user/project/tenant 是否匹配；</li>
+<li><code>Staleness</code>：已过期或被替代的惩罚。</li>
+</ul>
+<p>检索管线应先做强过滤，再做相似度：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="text"><code><span class="line"><span>tenant/user/project/status/time ACL filter</span></span>
+<span class="line"><span>  → lexical + vector candidate retrieval</span></span>
+<span class="line"><span>  → dedup / contradiction grouping</span></span>
+<span class="line"><span>  → recency + importance + relevance rerank</span></span>
+<span class="line"><span>  → token budget packing</span></span></code></pre>
+<p>相关笔记：Retrieval - 从大规模信息中找到候选、Recall - 召回阶段与 Recall@K 指标、Ranking - 从候选集合到最优顺序。</p>
+<h2 id="8-consolidationreflection-与遗忘">8. Consolidation、Reflection 与遗忘</h2>
+<p><strong>8.1 Consolidation</strong></p>
+<p>把多条经历合并为更稳定知识：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="text"><code><span class="line"><span>三次部署记录：</span></span>
+<span class="line"><span>- 直接全量发布失败</span></span>
+<span class="line"><span>- 10% 灰度成功</span></span>
+<span class="line"><span>- 用户再次要求先灰度</span></span>
+<span class="line"><span></span></span>
+<span class="line"><span>归纳语义记忆：</span></span>
+<span class="line"><span>“该项目发布默认先进行 10% 灰度；全量发布需明确确认。”</span></span></code></pre>
+<p>合并后不能删除全部原始证据；保留 <code>derived_from</code> 以便纠错。</p>
+<p><strong>8.2 Reflection</strong></p>
+<p>Reflection 是从多条经历中抽象规律。它可能提高长期行为，但也会放大模型错误。生产上应：</p>
+<ul>
+<li>只从高置信证据生成；</li>
+<li>给反思结果较低初始置信度；</li>
+<li>重要规则要求人工或后续证据确认；</li>
+<li>限制反思递归，避免“对自己的总结再总结”逐步漂移。</li>
+</ul>
+<p><strong>8.3 Forgetting</strong></p>
+<p>遗忘是质量机制，不只是存储清理：</p>
+<ul>
+<li>TTL：临时状态自然过期；</li>
+<li>Supersession：新事实替代旧事实；</li>
+<li>Decay：长期未访问且价值低的记忆降权；</li>
+<li>Compaction：重复事件合并；</li>
+<li>User deletion：用户可查看、纠正和删除；</li>
+<li>Compliance retention：按数据类型执行保留期限。</li>
+</ul>
+<h2 id="9-冲突纠正与事实演进">9. 冲突、纠正与事实演进</h2>
+<p>当出现“发布分支是 A”和“发布分支是 B”时，不要立即覆盖：</p>
+<ol>
+<li>比较来源可信度；</li>
+<li>区分项目/环境/版本范围；</li>
+<li>比较事实有效时间；</li>
+<li>新记录标记旧记录 superseded，而非物理删除；</li>
+<li>查询历史时允许读取旧版本；</li>
+<li>无法判断时向用户确认。</li>
+</ol>
+<img src="/images/go/04-memory-conflict-resolution.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
+<h2 id="10-安全隐私与租户隔离">10. 安全、隐私与租户隔离</h2>
+<ul>
+<li>Identity 必须来自认证上下文，不从模型生成的 <code>user_id</code> 读取；</li>
+<li>写入和读取都执行 ACL，不能只在检索后过滤；</li>
+<li>向量数据库同样要按 tenant/user/project 过滤；</li>
+<li>Embedding 可能泄露信息，不能视为不可逆匿名化；</li>
+<li>敏感字段加密、日志脱敏、密钥独立管理；</li>
+<li>Memory Tool Result 是不可信数据，防间接提示注入；</li>
+<li>提供“我记住了什么”的可见性和纠正入口；</li>
+<li>删除需要覆盖原文、索引、缓存、派生总结和备份保留流程。</li>
+</ul>
+<blockquote>
+<p>[!danger] 高频越权事故
+先全局向量检索 top-K，再在应用层过滤 tenant，可能通过时延、分数或日志泄露别人的记忆。应在索引查询阶段施加强约束，并做跨租户测试。</p>
+</blockquote>
+<p><strong>11. 生产架构</strong></p>
+<img src="/images/go/05-memory-production-architecture.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
+<p>设计经验：Metadata Store 是权威状态，向量索引是可重建派生物；不要只存向量库。写路径用 Outbox/CDC 保证数据库提交后索引最终更新，记录 <code>index_version</code> 和 lag。</p>
+<p><strong>12. 生产经验与故障模式</strong></p>
+<p><strong>12.1 什么都写，记忆库变成垃圾场</strong></p>
+<p>症状：索引膨胀、重复片段占满 top-K、模型引用无价值闲聊。修复：写入阈值、规范化去重、同事实 reinforce、批量压缩、按类型独立保留策略。</p>
+<p><strong>12.2 过时偏好覆盖当前明确指令</strong></p>
+<p>Memory 是背景，不应高于用户当前请求。Context Assembly 明确优先级：系统安全规则 > 当前用户指令 > 项目约束 > 长期偏好 > 模型推断。</p>
+<p><strong>12.3 模型把推测写成事实</strong></p>
+<p>为 <code>source_type</code> 区分 user_asserted、tool_observed、model_inferred。模型推断默认低置信，不直接成为高风险决策依据。</p>
+<p><strong>12.4 数据库已删除，向量索引仍能搜到</strong></p>
+<p>建立 deletion tombstone、异步重试和对账任务；读取结果回源权威库验证 <code>status=active</code>。定期做 metadata/index 双向一致性扫描。</p>
+<p><strong>12.5 Embedding 模型升级后召回骤降</strong></p>
+<p>不同模型向量不可混用。新建索引版本双写、离线回放、shadow query、比较 Recall@K，再按租户灰度切换；旧索引保留回滚窗口。</p>
+<p><strong>12.6 总结逐轮漂移</strong></p>
+<p>不要只用上一版总结生成下一版。周期性从原始证据重新归纳，保留差异，关键事实做结构化抽取和校验。</p>
+<p><strong>13. 评测与 SLO</strong></p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>维度</th><th>指标</th></tr></thead><tbody><tr><td>写入</td><td>useful write precision、漏写率、重复率、敏感数据拦截率</td></tr><tr><td>检索</td><td>Recall@K、MRR/nDCG、scope violation、stale hit rate</td></tr><tr><td>使用</td><td>memory utilization、引用正确率、冲突处理正确率</td></tr><tr><td>端到端</td><td>长期任务成功率、用户纠正率、个性化收益</td></tr><tr><td>系统</td><td>写入延迟、索引 lag、查询 p95、删除完成时间</td></tr></tbody></table>
+<p>测试集至少包括：需要记忆、不应记忆、矛盾更新、时间查询、跨项目同名事实、跨租户攻击、删除后检索、提示注入、长会话压缩。</p>
+<p><strong>14. 上线检查单</strong></p>
+<ul class="contains-task-list">
+<li class="task-list-item"><input type="checkbox" disabled> Memory 类型、主体和作用域清晰；</li>
+<li class="task-list-item"><input type="checkbox" disabled> 原始历史与归纳记忆分开；</li>
+<li class="task-list-item"><input type="checkbox" disabled> 写入有价值、敏感性、证据和去重检查；</li>
+<li class="task-list-item"><input type="checkbox" disabled> 权威元数据可追溯，向量索引可重建；</li>
+<li class="task-list-item"><input type="checkbox" disabled> 读取在索引阶段强制 tenant/user/project ACL；</li>
+<li class="task-list-item"><input type="checkbox" disabled> 冲突使用版本和有效时间，不静默覆盖；</li>
+<li class="task-list-item"><input type="checkbox" disabled> 有 TTL、supersede、delete 和 purge；</li>
+<li class="task-list-item"><input type="checkbox" disabled> Embedding/Schema 版本化并可双写迁移；</li>
+<li class="task-list-item"><input type="checkbox" disabled> 用户能查看、纠正和删除记忆；</li>
+<li class="task-list-item"><input type="checkbox" disabled> 评测覆盖写、取、用、忘四个阶段；</li>
+<li class="task-list-item"><input type="checkbox" disabled> 日志不包含原始秘密和完整敏感记忆；</li>
+<li class="task-list-item"><input type="checkbox" disabled> 有索引 lag、越权命中和 stale hit 告警。</li>
+</ul>
+<p><strong>15. 高级工程师面试追问</strong></p>
+<blockquote>
+<p>[!question] - Q1：Memory 与长 Context 的区别？
+长 Context 是一次推理的工作区，成本随输入增长且缺乏跨会话治理；Memory 是外部状态系统，有写入选择、索引、版本、权限、过期和删除。生产系统通常从 Memory 检索少量内容装配进 Context。</p>
+</blockquote>
+<blockquote>
+<p>[!question] - Q2：为什么不能把全部聊天记录做向量检索？
+原始记录重复、含噪、含过时指令和敏感数据；片段缺少事实有效时间与作用域。需要抽取、去重、证据、版本和 ACL，原始历史只作为审计来源。</p>
+</blockquote>
+<blockquote>
+<p>[!question] - Q3：Memory 的事实冲突怎么处理？
+保留来源和双时间，按作用域与可信度判断；新事实 supersede 旧事实而非覆盖；无法判断则询问。查询历史时间点时可重建当时有效事实。</p>
+</blockquote>
+<blockquote>
+<p>[!question] - Q4：怎样评估 Memory 系统？
+分解为写入精度、检索 Recall/Ranking、上下文使用正确率和端到端长期任务收益；加入跨租户、删除、冲突、过时和注入测试。只测向量相似度不够。</p>
+</blockquote>
+<blockquote>
+<p>[!question] - Q5：Semantic Memory 与 RAG 文档库有什么区别？
+Semantic Memory 是从特定主体经历中形成、会演进且受主体作用域约束的事实；RAG 文档库通常是共享的外部知识语料。技术栈可相似，写入权、治理和时间语义不同。</p>
+</blockquote>
+<blockquote>
+<p>[!question] - Q6：如何做到可遗忘？
+建立可追踪派生关系和 tombstone；删除覆盖元数据、索引、缓存、总结和备份策略；读取回源验证 active 状态；用审计证明在约定时间内完成。</p>
+</blockquote>
+<blockquote>
+<p>[!question] - Q7：Memory Writer 用 LLM 还是规则？
+组合使用。LLM 做语义抽取和归纳，规则/Schema 做敏感数据、作用域、类型、证据、去重和状态转换；高风险长期规则需要确认。不能让 LLM 单独拥有最终写权限。</p>
+</blockquote>
+<p><strong>16. 参考资料</strong></p>
+<ul>
+<li><a href="https://arxiv.org/abs/2304.03442" rel="noopener noreferrer" target="_blank">Generative Agents: Interactive Simulacra of Human Behavior</a></li>
+<li><a href="https://arxiv.org/abs/2310.08560" rel="noopener noreferrer" target="_blank">MemGPT: Towards LLMs as Operating Systems</a></li>
+<li><a href="https://arxiv.org/abs/2005.11401" rel="noopener noreferrer" target="_blank">Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks</a></li>
+</ul>
+<p><strong>17. 与 Retrieval、Recall、Ranking、RAG 的对比</strong></p>
+<p>相关笔记：Retrieval - 从大规模信息中找到候选 · Recall - 召回阶段与 Recall@K 指标 · Ranking - 从候选集合到最优顺序 · RAG - 从检索到可信生成的完整系统</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>概念</th><th>核心问题</th><th>输入 → 输出</th><th>在 Memory 中的位置</th></tr></thead><tbody><tr><td>Memory</td><td>什么值得跨时间保存、更新和遗忘</td><td>事件 → 受治理的长期状态</td><td>完整生命周期</td></tr><tr><td>Retrieval</td><td>从大集合怎样快速找候选</td><td>Query + Corpus → Candidates</td><td>读取子系统</td></tr><tr><td>Recall</td><td>相关内容有没有漏掉</td><td>结果 + Ground Truth → 覆盖率</td><td>读取评测指标/目标</td></tr><tr><td>Ranking</td><td>候选顺序是否最有用</td><td>Candidates → Ordered Top-K</td><td>检索后的排序</td></tr><tr><td>RAG</td><td>如何用外部证据生成答案</td><td>Query + Evidence → Grounded Answer</td><td>可消费 Memory 的上层架构</td></tr></tbody></table>
+<blockquote>
+<p>[!summary] 最短记忆法
+<strong>Memory 是可演进的档案系统；Retrieval 找档案，Recall 检查漏没漏，Ranking 决定先读哪份，RAG 用这些证据回答。</strong></p>
+</blockquote></main><aside class="toc"><p class="toc-title">本页目录</p><ul><li class="toc-d2"><a href="#1-memory-解决的不是上下文不够长这么简单">1. Memory 解决的不是“上下文不够长”这么简单</a></li><li class="toc-d2"><a href="#2-memorycontexthistoryrag-的边界">2. Memory、Context、History、RAG 的边界</a></li><li class="toc-d2"><a href="#3-记忆类型按用途而不是按数据库分类">3. 记忆类型：按用途而不是按数据库分类</a></li><li class="toc-d2"><a href="#4-memory-生命周期">4. Memory 生命周期</a></li><li class="toc-d2"><a href="#5-写入策略什么值得记住">5. 写入策略：什么值得记住</a></li><li class="toc-d2"><a href="#6-生产级-memory-schema">6. 生产级 Memory Schema</a></li><li class="toc-d2"><a href="#7-检索相关不等于应该使用">7. 检索：相关不等于应该使用</a></li><li class="toc-d2"><a href="#8-consolidationreflection-与遗忘">8. Consolidation、Reflection 与遗忘</a></li><li class="toc-d2"><a href="#9-冲突纠正与事实演进">9. 冲突、纠正与事实演进</a></li><li class="toc-d2"><a href="#10-安全隐私与租户隔离">10. 安全、隐私与租户隔离</a></li></ul></aside></div><div class="lightbox" id="lightbox" aria-hidden="true"><img alt=""></div><script type="module">var e=document.documentElement,t=document.getElementById(`themeToggle`),n={auto:`🖥️`,light:`☀️`,dark:`🌙`};function r(){var e=localStorage.getItem(`theme`);return e===`light`||e===`dark`?e:`auto`}function i(){var i=r();i===`auto`?e.removeAttribute(`data-theme`):e.setAttribute(`data-theme`,i),t.textContent=n[i]}i(),t.addEventListener(`click`,()=>{var e=[`auto`,`light`,`dark`],t=e[(e.indexOf(r())+1)%3];t===`auto`?localStorage.removeItem(`theme`):localStorage.setItem(`theme`,t),i()}),window.matchMedia(`(prefers-color-scheme: dark)`).addEventListener(`change`,()=>{r()===`auto`&&i()});var a=document.getElementById(`lightbox`),o=a.querySelector(`img`);document.querySelectorAll(`.prose img`).forEach(e=>{e.style.cursor=`zoom-in`,e.addEventListener(`click`,()=>{o.src=e.currentSrc||e.src,o.alt=e.alt,a.classList.add(`open`),a.setAttribute(`aria-hidden`,`false`)})}),a.addEventListener(`click`,()=>{a.classList.remove(`open`),a.setAttribute(`aria-hidden`,`true`)}),document.addEventListener(`keydown`,e=>{e.key===`Escape`&&a.click()});</script></body></html>

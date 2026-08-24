@@ -1,0 +1,349 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Retrieval：从大规模信息中找到候选</title><script>
+      (function () {
+        var s = localStorage.getItem('theme');
+        if (s === 'light' || s === 'dark') {
+          document.documentElement.setAttribute('data-theme', s);
+        }
+      })();
+    </script><link rel="stylesheet" href="/_astro/Base.C6O8tc7V.css"></head><body><header class="topbar"><a href="/" class="brand">HLDay</a><nav><a href="/">专题</a><a href="/posts/">博客</a><a href="https://github.com/hTangle" class="nav-github" aria-label="GitHub">GitHub</a></nav><button class="theme-toggle" id="themeToggle" type="button" title="切换主题（自动/浅色/深色）" aria-label="切换主题">🖥️</button></header><div class="layout"><aside class="booknav"><ul class="nav-tree"><li><p class="nav-group">Go</p><ul><li><p class="nav-subgroup">运行时基础</p><ul><li class><a href="/source-map/">源码环境与目录地图</a></li><li class><a href="/bootstrap/">程序启动流程</a></li></ul></li><li><p class="nav-subgroup">并发编程</p><ul><li class><a href="/gmp/">GMP 调度器</a></li><li class><a href="/netpoll/">网络轮询器</a></li><li class><a href="/timer/">定时器</a></li><li class><a href="/sync-lock/">同步和锁</a></li><li class><a href="/channel/">Channel</a></li><li class><a href="/context/">Context</a></li><li class><a href="/defer-panic/">defer/panic/recover</a></li></ul></li><li><p class="nav-subgroup">内存管理</p><ul><li class><a href="/memory-alloc/">内存分配器</a></li><li class><a href="/gc/">垃圾收集器</a></li><li class><a href="/stack/">栈空间管理</a></li></ul></li><li><p class="nav-subgroup">数据结构</p><ul><li class><a href="/type-metadata/">类型元数据与对象布局</a></li><li class><a href="/iface/">Interface 与动态调用</a></li><li class><a href="/generics/">泛型与字典传递</a></li><li class><a href="/array/">数组</a></li><li class><a href="/slice/">切片</a></li><li class><a href="/swiss-map/">哈希表 (Swiss Table)</a></li><li class><a href="/string/">字符串</a></li></ul></li></ul></li><li><p class="nav-group">Agent 开发</p><ul><li><p class="nav-subgroup">协议与调用</p><ul><li class><a href="/mcp/">MCP</a></li><li class><a href="/tool-call/">Tool Call</a></li><li class><a href="/skill/">Skill</a></li><li class><a href="/memory/">Memory</a></li></ul></li><li><p class="nav-subgroup">检索与排序</p><ul><li class><a href="/rag/">RAG</a></li><li class="active"><a href="/retrieval/">Retrieval</a></li><li class><a href="/recall/">Recall</a></li><li class><a href="/ranking/">Ranking</a></li></ul></li></ul></li></ul></aside><main class="prose"><h1>Retrieval：从大规模信息中找到候选</h1><blockquote>
+<p>[!abstract] 一句话定义
+**Retrieval 是在受延迟、成本、权限和新鲜度约束的条件下，从大规模语料中找出一小批可能相关候选的过程。**它首先追求“别漏掉”，再把精排工作交给 Ranking - 从候选集合到最优顺序。</p>
+</blockquote>
+<img src="/images/go/retrieval-pipeline.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
+<p>搜索框只是入口。生产检索系统还包括数据接入、解析、切分、索引、查询理解、候选生成、权限过滤、融合、缓存、观测和索引迁移。只会“文本转向量后查 Top-K”，通常还不足以支撑企业级 RAG。</p>
+<h2 id="1-retrievalsearch-与-ranking-的边界">1. Retrieval、Search 与 Ranking 的边界</h2>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>概念</th><th>核心问题</th><th>典型输入</th><th>典型输出</th></tr></thead><tbody><tr><td>Retrieval</td><td>哪些对象可能相关？</td><td>查询、过滤条件、租户身份</td><td>数十到数千个候选</td></tr><tr><td>Search</td><td>面向用户的完整检索产品</td><td>查询、交互、业务规则</td><td>排序结果、摘要、筛选项</td></tr><tr><td>Ranking - 从候选集合到最优顺序</td><td>候选谁更应该靠前？</td><td>查询和候选特征</td><td>有序列表</td></tr><tr><td>Recall - 召回阶段与 Recall@K 指标</td><td>相关对象是否被找全？</td><td>检索结果与相关性标注</td><td>指标或候选覆盖情况</td></tr></tbody></table>
+<p>检索的典型优化目标不是单一相关性，而是多目标约束：</p>
+<span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mi>max</mi><mo>⁡</mo><mtext>  </mtext><mtext>Recall@K</mtext><mspace width="1em"></mspace><mtext>s.t.</mtext><mspace width="1em"></mspace><mi>p</mi><mn>99</mn><mo>&#x3C;</mo><mi>L</mi><mo separator="true">,</mo><mtext>  </mtext><mi>C</mi><mi>o</mi><mi>s</mi><mi>t</mi><mo>&#x3C;</mo><mi>C</mi><mo separator="true">,</mo><mtext>  </mtext><mi>A</mi><mi>C</mi><mi>L</mi><mo>=</mo><mn>100</mn><mi mathvariant="normal">%</mi><mo separator="true">,</mo><mtext>  </mtext><mi>F</mi><mi>r</mi><mi>e</mi><mi>s</mi><mi>h</mi><mi>n</mi><mi>e</mi><mi>s</mi><mi>s</mi><mo>&#x3C;</mo><mi>F</mi></mrow><annotation encoding="application/x-tex">\max \; \text{Recall@K}
+\quad \text{s.t.} \quad
+p99 &#x3C; L,\; Cost &#x3C; C,\; ACL=100\%,\; Freshness &#x3C; F</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.8889em;vertical-align:-0.1944em;"></span><span class="mop">max</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord text"><span class="mord">Recall@K</span></span><span class="mspace" style="margin-right:1em;"></span><span class="mord text"><span class="mord">s.t.</span></span><span class="mspace" style="margin-right:1em;"></span><span class="mord mathnormal">p</span><span class="mord">99</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">&#x3C;</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.8778em;vertical-align:-0.1944em;"></span><span class="mord mathnormal">L</span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal" style="margin-right:0.0715em;">C</span><span class="mord mathnormal">os</span><span class="mord mathnormal">t</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">&#x3C;</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.8778em;vertical-align:-0.1944em;"></span><span class="mord mathnormal" style="margin-right:0.0715em;">C</span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal">A</span><span class="mord mathnormal" style="margin-right:0.0715em;">C</span><span class="mord mathnormal">L</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.9444em;vertical-align:-0.1944em;"></span><span class="mord">100%</span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal" style="margin-right:0.1389em;">F</span><span class="mord mathnormal" style="margin-right:0.0278em;">r</span><span class="mord mathnormal">es</span><span class="mord mathnormal">hn</span><span class="mord mathnormal">ess</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">&#x3C;</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.1389em;">F</span></span></span></span></span>
+<p>其中 ACL 正确性不是可以拿来交换的软指标，而是必须满足的安全约束。</p>
+<h2 id="2-一条完整的生产链路">2. 一条完整的生产链路</h2>
+<img src="/images/go/01-offline-online-retrieval.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
+<p>这条链路有两种时延：</p>
+<ul>
+<li><strong>数据时延</strong>：源数据改变到索引可查询所需时间；</li>
+<li><strong>查询时延</strong>：收到查询到返回候选所需时间。</li>
+</ul>
+<p>很多“RAG 答错”的根因不在模型，而在数据面：文档未解析、索引没刷新、删除事件没传播、ACL 元数据丢失。</p>
+<h2 id="3-稀疏检索关键词仍然不可替代">3. 稀疏检索：关键词仍然不可替代</h2>
+<p>倒排索引把词项映射到包含它的文档列表。BM25 是经典的稀疏检索函数：</p>
+<span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mi mathvariant="normal">BM25</mi><mo>⁡</mo><mo stretchy="false">(</mo><mi>q</mi><mo separator="true">,</mo><mi>d</mi><mo stretchy="false">)</mo><mo>=</mo><munder><mo>∑</mo><mrow><mi>t</mi><mo>∈</mo><mi>q</mi></mrow></munder><mi>I</mi><mi>D</mi><mi>F</mi><mo stretchy="false">(</mo><mi>t</mi><mo stretchy="false">)</mo><mo>⋅</mo><mfrac><mrow><mi>f</mi><mo stretchy="false">(</mo><mi>t</mi><mo separator="true">,</mo><mi>d</mi><mo stretchy="false">)</mo><mo stretchy="false">(</mo><msub><mi>k</mi><mn>1</mn></msub><mo>+</mo><mn>1</mn><mo stretchy="false">)</mo></mrow><mrow><mi>f</mi><mo stretchy="false">(</mo><mi>t</mi><mo separator="true">,</mo><mi>d</mi><mo stretchy="false">)</mo><mo>+</mo><msub><mi>k</mi><mn>1</mn></msub><mrow><mo fence="true">(</mo><mn>1</mn><mo>−</mo><mi>b</mi><mo>+</mo><mi>b</mi><mfrac><mrow><mi mathvariant="normal">∣</mi><mi>d</mi><mi mathvariant="normal">∣</mi></mrow><mrow><mi>a</mi><mi>v</mi><mi>g</mi><mi>d</mi><mi>l</mi></mrow></mfrac><mo fence="true">)</mo></mrow></mrow></mfrac></mrow><annotation encoding="application/x-tex">\operatorname{BM25}(q,d)=\sum_{t\in q}
+IDF(t)\cdot
+\frac{f(t,d)(k_1+1)}{f(t,d)+k_1\left(1-b+b\frac{|d|}{avgdl}\right)}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mop"><span class="mord mathrm">BM25</span></span><span class="mopen">(</span><span class="mord mathnormal" style="margin-right:0.0359em;">q</span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal">d</span><span class="mclose">)</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:2.4361em;vertical-align:-1.3861em;"></span><span class="mop op-limits"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.05em;"><span style="top:-1.9em;margin-left:0em;"><span class="pstrut" style="height:3.05em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">t</span><span class="mrel mtight">∈</span><span class="mord mathnormal mtight" style="margin-right:0.0359em;">q</span></span></span></span><span style="top:-3.05em;"><span class="pstrut" style="height:3.05em;"></span><span><span class="mop op-symbol large-op">∑</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:1.3861em;"><span></span></span></span></span></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal" style="margin-right:0.0785em;">I</span><span class="mord mathnormal" style="margin-right:0.0278em;">D</span><span class="mord mathnormal" style="margin-right:0.1389em;">F</span><span class="mopen">(</span><span class="mord mathnormal">t</span><span class="mclose">)</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">⋅</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:3.117em;vertical-align:-1.69em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.427em;"><span style="top:-2.11em;"><span class="pstrut" style="height:3.15em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.1076em;">f</span><span class="mopen">(</span><span class="mord mathnormal">t</span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal">d</span><span class="mclose">)</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.0315em;">k</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3011em;"><span style="top:-2.55em;margin-left:-0.0315em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight">1</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="minner"><span class="mopen delimcenter" style="top:0em;"><span class="delimsizing size2">(</span></span><span class="mord">1</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">−</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord mathnormal">b</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord mathnormal">b</span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.01em;"><span style="top:-2.655em;"><span class="pstrut" style="height:3em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">a</span><span class="mord mathnormal mtight" style="margin-right:0.0359em;">v</span><span class="mord mathnormal mtight" style="margin-right:0.0359em;">g</span><span class="mord mathnormal mtight">d</span><span class="mord mathnormal mtight" style="margin-right:0.0197em;">l</span></span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.485em;"><span class="pstrut" style="height:3em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">∣</span><span class="mord mathnormal mtight">d</span><span class="mord mtight">∣</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.4811em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span><span class="mclose delimcenter" style="top:0em;"><span class="delimsizing size2">)</span></span></span></span></span><span style="top:-3.38em;"><span class="pstrut" style="height:3.15em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.827em;"><span class="pstrut" style="height:3.15em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.1076em;">f</span><span class="mopen">(</span><span class="mord mathnormal">t</span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal">d</span><span class="mclose">)</span><span class="mopen">(</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.0315em;">k</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3011em;"><span style="top:-2.55em;margin-left:-0.0315em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight">1</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord">1</span><span class="mclose">)</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:1.69em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span></span></span></span></span>
+<ul>
+<li><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>f</mi><mo stretchy="false">(</mo><mi>t</mi><mo separator="true">,</mo><mi>d</mi><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">f(t,d)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.1076em;">f</span><span class="mopen">(</span><span class="mord mathnormal">t</span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal">d</span><span class="mclose">)</span></span></span></span>：词项在文档中的频率；</li>
+<li><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>I</mi><mi>D</mi><mi>F</mi><mo stretchy="false">(</mo><mi>t</mi><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">IDF(t)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.0785em;">I</span><span class="mord mathnormal" style="margin-right:0.0278em;">D</span><span class="mord mathnormal" style="margin-right:0.1389em;">F</span><span class="mopen">(</span><span class="mord mathnormal">t</span><span class="mclose">)</span></span></span></span>：稀有词权重；</li>
+<li><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>b</mi></mrow><annotation encoding="application/x-tex">b</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6944em;"></span><span class="mord mathnormal">b</span></span></span></span>：文档长度归一化强度；</li>
+<li><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>k</mi><mn>1</mn></msub></mrow><annotation encoding="application/x-tex">k_1</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.8444em;vertical-align:-0.15em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.0315em;">k</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3011em;"><span style="top:-2.55em;margin-left:-0.0315em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight">1</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span></span></span></span>：词频饱和速度。</li>
+</ul>
+<p>它尤其擅长：错误码、API 名、产品型号、人名、版本号、精确短语。其弱点是同义表达和跨语言语义匹配。</p>
+<blockquote>
+<p>[!example] 生产经验
+查询 <code>ERR_CONNECTION_RESET</code> 时，精确词项通常比向量语义更可靠；查询“怎么处理连接被对端重置”时，向量检索更有优势。两者不是替代关系。</p>
+</blockquote>
+<h2 id="4-稠密检索在向量空间里寻找语义近邻">4. 稠密检索：在向量空间里寻找语义近邻</h2>
+<p>双塔模型分别编码查询和文档：</p>
+<span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><msub><mi>e</mi><mi>q</mi></msub><mo>=</mo><msub><mi>f</mi><mi>q</mi></msub><mo stretchy="false">(</mo><mi>q</mi><mo stretchy="false">)</mo><mo separator="true">,</mo><mspace width="2em"></mspace><msub><mi>e</mi><mi>d</mi></msub><mo>=</mo><msub><mi>f</mi><mi>d</mi></msub><mo stretchy="false">(</mo><mi>d</mi><mo stretchy="false">)</mo><mo separator="true">,</mo><mspace width="2em"></mspace><mi>s</mi><mo stretchy="false">(</mo><mi>q</mi><mo separator="true">,</mo><mi>d</mi><mo stretchy="false">)</mo><mo>=</mo><mi>cos</mi><mo>⁡</mo><mo stretchy="false">(</mo><msub><mi>e</mi><mi>q</mi></msub><mo separator="true">,</mo><msub><mi>e</mi><mi>d</mi></msub><mo stretchy="false">)</mo><mtext>  </mtext><mtext>或</mtext><mtext>  </mtext><msubsup><mi>e</mi><mi>q</mi><mi>T</mi></msubsup><msub><mi>e</mi><mi>d</mi></msub></mrow><annotation encoding="application/x-tex">e_q=f_q(q),\qquad e_d=f_d(d),\qquad
+s(q,d)=\cos(e_q,e_d)\;\text{或}\;e_q^Te_d</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.7167em;vertical-align:-0.2861em;"></span><span class="mord"><span class="mord mathnormal">e</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.1514em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight" style="margin-right:0.0359em;">q</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2861em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:1.0361em;vertical-align:-0.2861em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.1076em;">f</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.1514em;"><span style="top:-2.55em;margin-left:-0.1076em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight" style="margin-right:0.0359em;">q</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2861em;"><span></span></span></span></span></span></span><span class="mopen">(</span><span class="mord mathnormal" style="margin-right:0.0359em;">q</span><span class="mclose">)</span><span class="mpunct">,</span><span class="mspace" style="margin-right:2em;"></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord"><span class="mord mathnormal">e</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3361em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">d</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.1076em;">f</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3361em;"><span style="top:-2.55em;margin-left:-0.1076em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">d</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mopen">(</span><span class="mord mathnormal">d</span><span class="mclose">)</span><span class="mpunct">,</span><span class="mspace" style="margin-right:2em;"></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal">s</span><span class="mopen">(</span><span class="mord mathnormal" style="margin-right:0.0359em;">q</span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal">d</span><span class="mclose">)</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:1.2744em;vertical-align:-0.3831em;"></span><span class="mop">cos</span><span class="mopen">(</span><span class="mord"><span class="mord mathnormal">e</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.1514em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight" style="margin-right:0.0359em;">q</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2861em;"><span></span></span></span></span></span></span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord"><span class="mord mathnormal">e</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3361em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">d</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mclose">)</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mord text"><span class="mord cjk_fallback">或</span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mord"><span class="mord mathnormal">e</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.8913em;"><span style="top:-2.453em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight" style="margin-right:0.0359em;">q</span></span></span><span style="top:-3.113em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight" style="margin-right:0.1389em;">T</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.3831em;"><span></span></span></span></span></span></span><span class="mord"><span class="mord mathnormal">e</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3361em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">d</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span></span></span></span></span>
+<p>训练时通常让正样本分数高于负样本。负样本质量决定模型是否真正学会区分“看似相近但不相关”的内容：</p>
+<ul>
+<li>随机负样本太简单；</li>
+<li>BM25 hard negative 更接近线上混淆项；</li>
+<li>线上曝光但未点击不能直接当负样本，存在位置偏差；</li>
+<li>跨租户数据不能因训练方便而突破隔离边界。</li>
+</ul>
+<p><strong>4.1 向量相似度的常见坑</strong></p>
+<ul>
+<li>cosine、dot product、L2 的分数不可直接混用；</li>
+<li>dot product 会受向量模长影响，是否归一化必须与训练一致；</li>
+<li>embedding 维度越大不必然效果越好，却会线性增加内存与带宽；</li>
+<li>同一索引混入不同模型或不同预处理版本的向量，分数将失去语义；</li>
+<li>短查询与长文档的编码分布可能不同，需要专门评估。</li>
+</ul>
+<h2 id="5-ann为什么不做精确全量扫描">5. ANN：为什么不做精确全量扫描</h2>
+<p>当有 <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>N</mi></mrow><annotation encoding="application/x-tex">N</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.109em;">N</span></span></span></span> 个 <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>D</mi></mrow><annotation encoding="application/x-tex">D</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.0278em;">D</span></span></span></span> 维向量时，暴力检索近似需要 <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>O</mi><mo stretchy="false">(</mo><mi>N</mi><mi>D</mi><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">O(ND)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.0278em;">O</span><span class="mopen">(</span><span class="mord mathnormal" style="margin-right:0.109em;">N</span><span class="mord mathnormal" style="margin-right:0.0278em;">D</span><span class="mclose">)</span></span></span></span> 计算。ANN（Approximate Nearest Neighbor）牺牲少量近邻召回率换取延迟和成本。</p>
+<p><strong>HNSW</strong></p>
+<p>HNSW 构建分层小世界图，查询从稀疏上层快速逼近，再在底层扩展邻居。</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>参数</th><th>增大后的效果</th><th>代价</th></tr></thead><tbody><tr><td><code>M</code></td><td>图连接更多，召回通常更高</td><td>内存、构建时间增加</td></tr><tr><td><code>efConstruction</code></td><td>索引质量更高</td><td>构建更慢</td></tr><tr><td><code>efSearch</code></td><td>查询召回更高</td><td>查询延迟和 CPU 增加</td></tr></tbody></table>
+<p><strong>IVF / PQ</strong></p>
+<p>IVF 先把向量分桶，查询只扫描部分桶；PQ 将向量压缩为码字。它们适合超大规模和内存敏感场景，但训练码本、分桶偏斜和量化损失都需要监控。</p>
+<div class="markdown-alert markdown-alert-important" dir="auto">
+<p class="markdown-alert-title" dir="auto"><svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M0 1.75C0 .784.784 0 1.75 0h12.5C15.216 0 16 .784 16 1.75v9.5A1.75 1.75 0 0 1 14.25 13H8.06l-2.573 2.573A1.458 1.458 0 0 1 3 14.543V13H1.75A1.75 1.75 0 0 1 0 11.25Zm1.75-.25a.25.25 0 0 0-.25.25v9.5c0 .138.112.25.25.25h2a.75.75 0 0 1 .75.75v2.19l2.72-2.72a.749.749 0 0 1 .53-.22h6.5a.25.25 0 0 0 .25-.25v-9.5a.25.25 0 0 0-.25-.25Zm7 2.25v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 9a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>IMPORTANT</p>
+<p> 必须区分两种 Recall
+<strong>ANN Recall</strong> 比较近似索引与精确向量 Top-K；<strong>业务 Retrieval Recall</strong> 比较系统结果与人工相关文档。前者高，不代表 embedding 能理解业务相关性。</p>
+</div>
+<h2 id="6-不只有双塔稀疏学习与-late-interaction">6. 不只有双塔：稀疏学习与 Late Interaction</h2>
+<ul>
+<li><strong>Learned Sparse Retrieval</strong>：模型产生稀疏词项权重，保留倒排索引的可扩展性；</li>
+<li><strong>Late Interaction</strong>：查询和文档保留 token 级向量，检索时做细粒度最大相似度聚合；</li>
+<li><strong>Cross-Encoder</strong>：把查询与文档一起输入模型，质量高但成本大，通常用于精排。</li>
+</ul>
+<p>ColBERT 的核心价值是把文档表示预计算，同时保留 token 级交互，处于双塔与 Cross-Encoder 之间。</p>
+<h2 id="7-混合检索解决不同相关性信号的互补">7. 混合检索：解决不同相关性信号的互补</h2>
+<p>生产系统常并行执行 BM25 与向量检索，再融合结果。</p>
+<p>直接对原始分数加权很危险：BM25、cosine、不同索引分片的分数分布都可能不同。RRF（Reciprocal Rank Fusion）只使用名次：</p>
+<span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mi mathvariant="normal">RRF</mi><mo>⁡</mo><mo stretchy="false">(</mo><mi>d</mi><mo stretchy="false">)</mo><mo>=</mo><munder><mo>∑</mo><mrow><mi>r</mi><mo>∈</mo><mi>R</mi></mrow></munder><mfrac><mn>1</mn><mrow><mi>k</mi><mo>+</mo><mi>r</mi><mi>a</mi><mi>n</mi><msub><mi>k</mi><mi>r</mi></msub><mo stretchy="false">(</mo><mi>d</mi><mo stretchy="false">)</mo></mrow></mfrac></mrow><annotation encoding="application/x-tex">\operatorname{RRF}(d)=\sum_{r\in R}\frac{1}{k+rank_r(d)}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mop"><span class="mord mathrm">RRF</span></span><span class="mopen">(</span><span class="mord mathnormal">d</span><span class="mclose">)</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:2.6431em;vertical-align:-1.3217em;"></span><span class="mop op-limits"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.05em;"><span style="top:-1.8557em;margin-left:0em;"><span class="pstrut" style="height:3.05em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight" style="margin-right:0.0278em;">r</span><span class="mrel mtight">∈</span><span class="mord mathnormal mtight" style="margin-right:0.0077em;">R</span></span></span></span><span style="top:-3.05em;"><span class="pstrut" style="height:3.05em;"></span><span><span class="mop op-symbol large-op">∑</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:1.3217em;"><span></span></span></span></span></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.3214em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.0315em;">k</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord mathnormal" style="margin-right:0.0278em;">r</span><span class="mord mathnormal">an</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.0315em;">k</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.1514em;"><span style="top:-2.55em;margin-left:-0.0315em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight" style="margin-right:0.0278em;">r</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mopen">(</span><span class="mord mathnormal">d</span><span class="mclose">)</span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">1</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.936em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span></span></span></span></span>
+<p>它易上线、对分数标定不敏感；缺点是忽略名次之间实际分差。若使用加权融合，需要离线标定、分查询类型校准并监控分布漂移。</p>
+<img src="/images/go/02-hybrid-retrieval.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
+<h2 id="8-query-understanding先理解要找什么">8. Query Understanding：先理解要找什么</h2>
+<p>检索前处理可能包括：</p>
+<ul>
+<li>拼写修正、分词、语言检测；</li>
+<li>实体识别与字段过滤提取；</li>
+<li>同义词、缩写和版本别名展开；</li>
+<li>多跳问题拆解为多个子查询；</li>
+<li>根据查询意图路由到代码、文档、工单或指标索引；</li>
+<li>使用 LLM 生成检索改写或假想答案（HyDE）。</li>
+</ul>
+<p>LLM 改写必须保留原查询并可回溯。它可能擅自补充错误实体，因此生产上常将“原查询通路”与“改写通路”并行，再融合结果。</p>
+<h2 id="9-chunking检索单位决定上限">9. Chunking：检索单位决定上限</h2>
+<p>Chunk 太小会丢失语境，太大则语义被稀释、token 成本上升。常见策略：</p>
+<ul>
+<li>固定 token + overlap：简单稳定，但会切断结构；</li>
+<li>按标题、段落、函数或表格切分：语义完整；</li>
+<li>parent-child：小块负责命中，大块负责提供上下文；</li>
+<li>hierarchical：先找章节，再在章节内找段落；</li>
+<li>late chunking：先编码长上下文，再形成局部表示。</li>
+</ul>
+<p>Chunk 必须携带 <code>document_id</code>、<code>chunk_id</code>、标题路径、页码/行号、版本、时间、租户和 ACL。否则即使命中，也难以引用、去重、删除或审计。</p>
+<h2 id="10-filter-与-acl安全边界不是事后补丁">10. Filter 与 ACL：安全边界不是事后补丁</h2>
+<p>推荐顺序取决于引擎能力，但必须确保不可越权：</p>
+<ol>
+<li>从可信身份生成租户与权限过滤器；</li>
+<li>在检索引擎中尽早过滤；</li>
+<li>返回候选后做防御性权限复核；</li>
+<li>缓存键包含身份、租户和权限版本；</li>
+<li>日志不记录敏感正文或完整 embedding。</li>
+</ol>
+<blockquote>
+<p>[!danger] 常见事故
+先全局向量检索再在应用层过滤，如果 Top-K 全被剔除，会导致“明明有权限文档却查不到”；如果过滤逻辑漏掉一次，则直接造成跨租户数据泄漏。应使用支持过滤感知 ANN 的索引，或扩大候选并进行严格复核。</p>
+</blockquote>
+<h2 id="11-索引生命周期与无损迁移">11. 索引生命周期与无损迁移</h2>
+<p>索引不是一次性构建物，而是持续演进的生产资产。</p>
+<img src="/images/go/03-index-migration.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
+<p>实践要点：</p>
+<ul>
+<li>逻辑别名指向物理版本，如 <code>docs_current -> docs_v17</code>；</li>
+<li>文档主键幂等，重复消费不会产生重复 chunk；</li>
+<li>删除使用 tombstone 并追踪传播延迟；</li>
+<li>双写期间记录两个版本的成功状态，避免静默半失败；</li>
+<li>shadow 只比较结果，不影响用户；</li>
+<li>切换后保留旧索引到回滚窗口结束；</li>
+<li>embedding 版本、chunker 版本与解析器版本进入元数据。</li>
+</ul>
+<p><strong>12. 容量与延迟预算</strong></p>
+<p>粗略向量原始内存：</p>
+<span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mi>M</mi><mi>e</mi><mi>m</mi><mi>o</mi><mi>r</mi><mi>y</mi><mo>≈</mo><mi>N</mi><mo>×</mo><mi>D</mi><mo>×</mo><mi>b</mi><mi>y</mi><mi>t</mi><mi>e</mi><mi>s</mi><mi mathvariant="normal">_</mi><mi>p</mi><mi>e</mi><mi>r</mi><mi mathvariant="normal">_</mi><mi>d</mi><mi>i</mi><mi>m</mi><mi>e</mi><mi>n</mi><mi>s</mi><mi>i</mi><mi>o</mi><mi>n</mi></mrow><annotation encoding="application/x-tex">Memory \approx N \times D \times bytes\_per\_dimension</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.8778em;vertical-align:-0.1944em;"></span><span class="mord mathnormal" style="margin-right:0.109em;">M</span><span class="mord mathnormal">e</span><span class="mord mathnormal">m</span><span class="mord mathnormal" style="margin-right:0.0278em;">or</span><span class="mord mathnormal" style="margin-right:0.0359em;">y</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">≈</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.7667em;vertical-align:-0.0833em;"></span><span class="mord mathnormal" style="margin-right:0.109em;">N</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:0.7667em;vertical-align:-0.0833em;"></span><span class="mord mathnormal" style="margin-right:0.0278em;">D</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:1.0044em;vertical-align:-0.31em;"></span><span class="mord mathnormal">b</span><span class="mord mathnormal" style="margin-right:0.0359em;">y</span><span class="mord mathnormal">t</span><span class="mord mathnormal">es</span><span class="mord" style="margin-right:0.0278em;">_</span><span class="mord mathnormal">p</span><span class="mord mathnormal" style="margin-right:0.0278em;">er</span><span class="mord" style="margin-right:0.0278em;">_</span><span class="mord mathnormal">d</span><span class="mord mathnormal">im</span><span class="mord mathnormal">e</span><span class="mord mathnormal">n</span><span class="mord mathnormal">s</span><span class="mord mathnormal">i</span><span class="mord mathnormal">o</span><span class="mord mathnormal">n</span></span></span></span></span>
+<p>还需加 HNSW 图、元数据、倒排表、副本和运行时缓存。容量规划至少估算：</p>
+<ul>
+<li>日增文档/Chunk 数和保留周期；</li>
+<li>embedding 维度与精度（FP32、FP16、量化）；</li>
+<li>分片数、副本数和故障冗余；</li>
+<li>峰值 QPS、热查询比例、批量写入吞吐；</li>
+<li>merge/compaction 对尾延迟的影响；</li>
+<li>重建全量索引所需时间和临时双倍容量。</li>
+</ul>
+<p>在线延迟要拆分，而不是只看总 p95：</p>
+<p><code>query rewrite → embedding → lexical/vector search → fusion → ACL → rerank</code></p>
+<h2 id="13-评估体系相关性系统性与安全性">13. 评估体系：相关性、系统性与安全性</h2>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>层面</th><th>指标</th><th>回答的问题</th></tr></thead><tbody><tr><td>相关性</td><td>Recall@K、Hit@K、MRR、nDCG</td><td>找得到、排得对吗？</td></tr><tr><td>ANN</td><td>ANN Recall@K</td><td>近似索引损失多少？</td></tr><tr><td>性能</td><td>p50/p95/p99、QPS、超时率</td><td>能否稳定服务？</td></tr><tr><td>数据</td><td>索引延迟、解析失败率、删除传播</td><td>数据新鲜且完整吗？</td></tr><tr><td>成本</td><td>每查询 CPU/GPU、embedding 成本</td><td>规模化是否可承受？</td></tr><tr><td>安全</td><td>ACL 违规数、跨租户泄漏测试</td><td>边界是否绝对正确？</td></tr></tbody></table>
+<p>评估集应按语言、租户、文档类型、查询意图、热门/长尾和时间切片分层。总体均值很容易掩盖某个关键客户或新数据源完全失效。</p>
+<p><strong>14. 高频生产故障与排查</strong></p>
+<p><strong>14.1 精确 ID 查不到</strong></p>
+<p><strong>现象</strong>：自然语言效果好，错误码、订单号、类名失效。<br>
+<strong>根因</strong>：只启用向量检索，分词器又拆坏标识符。<br>
+<strong>处理</strong>：保留 keyword 字段与 BM25 通路，对 ID 意图做精确路由。</p>
+<p><strong>14.2 新文档查不到但写入成功</strong></p>
+<p>检查事件消费 lag、解析状态、chunk 数、embedding 任务、索引 refresh 和 alias 指向。API 写入成功只说明入口接受，不代表可搜索。</p>
+<p><strong>14.3 embedding 升级后相关性骤降</strong></p>
+<p>检查是否将新查询向量打到旧文档向量索引，或新旧归一化策略不一致。embedding 模型与索引版本必须原子绑定。</p>
+<p><strong>14.4 延迟偶发尖峰</strong></p>
+<p>常见原因是 compaction、热点分片、<code>efSearch</code> 动态放大、冷缓存、同步 LLM 改写或 reranker 批处理等待。需要 span 级分段观测。</p>
+<p><strong>14.5 已删除文档仍被回答</strong></p>
+<p>追踪源删除事件、tombstone、索引删除、缓存失效和生成上下文缓存。对法规删除设置独立 SLO 与审计证据。</p>
+<p><strong>15. 上线清单</strong></p>
+<ul class="contains-task-list">
+<li class="task-list-item"><input type="checkbox" disabled> 有 lexical、dense 或 hybrid 的明确选择依据</li>
+<li class="task-list-item"><input type="checkbox" disabled> Recall@K 按关键切片达标</li>
+<li class="task-list-item"><input type="checkbox" disabled> ACL 在检索前后均有防线，并做越权测试</li>
+<li class="task-list-item"><input type="checkbox" disabled> 索引版本、embedding 版本和 chunker 版本可追踪</li>
+<li class="task-list-item"><input type="checkbox" disabled> 新索引支持 backfill、双写、shadow、canary 和回滚</li>
+<li class="task-list-item"><input type="checkbox" disabled> 删除与更新具有传播 SLO</li>
+<li class="task-list-item"><input type="checkbox" disabled> 分段 latency、失败、空结果和 fallback 可观测</li>
+<li class="task-list-item"><input type="checkbox" disabled> 精确 ID、长尾、多语言、时间敏感查询进入回归集</li>
+<li class="task-list-item"><input type="checkbox" disabled> 容量包含副本、重建和双索引窗口</li>
+</ul>
+<p><strong>16. 高级工程师面试题</strong></p>
+<blockquote>
+<p>[!question] - 为什么不能只用向量数据库？
+向量检索擅长语义相似，但对精确 ID、罕见词、否定关系和最新实体可能不稳定。生产上通常需要关键词、向量、元数据过滤和业务路由的组合，还要解决索引生命周期、权限与观测问题。</p>
+</blockquote>
+<blockquote>
+<p>[!question] - HNSW 的 <code>efSearch</code> 如何选择？
+在代表性查询集上绘制 ANN Recall、p95/p99 延迟和 CPU 的 Pareto 曲线；按查询类型或负载动态设置上限。不能只用平均延迟，也不能把 ANN Recall 当业务 Recall。</p>
+</blockquote>
+<blockquote>
+<p>[!question] - 如何升级 embedding 模型且不停机？
+新建版本化索引，全量回填，增量双写，影子查询比较，按租户或流量金丝雀切换；alias 原子切换并保留旧索引回滚。严禁新查询向量与旧文档向量混查。</p>
+</blockquote>
+<blockquote>
+<p>[!question] - 混合检索为什么常用 RRF？
+不同检索器分数尺度很难直接比较，RRF 基于名次融合，工程上稳定且无需复杂标定。若相关性收益需要分数信息，再用学习融合并监控分布漂移。</p>
+</blockquote>
+<blockquote>
+<p>[!question] - 如何证明检索问题而不是生成问题？
+固定问题，检查 gold evidence 是否进入候选、精排和最终 Context；分别测 Recall@K、nDCG、Context Recall 与答案支持度。证据从未进入候选是检索问题，进入上下文但回答仍错误才更偏生成或提示问题。</p>
+</blockquote>
+<p><strong>17. 延伸阅读</strong></p>
+<ul>
+<li>Karpukhin et al., <a href="https://arxiv.org/abs/2004.04906" rel="noopener noreferrer" target="_blank">Dense Passage Retrieval for Open-Domain Question Answering</a></li>
+<li>Khattab &#x26; Zaharia, <a href="https://arxiv.org/abs/2004.12832" rel="noopener noreferrer" target="_blank">ColBERT: Efficient and Effective Passage Search via Contextualized Late Interaction</a></li>
+<li>Elastic, <a href="https://www.elastic.co/docs/solutions/search/hybrid-search" rel="noopener noreferrer" target="_blank">Hybrid search</a></li>
+<li>Elastic, <a href="https://www.elastic.co/docs/reference/elasticsearch/rest-apis/reciprocal-rank-fusion" rel="noopener noreferrer" target="_blank">Reciprocal rank fusion</a></li>
+</ul>
+<p><strong>18. 与 Memory、Recall、Ranking、RAG 的对比</strong></p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>概念</th><th>它负责什么</th><th>它不负责什么</th><th>关键生产问题</th></tr></thead><tbody><tr><td>Memory - Agent 如何记住、更新与遗忘</td><td>保存、更新、治理跨时状态</td><td>不等于每次查询算法</td><td>写入质量、冲突、遗忘、权限</td></tr><tr><td><strong>Retrieval</strong></td><td>从大规模语料生成候选</td><td>不保证最终顺序或答案可信</td><td>索引、召回、延迟、新鲜度、ACL</td></tr><tr><td>Recall - 召回阶段与 Recall@K 指标</td><td>描述“有没有漏掉”及候选阶段目标</td><td>不是某一种数据库或算法</td><td>标注分母、分层评估、成本权衡</td></tr><tr><td>Ranking - 从候选集合到最优顺序</td><td>对候选排序与重排</td><td>无法挽回未召回文档</td><td>精排延迟、特征偏差、融合、降级</td></tr><tr><td>RAG - 从检索到可信生成的完整系统</td><td>将外部证据装配给生成模型</td><td>不等于单纯向量检索</td><td>证据链、引用、安全、端到端评估</td></tr></tbody></table>
+<p>一句话串起来：<strong>Memory 决定长期保留什么，Retrieval 找候选，Recall 衡量漏没漏，Ranking 决定先看谁，RAG 把证据变成有出处的回答。</strong></p></main><aside class="toc"><p class="toc-title">本页目录</p><ul><li class="toc-d2"><a href="#1-retrievalsearch-与-ranking-的边界">1. Retrieval、Search 与 Ranking 的边界</a></li><li class="toc-d2"><a href="#2-一条完整的生产链路">2. 一条完整的生产链路</a></li><li class="toc-d2"><a href="#3-稀疏检索关键词仍然不可替代">3. 稀疏检索：关键词仍然不可替代</a></li><li class="toc-d2"><a href="#4-稠密检索在向量空间里寻找语义近邻">4. 稠密检索：在向量空间里寻找语义近邻</a></li><li class="toc-d2"><a href="#5-ann为什么不做精确全量扫描">5. ANN：为什么不做精确全量扫描</a></li><li class="toc-d2"><a href="#6-不只有双塔稀疏学习与-late-interaction">6. 不只有双塔：稀疏学习与 Late Interaction</a></li><li class="toc-d2"><a href="#7-混合检索解决不同相关性信号的互补">7. 混合检索：解决不同相关性信号的互补</a></li><li class="toc-d2"><a href="#8-query-understanding先理解要找什么">8. Query Understanding：先理解要找什么</a></li><li class="toc-d2"><a href="#9-chunking检索单位决定上限">9. Chunking：检索单位决定上限</a></li><li class="toc-d2"><a href="#10-filter-与-acl安全边界不是事后补丁">10. Filter 与 ACL：安全边界不是事后补丁</a></li><li class="toc-d2"><a href="#11-索引生命周期与无损迁移">11. 索引生命周期与无损迁移</a></li><li class="toc-d2"><a href="#13-评估体系相关性系统性与安全性">13. 评估体系：相关性、系统性与安全性</a></li></ul></aside></div><div class="lightbox" id="lightbox" aria-hidden="true"><img alt=""></div><script type="module">var e=document.documentElement,t=document.getElementById(`themeToggle`),n={auto:`🖥️`,light:`☀️`,dark:`🌙`};function r(){var e=localStorage.getItem(`theme`);return e===`light`||e===`dark`?e:`auto`}function i(){var i=r();i===`auto`?e.removeAttribute(`data-theme`):e.setAttribute(`data-theme`,i),t.textContent=n[i]}i(),t.addEventListener(`click`,()=>{var e=[`auto`,`light`,`dark`],t=e[(e.indexOf(r())+1)%3];t===`auto`?localStorage.removeItem(`theme`):localStorage.setItem(`theme`,t),i()}),window.matchMedia(`(prefers-color-scheme: dark)`).addEventListener(`change`,()=>{r()===`auto`&&i()});var a=document.getElementById(`lightbox`),o=a.querySelector(`img`);document.querySelectorAll(`.prose img`).forEach(e=>{e.style.cursor=`zoom-in`,e.addEventListener(`click`,()=>{o.src=e.currentSrc||e.src,o.alt=e.alt,a.classList.add(`open`),a.setAttribute(`aria-hidden`,`false`)})}),a.addEventListener(`click`,()=>{a.classList.remove(`open`),a.setAttribute(`aria-hidden`,`true`)}),document.addEventListener(`keydown`,e=>{e.key===`Escape`&&a.click()});</script></body></html>

@@ -1,0 +1,335 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Recall：召回阶段与 Recall@K 指标</title><script>
+      (function () {
+        var s = localStorage.getItem('theme');
+        if (s === 'light' || s === 'dark') {
+          document.documentElement.setAttribute('data-theme', s);
+        }
+      })();
+    </script><link rel="stylesheet" href="/_astro/Base.C6O8tc7V.css"></head><body><header class="topbar"><a href="/" class="brand">HLDay</a><nav><a href="/">专题</a><a href="/posts/">博客</a><a href="https://github.com/hTangle" class="nav-github" aria-label="GitHub">GitHub</a></nav><button class="theme-toggle" id="themeToggle" type="button" title="切换主题（自动/浅色/深色）" aria-label="切换主题">🖥️</button></header><div class="layout"><aside class="booknav"><ul class="nav-tree"><li><p class="nav-group">Go</p><ul><li><p class="nav-subgroup">运行时基础</p><ul><li class><a href="/source-map/">源码环境与目录地图</a></li><li class><a href="/bootstrap/">程序启动流程</a></li></ul></li><li><p class="nav-subgroup">并发编程</p><ul><li class><a href="/gmp/">GMP 调度器</a></li><li class><a href="/netpoll/">网络轮询器</a></li><li class><a href="/timer/">定时器</a></li><li class><a href="/sync-lock/">同步和锁</a></li><li class><a href="/channel/">Channel</a></li><li class><a href="/context/">Context</a></li><li class><a href="/defer-panic/">defer/panic/recover</a></li></ul></li><li><p class="nav-subgroup">内存管理</p><ul><li class><a href="/memory-alloc/">内存分配器</a></li><li class><a href="/gc/">垃圾收集器</a></li><li class><a href="/stack/">栈空间管理</a></li></ul></li><li><p class="nav-subgroup">数据结构</p><ul><li class><a href="/type-metadata/">类型元数据与对象布局</a></li><li class><a href="/iface/">Interface 与动态调用</a></li><li class><a href="/generics/">泛型与字典传递</a></li><li class><a href="/array/">数组</a></li><li class><a href="/slice/">切片</a></li><li class><a href="/swiss-map/">哈希表 (Swiss Table)</a></li><li class><a href="/string/">字符串</a></li></ul></li></ul></li><li><p class="nav-group">Agent 开发</p><ul><li><p class="nav-subgroup">协议与调用</p><ul><li class><a href="/mcp/">MCP</a></li><li class><a href="/tool-call/">Tool Call</a></li><li class><a href="/skill/">Skill</a></li><li class><a href="/memory/">Memory</a></li></ul></li><li><p class="nav-subgroup">检索与排序</p><ul><li class><a href="/rag/">RAG</a></li><li class><a href="/retrieval/">Retrieval</a></li><li class="active"><a href="/recall/">Recall</a></li><li class><a href="/ranking/">Ranking</a></li></ul></li></ul></li></ul></aside><main class="prose"><h1>Recall：召回阶段与 Recall@K 指标</h1><blockquote>
+<p>[!abstract] 一句话定义
+**Recall 既指“尽量找全相关候选”的系统阶段目标，也指衡量相关对象被找回比例的指标。**它关心的是漏掉了多少，而不是结果是否已经排在最佳位置。</p>
+</blockquote>
+<img src="/images/go/recall-coverage.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
+<p>在搜索、推荐和 RAG - 从检索到可信生成的完整系统 中，后续 Ranking - 从候选集合到最优顺序 再强，也无法挽回召回阶段从未提供的正确证据。因此高级工程师讨论 Recall 时，必须同时讲清：<strong>分母如何定义、标签是否完整、K 取多少、延迟成本多少、哪个业务切片正在漏。</strong></p>
+<h2 id="1-从混淆矩阵理解-recall">1. 从混淆矩阵理解 Recall</h2>
+<p>对于二分类：</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th></th><th align="right">实际相关</th><th align="right">实际不相关</th></tr></thead><tbody><tr><td>系统返回</td><td align="right">TP</td><td align="right">FP</td></tr><tr><td>系统未返回</td><td align="right">FN</td><td align="right">TN</td></tr></tbody></table>
+<span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mi>R</mi><mi>e</mi><mi>c</mi><mi>a</mi><mi>l</mi><mi>l</mi><mo>=</mo><mfrac><mrow><mi>T</mi><mi>P</mi></mrow><mrow><mi>T</mi><mi>P</mi><mo>+</mo><mi>F</mi><mi>N</mi></mrow></mfrac></mrow><annotation encoding="application/x-tex">Recall=\frac{TP}{TP+FN}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6944em;"></span><span class="mord mathnormal" style="margin-right:0.0077em;">R</span><span class="mord mathnormal">ec</span><span class="mord mathnormal">a</span><span class="mord mathnormal" style="margin-right:0.0197em;">l</span><span class="mord mathnormal" style="margin-right:0.0197em;">l</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:2.1297em;vertical-align:-0.7693em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.3603em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.1389em;">T</span><span class="mord mathnormal" style="margin-right:0.1389em;">P</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord mathnormal" style="margin-right:0.1389em;">F</span><span class="mord mathnormal" style="margin-right:0.109em;">N</span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.1389em;">T</span><span class="mord mathnormal" style="margin-right:0.1389em;">P</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.7693em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span></span></span></span></span>
+<p>Recall 高表示漏掉的相关对象少。与它互补的是 Precision：</p>
+<span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mi>P</mi><mi>r</mi><mi>e</mi><mi>c</mi><mi>i</mi><mi>s</mi><mi>i</mi><mi>o</mi><mi>n</mi><mo>=</mo><mfrac><mrow><mi>T</mi><mi>P</mi></mrow><mrow><mi>T</mi><mi>P</mi><mo>+</mo><mi>F</mi><mi>P</mi></mrow></mfrac></mrow><annotation encoding="application/x-tex">Precision=\frac{TP}{TP+FP}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.1389em;">P</span><span class="mord mathnormal" style="margin-right:0.0278em;">r</span><span class="mord mathnormal">ec</span><span class="mord mathnormal">i</span><span class="mord mathnormal">s</span><span class="mord mathnormal">i</span><span class="mord mathnormal">o</span><span class="mord mathnormal">n</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:2.1297em;vertical-align:-0.7693em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.3603em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.1389em;">T</span><span class="mord mathnormal" style="margin-right:0.1389em;">P</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord mathnormal" style="margin-right:0.1389em;">F</span><span class="mord mathnormal" style="margin-right:0.1389em;">P</span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.1389em;">T</span><span class="mord mathnormal" style="margin-right:0.1389em;">P</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.7693em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span></span></span></span></span>
+<p>如果把整个知识库都返回，Recall 可能接近 1，但 Precision、延迟和上下文成本会崩溃。生产系统追求的是约束下的高 Recall，而非无成本最大化。</p>
+<h2 id="2-排序场景中的-recallk">2. 排序场景中的 Recall@K</h2>
+<p>对于查询 <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>q</mi></mrow><annotation encoding="application/x-tex">q</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.625em;vertical-align:-0.1944em;"></span><span class="mord mathnormal" style="margin-right:0.0359em;">q</span></span></span></span>，设相关集合为 <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>R</mi><mi>e</mi><msub><mi>l</mi><mi>q</mi></msub></mrow><annotation encoding="application/x-tex">Rel_q</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.9805em;vertical-align:-0.2861em;"></span><span class="mord mathnormal" style="margin-right:0.0077em;">R</span><span class="mord mathnormal">e</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.0197em;">l</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.1514em;"><span style="top:-2.55em;margin-left:-0.0197em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight" style="margin-right:0.0359em;">q</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2861em;"><span></span></span></span></span></span></span></span></span></span>，系统前 <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>K</mi></mrow><annotation encoding="application/x-tex">K</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.0715em;">K</span></span></span></span> 个结果为 <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>T</mi><mi>o</mi><mi>p</mi><msub><mi>K</mi><mi>q</mi></msub></mrow><annotation encoding="application/x-tex">TopK_q</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.9694em;vertical-align:-0.2861em;"></span><span class="mord mathnormal" style="margin-right:0.1389em;">T</span><span class="mord mathnormal">o</span><span class="mord mathnormal">p</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.0715em;">K</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.1514em;"><span style="top:-2.55em;margin-left:-0.0715em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight" style="margin-right:0.0359em;">q</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2861em;"><span></span></span></span></span></span></span></span></span></span>：</p>
+<span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mi>R</mi><mi>e</mi><mi>c</mi><mi>a</mi><mi>l</mi><mi>l</mi><mi mathvariant="normal">@</mi><mi>K</mi><mo stretchy="false">(</mo><mi>q</mi><mo stretchy="false">)</mo><mo>=</mo><mfrac><mrow><mi mathvariant="normal">∣</mi><mi>R</mi><mi>e</mi><msub><mi>l</mi><mi>q</mi></msub><mo>∩</mo><mi>T</mi><mi>o</mi><mi>p</mi><msub><mi>K</mi><mi>q</mi></msub><mi mathvariant="normal">∣</mi></mrow><mrow><mi mathvariant="normal">∣</mi><mi>R</mi><mi>e</mi><msub><mi>l</mi><mi>q</mi></msub><mi mathvariant="normal">∣</mi></mrow></mfrac></mrow><annotation encoding="application/x-tex">Recall@K(q)=\frac{|Rel_q\cap TopK_q|}{|Rel_q|}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.0077em;">R</span><span class="mord mathnormal">ec</span><span class="mord mathnormal">a</span><span class="mord mathnormal" style="margin-right:0.0197em;">l</span><span class="mord mathnormal" style="margin-right:0.0197em;">l</span><span class="mord">@</span><span class="mord mathnormal" style="margin-right:0.0715em;">K</span><span class="mopen">(</span><span class="mord mathnormal" style="margin-right:0.0359em;">q</span><span class="mclose">)</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:2.3991em;vertical-align:-0.9721em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.427em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">∣</span><span class="mord mathnormal" style="margin-right:0.0077em;">R</span><span class="mord mathnormal">e</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.0197em;">l</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.1514em;"><span style="top:-2.55em;margin-left:-0.0197em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight" style="margin-right:0.0359em;">q</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2861em;"><span></span></span></span></span></span></span><span class="mord">∣</span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">∣</span><span class="mord mathnormal" style="margin-right:0.0077em;">R</span><span class="mord mathnormal">e</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.0197em;">l</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.1514em;"><span style="top:-2.55em;margin-left:-0.0197em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight" style="margin-right:0.0359em;">q</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2861em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">∩</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord mathnormal" style="margin-right:0.1389em;">T</span><span class="mord mathnormal">o</span><span class="mord mathnormal">p</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.0715em;">K</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.1514em;"><span style="top:-2.55em;margin-left:-0.0715em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight" style="margin-right:0.0359em;">q</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2861em;"><span></span></span></span></span></span></span><span class="mord">∣</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.9721em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span></span></span></span></span>
+<p>例：某问题有 4 个相关段落，Top-10 找到其中 3 个，则 <code>Recall@10 = 0.75</code>。</p>
+<div class="markdown-alert markdown-alert-warning" dir="auto">
+<p class="markdown-alert-title" dir="auto"><svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>WARNING</p>
+<p> 分母决定指标含义
+如果只标了一个“标准答案段落”，Recall@K 可能退化成是否命中的 0/1；如果真实还有多个未标注相关段落，系统返回它们反而会被错误当作无关结果。</p>
+</div>
+<h2 id="3-容易混淆的几个指标">3. 容易混淆的几个指标</h2>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>指标</th><th>定义</th><th>适合回答</th></tr></thead><tbody><tr><td>Recall@K</td><td>Top-K 找到的相关项 / 全部相关项</td><td>相关证据找全多少？</td></tr><tr><td>Hit@K / Success@K</td><td>Top-K 是否至少有一个相关项</td><td>能否命中任一可用答案？</td></tr><tr><td>Precision@K</td><td>Top-K 中相关项比例</td><td>返回结果有多干净？</td></tr><tr><td>MRR</td><td>第一个相关结果名次倒数的均值</td><td>第一个正确结果来得多早？</td></tr><tr><td>nDCG@K</td><td>考虑等级相关性与位置折损</td><td>高价值结果排序是否合理？</td></tr><tr><td>ANN Recall@K</td><td>近似向量结果覆盖精确向量 Top-K 的比例</td><td>ANN 索引损失多少？</td></tr><tr><td>Coverage</td><td>有结果的查询、实体或目录覆盖比例</td><td>系统是否遗漏一整类内容？</td></tr></tbody></table>
+<p><code>Hit@5 = 1</code> 只说明前 5 至少命中一个；如果回答需要同时找到“配置说明”和“版本限制”两个证据，它仍可能不足。</p>
+<h2 id="4-召回阶段不是单一算法">4. 召回阶段不是单一算法</h2>
+<p>候选可以来自多条并行通路：</p>
+<img src="/images/go/01-multi-channel-recall.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
+<p>因此“召回模型”可能是关键词检索、向量双塔、协同过滤、规则、知识图谱、多查询扩展或它们的组合。它们共同目标是在可接受预算内扩大正确候选的覆盖面。</p>
+<h2 id="5-k-是一个系统参数不是随手填的数字">5. K 是一个系统参数，不是随手填的数字</h2>
+<p>增大 K 通常能提高 Recall，但会带来：</p>
+<ul>
+<li>检索与网络传输成本上升；</li>
+<li>reranker 计算量上升；</li>
+<li>去重和 ACL 检查负担上升；</li>
+<li>RAG Context 噪声与 token 成本上升；</li>
+<li>尾延迟变差。</li>
+</ul>
+<p>应分别定义多个 K：</p>
+<ul>
+<li><code>K_retrieval</code>：每路检索返回多少；</li>
+<li><code>K_union</code>：融合后保留多少；</li>
+<li><code>K_rerank</code>：送入昂贵精排多少；</li>
+<li><code>K_context</code>：最终装入模型多少。</li>
+</ul>
+<p>不要用一个 <code>top_k</code> 参数贯穿所有层，否则很难诊断是哪一层截断了正确证据。</p>
+<h2 id="6-macromicro-与分层聚合">6. Macro、Micro 与分层聚合</h2>
+<p>假设不同查询的相关文档数量不同：</p>
+<span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mi>M</mi><mi>a</mi><mi>c</mi><mi>r</mi><mi>o</mi><mi>R</mi><mi>e</mi><mi>c</mi><mi>a</mi><mi>l</mi><mi>l</mi><mi mathvariant="normal">@</mi><mi>K</mi><mo>=</mo><mfrac><mn>1</mn><mrow><mi mathvariant="normal">∣</mi><mi>Q</mi><mi mathvariant="normal">∣</mi></mrow></mfrac><munder><mo>∑</mo><mrow><mi>q</mi><mo>∈</mo><mi>Q</mi></mrow></munder><mi>R</mi><mi>e</mi><mi>c</mi><mi>a</mi><mi>l</mi><mi>l</mi><mi mathvariant="normal">@</mi><mi>K</mi><mo stretchy="false">(</mo><mi>q</mi><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">MacroRecall@K=\frac{1}{|Q|}\sum_{q\in Q}Recall@K(q)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6944em;"></span><span class="mord mathnormal" style="margin-right:0.109em;">M</span><span class="mord mathnormal">a</span><span class="mord mathnormal" style="margin-right:0.0278em;">cr</span><span class="mord mathnormal">o</span><span class="mord mathnormal" style="margin-right:0.0077em;">R</span><span class="mord mathnormal">ec</span><span class="mord mathnormal">a</span><span class="mord mathnormal" style="margin-right:0.0197em;">l</span><span class="mord mathnormal" style="margin-right:0.0197em;">l</span><span class="mord">@</span><span class="mord mathnormal" style="margin-right:0.0715em;">K</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:2.7519em;vertical-align:-1.4304em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.3214em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">∣</span><span class="mord mathnormal">Q</span><span class="mord">∣</span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">1</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.936em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mop op-limits"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.05em;"><span style="top:-1.8557em;margin-left:0em;"><span class="pstrut" style="height:3.05em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight" style="margin-right:0.0359em;">q</span><span class="mrel mtight">∈</span><span class="mord mathnormal mtight">Q</span></span></span></span><span style="top:-3.05em;"><span class="pstrut" style="height:3.05em;"></span><span><span class="mop op-symbol large-op">∑</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:1.4304em;"><span></span></span></span></span></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal" style="margin-right:0.0077em;">R</span><span class="mord mathnormal">ec</span><span class="mord mathnormal">a</span><span class="mord mathnormal" style="margin-right:0.0197em;">l</span><span class="mord mathnormal" style="margin-right:0.0197em;">l</span><span class="mord">@</span><span class="mord mathnormal" style="margin-right:0.0715em;">K</span><span class="mopen">(</span><span class="mord mathnormal" style="margin-right:0.0359em;">q</span><span class="mclose">)</span></span></span></span></span>
+<p>Macro 对每个查询等权。Micro 则先汇总所有 TP/FN：</p>
+<span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mi>M</mi><mi>i</mi><mi>c</mi><mi>r</mi><mi>o</mi><mi>R</mi><mi>e</mi><mi>c</mi><mi>a</mi><mi>l</mi><mi>l</mi><mi mathvariant="normal">@</mi><mi>K</mi><mo>=</mo><mfrac><mrow><munder><mo>∑</mo><mi>q</mi></munder><mi>T</mi><msub><mi>P</mi><mi>q</mi></msub></mrow><mrow><munder><mo>∑</mo><mi>q</mi></munder><mo stretchy="false">(</mo><mi>T</mi><msub><mi>P</mi><mi>q</mi></msub><mo>+</mo><mi>F</mi><msub><mi>N</mi><mi>q</mi></msub><mo stretchy="false">)</mo></mrow></mfrac></mrow><annotation encoding="application/x-tex">MicroRecall@K=\frac{\sum_q TP_q}{\sum_q(TP_q+FN_q)}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6944em;"></span><span class="mord mathnormal" style="margin-right:0.109em;">M</span><span class="mord mathnormal">i</span><span class="mord mathnormal" style="margin-right:0.0278em;">cr</span><span class="mord mathnormal">o</span><span class="mord mathnormal" style="margin-right:0.0077em;">R</span><span class="mord mathnormal">ec</span><span class="mord mathnormal">a</span><span class="mord mathnormal" style="margin-right:0.0197em;">l</span><span class="mord mathnormal" style="margin-right:0.0197em;">l</span><span class="mord">@</span><span class="mord mathnormal" style="margin-right:0.0715em;">K</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:2.6976em;vertical-align:-1.1218em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.5758em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mop"><span class="mop op-symbol small-op" style="position:relative;top:0em;">∑</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.0017em;"><span style="top:-2.4003em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight" style="margin-right:0.0359em;">q</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.4358em;"><span></span></span></span></span></span></span><span class="mopen">(</span><span class="mord mathnormal" style="margin-right:0.1389em;">T</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.1389em;">P</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.1514em;"><span style="top:-2.55em;margin-left:-0.1389em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight" style="margin-right:0.0359em;">q</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2861em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord mathnormal" style="margin-right:0.1389em;">F</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.109em;">N</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.1514em;"><span style="top:-2.55em;margin-left:-0.109em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight" style="margin-right:0.0359em;">q</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2861em;"><span></span></span></span></span></span></span><span class="mclose">)</span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.8258em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mop"><span class="mop op-symbol small-op" style="position:relative;top:0em;">∑</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.0017em;"><span style="top:-2.4003em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight" style="margin-right:0.0359em;">q</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.4358em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal" style="margin-right:0.1389em;">T</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.1389em;">P</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.1514em;"><span style="top:-2.55em;margin-left:-0.1389em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight" style="margin-right:0.0359em;">q</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2861em;"><span></span></span></span></span></span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:1.1218em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span></span></span></span></span>
+<p>Micro 会让相关文档多的查询权重更大。生产评估通常同时报告：</p>
+<ul>
+<li>macro：普通用户的一次查询体验；</li>
+<li>micro：所有相关证据的总体覆盖；</li>
+<li>business-weighted：按收入、风险或流量加权；</li>
+<li>sliced：按语言、租户、意图、数据源、新旧文档拆分。</li>
+</ul>
+<h2 id="7-真正困难的是-ground-truth">7. 真正困难的是 Ground Truth</h2>
+<p>搜索相关性不是天然标签。构建 qrels（query relevance judgments）的方法包括：</p>
+<ul>
+<li>专家或标注员逐项判断；</li>
+<li>从客服解决记录、文档引用、点击和任务成功反推；</li>
+<li>多个系统结果做 pooling，再统一标注；</li>
+<li>LLM 预标注 + 人工审核；</li>
+<li>基于已知文档反向生成问题，再做质量筛选。</li>
+</ul>
+<p><strong>7.1 不完整标注偏差</strong></p>
+<p>未标注文档不等于不相关。新系统找到了旧系统从未暴露的好结果时，离线分数可能被低估。</p>
+<p>改进方式：</p>
+<ul>
+<li>汇聚 BM25、dense、新旧系统的候选后再标注；</li>
+<li>对系统间分歧样本优先人工复核；</li>
+<li>使用 graded relevance：完全支持、部分支持、仅背景、无关；</li>
+<li>定期补充线上失败、零结果和新鲜内容；</li>
+<li>记录标注准则版本与标注一致性。</li>
+</ul>
+<p><strong>7.2 点击不是纯相关性标签</strong></p>
+<p>点击受到位置、标题、UI、品牌和曝光影响。未点击结果可能只是没被看到。可使用随机化、interleaving、逆倾向加权或人工集校准，但不能把日志直接当真值。</p>
+<h2 id="8-多证据问题的-recall">8. 多证据问题的 Recall</h2>
+<p>一些问题只需任意一个证据，另一些问题要求完整证据集合：</p>
+<ul>
+<li><strong>Any-evidence success</strong>：至少命中一个足以回答的片段；</li>
+<li><strong>All-evidence recall</strong>：所需证据都被找到；</li>
+<li><strong>Entity coverage</strong>：关键实体是否全部覆盖；</li>
+<li><strong>Hop coverage</strong>：多跳推理每一跳是否找到依据。</li>
+</ul>
+<p>例如“版本 A 到 B 的行为变更和回滚方法”同时需要 release note 与 runbook。只找到一个，Hit@K 是成功，但端到端回答仍可能缺失。</p>
+<h2 id="9-提升-recall-的主要杠杆">9. 提升 Recall 的主要杠杆</h2>
+<p><strong>9.1 检索算法层</strong></p>
+<ul>
+<li>增大 HNSW <code>efSearch</code>、IVF <code>nprobe</code> 或 ANN 候选数；</li>
+<li>混合 BM25、dense、精确字段和实体检索；</li>
+<li>训练领域 embedding，加入 hard negatives；</li>
+<li>对短查询、代码、数字、跨语言采用不同路由；</li>
+<li>query expansion、multi-query 与拼写纠正。</li>
+</ul>
+<p><strong>9.2 数据与索引层</strong></p>
+<ul>
+<li>修复解析失败、OCR、表格和代码块丢失；</li>
+<li>调整 chunk 大小、overlap 与 parent-child；</li>
+<li>补全标题、层级、时间和实体元数据；</li>
+<li>缩短索引新鲜度和删除传播延迟；</li>
+<li>避免新旧 embedding 混用。</li>
+</ul>
+<p><strong>9.3 候选融合层</strong></p>
+<ul>
+<li>每个通路保留独立 quota，避免强势通路挤掉长尾；</li>
+<li>使用 RRF 或校准后的学习融合；</li>
+<li>去重时保留最佳 chunk，也保留 parent 关系；</li>
+<li>过滤感知 ANN，避免过滤后候选耗尽。</li>
+</ul>
+<h2 id="10-recall-与-precision-的工程权衡">10. Recall 与 Precision 的工程权衡</h2>
+<p>候选生成阶段通常偏向 Recall，精排和 Context 阶段逐步提高 Precision：</p>
+<img src="/images/go/02-recall-ranking-funnel.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
+<p>若最终答案错误，不应盲目增大 Context K。先定位 gold evidence 在哪一层消失：</p>
+<ol>
+<li>未进入 Top-1000：召回问题；</li>
+<li>进入候选但未进 Top-30：排序问题；</li>
+<li>进 Top-30 但 Context 未选中：上下文装配问题；</li>
+<li>已在 Context 却未正确使用：生成或提示问题。</li>
+</ol>
+<p><strong>11. 线上指标与 SLO</strong></p>
+<p>建议至少建立四组仪表盘：</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>组别</th><th>指标</th></tr></thead><tbody><tr><td>质量</td><td>Recall@K、Hit@K、分通路贡献、zero-result rate</td></tr><tr><td>系统</td><td>p50/p95/p99、timeout、fallback、候选数分布</td></tr><tr><td>数据</td><td>index lag、解析失败、无向量文档、删除传播时间</td></tr><tr><td>下游</td><td>rerank 入选率、context evidence coverage、答案支持率</td></tr></tbody></table>
+<p>Recall 无法对每次线上查询实时计算，因为通常不知道全部相关项。线上代理信号包括：</p>
+<ul>
+<li>用户改写同一查询；</li>
+<li>零结果后转人工或打开目录浏览；</li>
+<li>答案“无依据”或低置信度比例；</li>
+<li>被引用文档的最终任务成功率；</li>
+<li>抽样查询的持续人工评审。</li>
+</ul>
+<p><strong>12. 生产事故模式</strong></p>
+<p><strong>12.1 总 Recall 很高，关键租户却完全失效</strong></p>
+<p>大租户或主流语言掩盖小切片。必须按租户、语言、数据源和权限组设最低门槛，而不只是全局均值。</p>
+<p><strong>12.2 Offline Recall 上升，线上任务成功下降</strong></p>
+<p>可能原因：K 增大导致精排超时、Context 噪声增加；离线标签过时；新增召回结果不可访问；或指标与业务只需的“可回答证据”不一致。</p>
+<p><strong>12.3 ANN Recall 很高，业务 Recall 很低</strong></p>
+<p>ANN 忠实找到了 embedding 认为最近的向量，但 embedding 本身不理解领域语义，或相关文档未被正确解析和切分。</p>
+<p><strong>12.4 去重后 Recall 降低</strong></p>
+<p>用文档 ID 粗暴去重可能只保留一个段落，丢失同文档内其他必要证据。应区分近重复去除与多证据保留。</p>
+<p><strong>12.5 权限过滤让候选数骤降</strong></p>
+<p>后过滤把 ANN Top-K 大量剔除。应使用 pre-filter/filter-aware ANN，或按可见语料动态扩大 <code>num_candidates</code>，同时保持严格 ACL。</p>
+<p><strong>13. 实验与发布方法</strong></p>
+<p>一次 Recall 优化应保留证据链：</p>
+<ol>
+<li>明确要改善的查询切片和失败类型；</li>
+<li>冻结带版本的离线评估集；</li>
+<li>比较 Recall-延迟-成本 Pareto 曲线；</li>
+<li>shadow 新通路，观察候选差异和资源消耗；</li>
+<li>小流量 canary，检查下游排序、答案与超时；</li>
+<li>保留旧参数/旧索引的即时回滚能力；</li>
+<li>将新增失败样本回灌评估集。</li>
+</ol>
+<p>不要只报告“Recall@20 +3%”，还要报告每查询候选成本、p99、受益切片、退化切片和统计置信度。</p>
+<p><strong>14. 高级工程师面试题</strong></p>
+<blockquote>
+<p>[!question] - Recall@K 和 Hit@K 有什么区别？
+Recall@K 关心找到全部相关项中的多少；Hit@K 只关心是否至少命中一个。单证据问答可能用 Hit@K，多证据或合规检索更需要 Recall@K 和完整证据覆盖。</p>
+</blockquote>
+<blockquote>
+<p>[!question] - 为什么 Recall@100 提高，RAG 反而变差？
+正确证据可能虽进入候选但排名靠后；更大候选导致 reranker 超时或 Context 噪声；评估标签与可回答性不一致。需要追踪 evidence 在检索、排序、装配和生成每层的生存率。</p>
+</blockquote>
+<blockquote>
+<p>[!question] - 没有完整相关集合，如何评估 Recall？
+用多系统 pooling + 人工标注扩大 qrels，对差异结果主动采样；同时报告 Hit@K、任务成功和持续人工审计，并明确指标是对“已知相关集合”的估计，不冒充绝对 Recall。</p>
+</blockquote>
+<blockquote>
+<p>[!question] - 如何选择 K？
+在代表性切片上绘制 Recall、下游 nDCG/答案质量、p99 与成本曲线；选择边际 Recall 收益开始变小且 SLO 可满足的点。不同意图可用不同 K。</p>
+</blockquote>
+<blockquote>
+<p>[!question] - 召回下降如何快速定位？
+先区分数据缺失、过滤、检索模型与 ANN 近似损失；检查 source→parse→chunk→embed→index 每层计数，再比较 exact vector 与 ANN、无过滤与有过滤、旧索引与新索引的差异。</p>
+</blockquote>
+<p><strong>15. 上线检查清单</strong></p>
+<ul class="contains-task-list">
+<li class="task-list-item"><input type="checkbox" disabled> 指标明确区分 Recall、Hit Rate 和 ANN Recall</li>
+<li class="task-list-item"><input type="checkbox" disabled> qrels 来源、完整性与版本可追踪</li>
+<li class="task-list-item"><input type="checkbox" disabled> 关键业务采用分层指标与最低门槛</li>
+<li class="task-list-item"><input type="checkbox" disabled> 各阶段 K 独立配置和观测</li>
+<li class="task-list-item"><input type="checkbox" disabled> Recall 改动同时评估 p99、成本和下游质量</li>
+<li class="task-list-item"><input type="checkbox" disabled> 多证据问题使用 evidence-set coverage</li>
+<li class="task-list-item"><input type="checkbox" disabled> 过滤、去重和新鲜度进入回归测试</li>
+<li class="task-list-item"><input type="checkbox" disabled> shadow、canary、回滚参数已经准备</li>
+</ul>
+<p><strong>16. 延伸阅读</strong></p>
+<ul>
+<li>NIST TREC, <a href="https://trec.nist.gov/presentations/TREC9/overview/tsld014.htm" rel="noopener noreferrer" target="_blank">Recall and Precision</a></li>
+<li>NIST, <a href="https://trec.nist.gov/" rel="noopener noreferrer" target="_blank">Text REtrieval Conference</a></li>
+<li>Karpukhin et al., <a href="https://arxiv.org/abs/2004.04906" rel="noopener noreferrer" target="_blank">Dense Passage Retrieval</a></li>
+</ul>
+<p><strong>17. 与 Memory、Retrieval、Ranking、RAG 的对比</strong></p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>概念</th><th>核心产物</th><th>主要问题</th><th>代表指标</th></tr></thead><tbody><tr><td>Memory - Agent 如何记住、更新与遗忘</td><td>可复用的长期状态</td><td>什么值得记、如何更新与遗忘</td><td>写入准确率、检索命中、陈旧率</td></tr><tr><td>Retrieval - 从大规模信息中找到候选</td><td>候选集合</td><td>用什么索引和算法找到候选</td><td>Recall@K、延迟、新鲜度</td></tr><tr><td><strong>Recall</strong></td><td>候选覆盖度或候选阶段目标</td><td>漏了多少，分母是否可信</td><td>Recall@K、Hit@K、Coverage</td></tr><tr><td>Ranking - 从候选集合到最优顺序</td><td>有序候选</td><td>正确结果是否排在前面</td><td>nDCG、MRR、MAP</td></tr><tr><td>RAG - 从检索到可信生成的完整系统</td><td>基于外部证据的回答</td><td>检索证据能否被正确装配和使用</td><td>Faithfulness、Citation、Answer Quality</td></tr></tbody></table>
+<p>最关键的边界是：<strong>Retrieval 是过程，Recall 是这一过程的重要目标与度量；Ranking 优化顺序；RAG 消费结果；Memory 决定某类长期状态是否进入可检索集合。</strong></p></main><aside class="toc"><p class="toc-title">本页目录</p><ul><li class="toc-d2"><a href="#1-从混淆矩阵理解-recall">1. 从混淆矩阵理解 Recall</a></li><li class="toc-d2"><a href="#2-排序场景中的-recallk">2. 排序场景中的 Recall@K</a></li><li class="toc-d2"><a href="#3-容易混淆的几个指标">3. 容易混淆的几个指标</a></li><li class="toc-d2"><a href="#4-召回阶段不是单一算法">4. 召回阶段不是单一算法</a></li><li class="toc-d2"><a href="#5-k-是一个系统参数不是随手填的数字">5. K 是一个系统参数，不是随手填的数字</a></li><li class="toc-d2"><a href="#6-macromicro-与分层聚合">6. Macro、Micro 与分层聚合</a></li><li class="toc-d2"><a href="#7-真正困难的是-ground-truth">7. 真正困难的是 Ground Truth</a></li><li class="toc-d2"><a href="#8-多证据问题的-recall">8. 多证据问题的 Recall</a></li><li class="toc-d2"><a href="#9-提升-recall-的主要杠杆">9. 提升 Recall 的主要杠杆</a></li><li class="toc-d2"><a href="#10-recall-与-precision-的工程权衡">10. Recall 与 Precision 的工程权衡</a></li></ul></aside></div><div class="lightbox" id="lightbox" aria-hidden="true"><img alt=""></div><script type="module">var e=document.documentElement,t=document.getElementById(`themeToggle`),n={auto:`🖥️`,light:`☀️`,dark:`🌙`};function r(){var e=localStorage.getItem(`theme`);return e===`light`||e===`dark`?e:`auto`}function i(){var i=r();i===`auto`?e.removeAttribute(`data-theme`):e.setAttribute(`data-theme`,i),t.textContent=n[i]}i(),t.addEventListener(`click`,()=>{var e=[`auto`,`light`,`dark`],t=e[(e.indexOf(r())+1)%3];t===`auto`?localStorage.removeItem(`theme`):localStorage.setItem(`theme`,t),i()}),window.matchMedia(`(prefers-color-scheme: dark)`).addEventListener(`change`,()=>{r()===`auto`&&i()});var a=document.getElementById(`lightbox`),o=a.querySelector(`img`);document.querySelectorAll(`.prose img`).forEach(e=>{e.style.cursor=`zoom-in`,e.addEventListener(`click`,()=>{o.src=e.currentSrc||e.src,o.alt=e.alt,a.classList.add(`open`),a.setAttribute(`aria-hidden`,`false`)})}),a.addEventListener(`click`,()=>{a.classList.remove(`open`),a.setAttribute(`aria-hidden`,`true`)}),document.addEventListener(`keydown`,e=>{e.key===`Escape`&&a.click()});</script></body></html>

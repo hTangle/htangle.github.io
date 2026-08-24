@@ -1,0 +1,343 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Ranking：从候选集合到最优顺序</title><script>
+      (function () {
+        var s = localStorage.getItem('theme');
+        if (s === 'light' || s === 'dark') {
+          document.documentElement.setAttribute('data-theme', s);
+        }
+      })();
+    </script><link rel="stylesheet" href="/_astro/Base.C6O8tc7V.css"></head><body><header class="topbar"><a href="/" class="brand">HLDay</a><nav><a href="/">专题</a><a href="/posts/">博客</a><a href="https://github.com/hTangle" class="nav-github" aria-label="GitHub">GitHub</a></nav><button class="theme-toggle" id="themeToggle" type="button" title="切换主题（自动/浅色/深色）" aria-label="切换主题">🖥️</button></header><div class="layout"><aside class="booknav"><ul class="nav-tree"><li><p class="nav-group">Go</p><ul><li><p class="nav-subgroup">运行时基础</p><ul><li class><a href="/source-map/">源码环境与目录地图</a></li><li class><a href="/bootstrap/">程序启动流程</a></li></ul></li><li><p class="nav-subgroup">并发编程</p><ul><li class><a href="/gmp/">GMP 调度器</a></li><li class><a href="/netpoll/">网络轮询器</a></li><li class><a href="/timer/">定时器</a></li><li class><a href="/sync-lock/">同步和锁</a></li><li class><a href="/channel/">Channel</a></li><li class><a href="/context/">Context</a></li><li class><a href="/defer-panic/">defer/panic/recover</a></li></ul></li><li><p class="nav-subgroup">内存管理</p><ul><li class><a href="/memory-alloc/">内存分配器</a></li><li class><a href="/gc/">垃圾收集器</a></li><li class><a href="/stack/">栈空间管理</a></li></ul></li><li><p class="nav-subgroup">数据结构</p><ul><li class><a href="/type-metadata/">类型元数据与对象布局</a></li><li class><a href="/iface/">Interface 与动态调用</a></li><li class><a href="/generics/">泛型与字典传递</a></li><li class><a href="/array/">数组</a></li><li class><a href="/slice/">切片</a></li><li class><a href="/swiss-map/">哈希表 (Swiss Table)</a></li><li class><a href="/string/">字符串</a></li></ul></li></ul></li><li><p class="nav-group">Agent 开发</p><ul><li><p class="nav-subgroup">协议与调用</p><ul><li class><a href="/mcp/">MCP</a></li><li class><a href="/tool-call/">Tool Call</a></li><li class><a href="/skill/">Skill</a></li><li class><a href="/memory/">Memory</a></li></ul></li><li><p class="nav-subgroup">检索与排序</p><ul><li class><a href="/rag/">RAG</a></li><li class><a href="/retrieval/">Retrieval</a></li><li class><a href="/recall/">Recall</a></li><li class="active"><a href="/ranking/">Ranking</a></li></ul></li></ul></li></ul></aside><main class="prose"><h1>Ranking：从候选集合到最优顺序</h1><blockquote>
+<p>[!abstract] 一句话定义
+**Ranking 是根据查询、候选、用户和场景信号，为候选计算效用并生成最优顺序的过程。**它在有限展示位或 Context 预算中，把最有价值、最可信的结果放到前面。</p>
+</blockquote>
+<img src="/images/go/ranking-pipeline.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
+<p>Retrieval - 从大规模信息中找到候选 解决“可能相关的有哪些”，Ranking 解决“先看谁”。在 RAG - 从检索到可信生成的完整系统 中，排序不仅影响用户点击，也决定模型最终看见哪些证据，因此一次排序错误可能直接变成一次无依据回答。</p>
+<h2 id="1-排序不是一个-score-字段">1. 排序不是一个 <code>score</code> 字段</h2>
+<p>生产排序通常是漏斗，而不是单模型：</p>
+<img src="/images/go/01-multi-stage-ranking.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
+<p>每一层有不同预算：</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>层</th><th>目标</th><th>常见模型</th><th>约束</th></tr></thead><tbody><tr><td>召回打分</td><td>低成本覆盖</td><td>BM25、双塔、规则</td><td>毫秒级、大候选</td></tr><tr><td>粗排</td><td>快速淘汰明显无关项</td><td>线性模型、GBDT、轻量网络</td><td>特征可批量获取</td></tr><tr><td>精排</td><td>深度理解 query-document</td><td>Cross-Encoder、LLM reranker</td><td>GPU、批处理、超时</td></tr><tr><td>策略重排</td><td>满足产品与安全约束</td><td>规则、MMR、去重</td><td>可解释、可审计</td></tr></tbody></table>
+<h2 id="2-相关性分数的来源">2. 相关性分数的来源</h2>
+<p>一个简化排序目标可以写成：</p>
+<span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mi>S</mi><mi>c</mi><mi>o</mi><mi>r</mi><mi>e</mi><mo stretchy="false">(</mo><mi>d</mi><mi mathvariant="normal">∣</mi><mi>q</mi><mo separator="true">,</mo><mi>u</mi><mo separator="true">,</mo><mi>c</mi><mo stretchy="false">)</mo><mo>=</mo><msub><mi>w</mi><mi>r</mi></msub><mi>R</mi><mo stretchy="false">(</mo><mi>q</mi><mo separator="true">,</mo><mi>d</mi><mo stretchy="false">)</mo><mo>+</mo><msub><mi>w</mi><mi>f</mi></msub><mi>F</mi><mo stretchy="false">(</mo><mi>d</mi><mo stretchy="false">)</mo><mo>+</mo><msub><mi>w</mi><mi>a</mi></msub><mi>A</mi><mo stretchy="false">(</mo><mi>d</mi><mo stretchy="false">)</mo><mo>+</mo><msub><mi>w</mi><mi>p</mi></msub><mi>P</mi><mo stretchy="false">(</mo><mi>u</mi><mo separator="true">,</mo><mi>d</mi><mo stretchy="false">)</mo><mo>+</mo><msub><mi>w</mi><mi>b</mi></msub><mi>B</mi><mo stretchy="false">(</mo><mi>d</mi><mo separator="true">,</mo><mi>c</mi><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">Score(d|q,u,c)=
+w_rR(q,d)+w_fF(d)+w_aA(d)+w_pP(u,d)+w_bB(d,c)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.0576em;">S</span><span class="mord mathnormal" style="margin-right:0.0278em;">cor</span><span class="mord mathnormal">e</span><span class="mopen">(</span><span class="mord mathnormal">d</span><span class="mord">∣</span><span class="mord mathnormal" style="margin-right:0.0359em;">q</span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal">u</span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal">c</span><span class="mclose">)</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.0269em;">w</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.1514em;"><span style="top:-2.55em;margin-left:-0.0269em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight" style="margin-right:0.0278em;">r</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mord mathnormal" style="margin-right:0.0077em;">R</span><span class="mopen">(</span><span class="mord mathnormal" style="margin-right:0.0359em;">q</span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal">d</span><span class="mclose">)</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:1.0361em;vertical-align:-0.2861em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.0269em;">w</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3361em;"><span style="top:-2.55em;margin-left:-0.0269em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight" style="margin-right:0.1076em;">f</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2861em;"><span></span></span></span></span></span></span><span class="mord mathnormal" style="margin-right:0.1389em;">F</span><span class="mopen">(</span><span class="mord mathnormal">d</span><span class="mclose">)</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.0269em;">w</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.1514em;"><span style="top:-2.55em;margin-left:-0.0269em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">a</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mord mathnormal">A</span><span class="mopen">(</span><span class="mord mathnormal">d</span><span class="mclose">)</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:1.0361em;vertical-align:-0.2861em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.0269em;">w</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.1514em;"><span style="top:-2.55em;margin-left:-0.0269em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">p</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2861em;"><span></span></span></span></span></span></span><span class="mord mathnormal" style="margin-right:0.1389em;">P</span><span class="mopen">(</span><span class="mord mathnormal">u</span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal">d</span><span class="mclose">)</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.0269em;">w</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3361em;"><span style="top:-2.55em;margin-left:-0.0269em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">b</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mord mathnormal" style="margin-right:0.0502em;">B</span><span class="mopen">(</span><span class="mord mathnormal">d</span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal">c</span><span class="mclose">)</span></span></span></span></span>
+<ul>
+<li><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>R</mi></mrow><annotation encoding="application/x-tex">R</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.0077em;">R</span></span></span></span>：文本或语义相关性；</li>
+<li><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>F</mi></mrow><annotation encoding="application/x-tex">F</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.1389em;">F</span></span></span></span>：新鲜度；</li>
+<li><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>A</mi></mrow><annotation encoding="application/x-tex">A</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord mathnormal">A</span></span></span></span>：权威度/质量；</li>
+<li><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>P</mi></mrow><annotation encoding="application/x-tex">P</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.1389em;">P</span></span></span></span>：个性化；</li>
+<li><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>B</mi></mrow><annotation encoding="application/x-tex">B</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.0502em;">B</span></span></span></span>：业务或场景效用。</li>
+</ul>
+<p>难点不在写出加权和，而在：各信号如何标定、标签如何获得、约束如何表达、线上分布变化后是否仍有效。</p>
+<h2 id="3-bm25-与向量分数不能直接相加">3. BM25 与向量分数不能直接相加</h2>
+<p>BM25 没有固定上界，cosine 通常位于有限区间，dot product 又受向量模长影响。下面这种写法常造成静默错误：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="text"><code><span class="line"><span>final_score = 0.5 * bm25_score + 0.5 * cosine_score</span></span></code></pre>
+<p>“0.5”不表示两个通路贡献相等。可选方案：</p>
+<ul>
+<li>min-max、z-score 或分位数归一化，但要处理查询间分布差异；</li>
+<li>在标注集上学习融合权重；</li>
+<li>只用名次做 RRF；</li>
+<li>分查询意图采用不同融合策略。</li>
+</ul>
+<p>RRF：</p>
+<span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mi>R</mi><mi>R</mi><mi>F</mi><mo stretchy="false">(</mo><mi>d</mi><mo stretchy="false">)</mo><mo>=</mo><munder><mo>∑</mo><mrow><mi>r</mi><mo>∈</mo><mi>R</mi></mrow></munder><mfrac><mn>1</mn><mrow><mi>k</mi><mo>+</mo><mi>r</mi><mi>a</mi><mi>n</mi><msub><mi>k</mi><mi>r</mi></msub><mo stretchy="false">(</mo><mi>d</mi><mo stretchy="false">)</mo></mrow></mfrac></mrow><annotation encoding="application/x-tex">RRF(d)=\sum_{r\in R}\frac{1}{k+rank_r(d)}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.0077em;">R</span><span class="mord mathnormal" style="margin-right:0.0077em;">R</span><span class="mord mathnormal" style="margin-right:0.1389em;">F</span><span class="mopen">(</span><span class="mord mathnormal">d</span><span class="mclose">)</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:2.6431em;vertical-align:-1.3217em;"></span><span class="mop op-limits"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.05em;"><span style="top:-1.8557em;margin-left:0em;"><span class="pstrut" style="height:3.05em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight" style="margin-right:0.0278em;">r</span><span class="mrel mtight">∈</span><span class="mord mathnormal mtight" style="margin-right:0.0077em;">R</span></span></span></span><span style="top:-3.05em;"><span class="pstrut" style="height:3.05em;"></span><span><span class="mop op-symbol large-op">∑</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:1.3217em;"><span></span></span></span></span></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.3214em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.0315em;">k</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord mathnormal" style="margin-right:0.0278em;">r</span><span class="mord mathnormal">an</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.0315em;">k</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.1514em;"><span style="top:-2.55em;margin-left:-0.0315em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight" style="margin-right:0.0278em;">r</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mopen">(</span><span class="mord mathnormal">d</span><span class="mclose">)</span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">1</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.936em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span></span></span></span></span>
+<p>RRF 稳定、易回滚；学习融合上限更高，但需要可靠标签和漂移监控。</p>
+<h2 id="4-bi-encoderlate-interaction-与-cross-encoder">4. Bi-Encoder、Late Interaction 与 Cross-Encoder</h2>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>架构</th><th>交互方式</th><th align="right">可预计算</th><th>质量/成本</th><th>典型位置</th></tr></thead><tbody><tr><td>Bi-Encoder</td><td>query/document 各自编码</td><td align="right">文档可</td><td>快、细粒度交互弱</td><td>召回</td></tr><tr><td>Late Interaction</td><td>token 表示延后交互</td><td align="right">文档部分可</td><td>中等</td><td>高质量检索/粗排</td></tr><tr><td>Cross-Encoder</td><td>query 与 document 联合编码</td><td align="right">不可</td><td>准、昂贵</td><td>Top-N 精排</td></tr><tr><td>LLM Reranker</td><td>指令化比较或打分</td><td align="right">不可</td><td>语义强、延迟和稳定性风险高</td><td>小候选精排</td></tr></tbody></table>
+<p>Cross-Encoder 能看到词序、否定和细粒度对应关系，但成本近似随候选数线性增加。生产上要控制：候选长度、批大小、动态 batching、最大等待时间、GPU 饱和度和 fallback。</p>
+<h2 id="5-learning-to-rank学的不是分类而是顺序">5. Learning to Rank：学的不是分类，而是顺序</h2>
+<p><strong>5.1 Pointwise</strong></p>
+<p>把每个 query-document 当独立样本，预测相关性或点击概率。实现简单，但目标与“列表顺序”不完全一致。</p>
+<p><strong>5.2 Pairwise</strong></p>
+<p>学习同一查询下 <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msup><mi>d</mi><mo>+</mo></msup></mrow><annotation encoding="application/x-tex">d^+</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.7713em;"></span><span class="mord"><span class="mord mathnormal">d</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.7713em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mbin mtight">+</span></span></span></span></span></span></span></span></span></span></span> 应排在 <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msup><mi>d</mi><mo>−</mo></msup></mrow><annotation encoding="application/x-tex">d^-</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.7713em;"></span><span class="mord"><span class="mord mathnormal">d</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.7713em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mbin mtight">−</span></span></span></span></span></span></span></span></span></span></span> 前：</p>
+<span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><msub><mi mathvariant="script">L</mi><mrow><mi>p</mi><mi>a</mi><mi>i</mi><mi>r</mi></mrow></msub><mo>=</mo><mi>log</mi><mo>⁡</mo><mo stretchy="false">(</mo><mn>1</mn><mo>+</mo><msup><mi>e</mi><mrow><mo>−</mo><mo stretchy="false">(</mo><mi>s</mi><mo stretchy="false">(</mo><mi>q</mi><mo separator="true">,</mo><msup><mi>d</mi><mo>+</mo></msup><mo stretchy="false">)</mo><mo>−</mo><mi>s</mi><mo stretchy="false">(</mo><mi>q</mi><mo separator="true">,</mo><msup><mi>d</mi><mo>−</mo></msup><mo stretchy="false">)</mo><mo stretchy="false">)</mo></mrow></msup><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">\mathcal{L}_{pair}=\log(1+e^{-(s(q,d^+)-s(q,d^-))})</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.9694em;vertical-align:-0.2861em;"></span><span class="mord"><span class="mord mathcal">L</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3117em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">p</span><span class="mord mathnormal mtight">ai</span><span class="mord mathnormal mtight" style="margin-right:0.0278em;">r</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2861em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mop">lo<span style="margin-right:0.0139em;">g</span></span><span class="mopen">(</span><span class="mord">1</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:1.2564em;vertical-align:-0.25em;"></span><span class="mord"><span class="mord mathnormal">e</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:1.0064em;"><span style="top:-3.113em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">−</span><span class="mopen mtight">(</span><span class="mord mathnormal mtight">s</span><span class="mopen mtight">(</span><span class="mord mathnormal mtight" style="margin-right:0.0359em;">q</span><span class="mpunct mtight">,</span><span class="mord mtight"><span class="mord mathnormal mtight">d</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8477em;"><span style="top:-2.931em;margin-right:0.0714em;"><span class="pstrut" style="height:2.5em;"></span><span class="sizing reset-size3 size1 mtight"><span class="mbin mtight">+</span></span></span></span></span></span></span></span><span class="mclose mtight">)</span><span class="mbin mtight">−</span><span class="mord mathnormal mtight">s</span><span class="mopen mtight">(</span><span class="mord mathnormal mtight" style="margin-right:0.0359em;">q</span><span class="mpunct mtight">,</span><span class="mord mtight"><span class="mord mathnormal mtight">d</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8477em;"><span style="top:-2.931em;margin-right:0.0714em;"><span class="pstrut" style="height:2.5em;"></span><span class="sizing reset-size3 size1 mtight"><span class="mbin mtight">−</span></span></span></span></span></span></span></span><span class="mclose mtight">))</span></span></span></span></span></span></span></span></span><span class="mclose">)</span></span></span></span></span>
+<p>更贴近顺序，但没有直接区分榜首交换与榜尾交换的价值。</p>
+<p><strong>5.3 Listwise</strong></p>
+<p>直接基于整张列表和排名指标优化。LambdaRank/LambdaMART 用名次交换对 nDCG 的影响来调节梯度，能让顶部位置获得更合理的优化权重。</p>
+<div class="markdown-alert markdown-alert-important" dir="auto">
+<p class="markdown-alert-title" dir="auto"><svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M0 1.75C0 .784.784 0 1.75 0h12.5C15.216 0 16 .784 16 1.75v9.5A1.75 1.75 0 0 1 14.25 13H8.06l-2.573 2.573A1.458 1.458 0 0 1 3 14.543V13H1.75A1.75 1.75 0 0 1 0 11.25Zm1.75-.25a.25.25 0 0 0-.25.25v9.5c0 .138.112.25.25.25h2a.75.75 0 0 1 .75.75v2.19l2.72-2.72a.749.749 0 0 1 .53-.22h6.5a.25.25 0 0 0 .25-.25v-9.5a.25.25 0 0 0-.25-.25Zm7 2.25v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 9a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>IMPORTANT</p>
+<p> 标签问题往往比模型问题更大
+点击、停留时长、采纳和转化都受位置、曝光、UI、品牌以及推荐策略影响。没有偏差校正时，模型容易学会“过去排得高的继续排高”。</p>
+</div>
+<h2 id="6-特征工程与泄漏">6. 特征工程与泄漏</h2>
+<p>生产排序特征通常分为：</p>
+<ul>
+<li>Query：语言、意图、长度、实体、时间敏感度；</li>
+<li>Document：质量、权威性、发布时间、流行度、类型；</li>
+<li>Cross：词项匹配、语义相似、实体重合、查询-文档交互；</li>
+<li>User/Context：权限、角色、历史偏好、设备、地区；</li>
+<li>System：召回通路、原始 rank、索引版本。</li>
+</ul>
+<p>特征必须满足 point-in-time correctness。用“点击后才生成的数据”训练点击前排序，就是标签泄漏。离线训练与在线服务还要避免 training-serving skew：同名特征的计算逻辑、时区、缺失值和版本必须一致。</p>
+<h2 id="7-freshnessauthority-与-relevance-的冲突">7. Freshness、Authority 与 Relevance 的冲突</h2>
+<p>最新不一定最权威，权威不一定回答当前版本。可采用：</p>
+<ul>
+<li>时间衰减：<span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>f</mi><mi>r</mi><mi>e</mi><mi>s</mi><mi>h</mi><mi>n</mi><mi>e</mi><mi>s</mi><mi>s</mi><mo>=</mo><msup><mi>e</mi><mrow><mo>−</mo><mi>λ</mi><mi mathvariant="normal">Δ</mi><mi>t</mi></mrow></msup></mrow><annotation encoding="application/x-tex">freshness=e^{-\lambda \Delta t}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.8889em;vertical-align:-0.1944em;"></span><span class="mord mathnormal" style="margin-right:0.1076em;">f</span><span class="mord mathnormal" style="margin-right:0.0278em;">r</span><span class="mord mathnormal">es</span><span class="mord mathnormal">hn</span><span class="mord mathnormal">ess</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.8491em;"></span><span class="mord"><span class="mord mathnormal">e</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8491em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">−</span><span class="mord mathnormal mtight">λ</span><span class="mord mtight">Δ</span><span class="mord mathnormal mtight">t</span></span></span></span></span></span></span></span></span></span></span></span>；</li>
+<li>查询意图触发：只有“最新、当前版本”等意图增强时效；</li>
+<li>文档有效期：<code>valid_from</code> / <code>valid_to</code>；</li>
+<li>权威源白名单与冲突标记；</li>
+<li>对旧版本文档做版本过滤，而不是只靠降权。</li>
+</ul>
+<p>在技术知识库中，“v1 的高权威文档”不能因为质量高就压过“v2 的当前文档”。版本是硬约束还是软特征，需要产品明确。</p>
+<h2 id="8-去重与多样性">8. 去重与多样性</h2>
+<p>Top-K 被同一文档的相邻 Chunk 占满，会浪费 Context。常见措施：</p>
+<ul>
+<li>URL/document ID 去重；</li>
+<li>文本指纹或 embedding 相似度近重复去重；</li>
+<li>每个来源、文档、实体设置 quota；</li>
+<li>MMR（Maximal Marginal Relevance）平衡相关与新颖：</li>
+</ul>
+<span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mi>M</mi><mi>M</mi><mi>R</mi><mo stretchy="false">(</mo><mi>d</mi><mo stretchy="false">)</mo><mo>=</mo><mi>λ</mi><mi>S</mi><mi>i</mi><mi>m</mi><mo stretchy="false">(</mo><mi>q</mi><mo separator="true">,</mo><mi>d</mi><mo stretchy="false">)</mo><mo>−</mo><mo stretchy="false">(</mo><mn>1</mn><mo>−</mo><mi>λ</mi><mo stretchy="false">)</mo><munder><mrow><mi>max</mi><mo>⁡</mo></mrow><mrow><mi>s</mi><mo>∈</mo><mi>S</mi></mrow></munder><mi>S</mi><mi>i</mi><mi>m</mi><mo stretchy="false">(</mo><mi>d</mi><mo separator="true">,</mo><mi>s</mi><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">MMR(d)=\lambda Sim(q,d)-(1-\lambda)\max_{s\in S}Sim(d,s)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.109em;">M</span><span class="mord mathnormal" style="margin-right:0.109em;">M</span><span class="mord mathnormal" style="margin-right:0.0077em;">R</span><span class="mopen">(</span><span class="mord mathnormal">d</span><span class="mclose">)</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal">λ</span><span class="mord mathnormal" style="margin-right:0.0576em;">S</span><span class="mord mathnormal">im</span><span class="mopen">(</span><span class="mord mathnormal" style="margin-right:0.0359em;">q</span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal">d</span><span class="mclose">)</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">−</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mopen">(</span><span class="mord">1</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">−</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:1.5217em;vertical-align:-0.7717em;"></span><span class="mord mathnormal">λ</span><span class="mclose">)</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mop op-limits"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.4306em;"><span style="top:-2.3557em;margin-left:0em;"><span class="pstrut" style="height:3em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">s</span><span class="mrel mtight">∈</span><span class="mord mathnormal mtight" style="margin-right:0.0576em;">S</span></span></span></span><span style="top:-3em;"><span class="pstrut" style="height:3em;"></span><span><span class="mop">max</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.7717em;"><span></span></span></span></span></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal" style="margin-right:0.0576em;">S</span><span class="mord mathnormal">im</span><span class="mopen">(</span><span class="mord mathnormal">d</span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal">s</span><span class="mclose">)</span></span></span></span></span>
+<p>但去重不能损害多证据完整性：同一文档的“配置方法”和“回滚限制”可能都是必要证据。应基于证据单元，而非简单一文档只留一条。</p>
+<h2 id="9-业务规则要与相关性模型分层">9. 业务规则要与相关性模型分层</h2>
+<p>置顶、合规下架、广告、来源配额和多样性属于策略层。推荐：</p>
+<ul>
+<li>模型输出相关性/效用分数；</li>
+<li>策略引擎执行硬约束和可审计规则；</li>
+<li>最终结果记录每次升降位原因；</li>
+<li>规则配置版本化、有有效期、有 owner；</li>
+<li>紧急关闭开关可独立于模型发布。</li>
+</ul>
+<p>把大量隐式业务规则塞进模型特征，会使问题难解释、难回滚，也很难回答“为什么这条结果排第一”。</p>
+<h2 id="10-排序评估指标">10. 排序评估指标</h2>
+<p><strong>10.1 MRR</strong></p>
+<p>关注第一个相关结果：</p>
+<span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mi>M</mi><mi>R</mi><mi>R</mi><mo>=</mo><mfrac><mn>1</mn><mrow><mi mathvariant="normal">∣</mi><mi>Q</mi><mi mathvariant="normal">∣</mi></mrow></mfrac><munder><mo>∑</mo><mrow><mi>q</mi><mo>∈</mo><mi>Q</mi></mrow></munder><mfrac><mn>1</mn><mrow><mi>r</mi><mi>a</mi><mi>n</mi><msub><mi>k</mi><mi>q</mi></msub></mrow></mfrac></mrow><annotation encoding="application/x-tex">MRR=\frac{1}{|Q|}\sum_{q\in Q}\frac{1}{rank_q}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.109em;">M</span><span class="mord mathnormal" style="margin-right:0.0077em;">R</span><span class="mord mathnormal" style="margin-right:0.0077em;">R</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:2.7519em;vertical-align:-1.4304em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.3214em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">∣</span><span class="mord mathnormal">Q</span><span class="mord">∣</span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">1</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.936em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mop op-limits"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.05em;"><span style="top:-1.8557em;margin-left:0em;"><span class="pstrut" style="height:3.05em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight" style="margin-right:0.0359em;">q</span><span class="mrel mtight">∈</span><span class="mord mathnormal mtight">Q</span></span></span></span><span style="top:-3.05em;"><span class="pstrut" style="height:3.05em;"></span><span><span class="mop op-symbol large-op">∑</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:1.4304em;"><span></span></span></span></span></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.3214em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.0278em;">r</span><span class="mord mathnormal">an</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.0315em;">k</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.1514em;"><span style="top:-2.55em;margin-left:-0.0315em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight" style="margin-right:0.0359em;">q</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2861em;"><span></span></span></span></span></span></span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">1</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.9721em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span></span></span></span></span>
+<p>适合只需一个正确答案的导航型查询。</p>
+<p><strong>10.2 DCG 与 nDCG</strong></p>
+<span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mi>D</mi><mi>C</mi><mi>G</mi><mi mathvariant="normal">@</mi><mi>K</mi><mo>=</mo><munderover><mo>∑</mo><mrow><mi>i</mi><mo>=</mo><mn>1</mn></mrow><mi>K</mi></munderover><mfrac><mrow><msup><mn>2</mn><mrow><mi>r</mi><mi>e</mi><msub><mi>l</mi><mi>i</mi></msub></mrow></msup><mo>−</mo><mn>1</mn></mrow><mrow><msub><mrow><mi>log</mi><mo>⁡</mo></mrow><mn>2</mn></msub><mo stretchy="false">(</mo><mi>i</mi><mo>+</mo><mn>1</mn><mo stretchy="false">)</mo></mrow></mfrac><mo separator="true">,</mo><mspace width="2em"></mspace><mi>n</mi><mi>D</mi><mi>C</mi><mi>G</mi><mi mathvariant="normal">@</mi><mi>K</mi><mo>=</mo><mfrac><mrow><mi>D</mi><mi>C</mi><mi>G</mi><mi mathvariant="normal">@</mi><mi>K</mi></mrow><mrow><mi>I</mi><mi>D</mi><mi>C</mi><mi>G</mi><mi mathvariant="normal">@</mi><mi>K</mi></mrow></mfrac></mrow><annotation encoding="application/x-tex">DCG@K=\sum_{i=1}^{K}\frac{2^{rel_i}-1}{\log_2(i+1)},\qquad
+nDCG@K=\frac{DCG@K}{IDCG@K}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6944em;"></span><span class="mord mathnormal" style="margin-right:0.0278em;">D</span><span class="mord mathnormal" style="margin-right:0.0715em;">C</span><span class="mord mathnormal">G</span><span class="mord">@</span><span class="mord mathnormal" style="margin-right:0.0715em;">K</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:3.106em;vertical-align:-1.2777em;"></span><span class="mop op-limits"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.8283em;"><span style="top:-1.8723em;margin-left:0em;"><span class="pstrut" style="height:3.05em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">i</span><span class="mrel mtight">=</span><span class="mord mtight">1</span></span></span></span><span style="top:-3.05em;"><span class="pstrut" style="height:3.05em;"></span><span><span class="mop op-symbol large-op">∑</span></span></span><span style="top:-4.3em;margin-left:0em;"><span class="pstrut" style="height:3.05em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight" style="margin-right:0.0715em;">K</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:1.2777em;"><span></span></span></span></span></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.5261em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mop"><span class="mop">lo<span style="margin-right:0.0139em;">g</span></span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.207em;"><span style="top:-2.4559em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight">2</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2441em;"><span></span></span></span></span></span></span><span class="mopen">(</span><span class="mord mathnormal">i</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord">1</span><span class="mclose">)</span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord"><span class="mord">2</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8491em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight" style="margin-right:0.0278em;">r</span><span class="mord mathnormal mtight">e</span><span class="mord mtight"><span class="mord mathnormal mtight" style="margin-right:0.0197em;">l</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3281em;"><span style="top:-2.357em;margin-left:-0.0197em;margin-right:0.0714em;"><span class="pstrut" style="height:2.5em;"></span><span class="sizing reset-size3 size1 mtight"><span class="mord mathnormal mtight">i</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.143em;"><span></span></span></span></span></span></span></span></span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">−</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord">1</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.936em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span><span class="mpunct">,</span><span class="mspace" style="margin-right:2em;"></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal">n</span><span class="mord mathnormal" style="margin-right:0.0278em;">D</span><span class="mord mathnormal" style="margin-right:0.0715em;">C</span><span class="mord mathnormal">G</span><span class="mord">@</span><span class="mord mathnormal" style="margin-right:0.0715em;">K</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:2.0574em;vertical-align:-0.686em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.3714em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.0785em;">I</span><span class="mord mathnormal" style="margin-right:0.0278em;">D</span><span class="mord mathnormal" style="margin-right:0.0715em;">C</span><span class="mord mathnormal">G</span><span class="mord">@</span><span class="mord mathnormal" style="margin-right:0.0715em;">K</span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.0278em;">D</span><span class="mord mathnormal" style="margin-right:0.0715em;">C</span><span class="mord mathnormal">G</span><span class="mord">@</span><span class="mord mathnormal" style="margin-right:0.0715em;">K</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.686em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span></span></span></span></span>
+<p>nDCG 支持等级相关性，并强调顶部位置。若问题需要多个证据，还应补充 evidence-set coverage。</p>
+<p><strong>10.3 线上指标</strong></p>
+<ul>
+<li>CTR、长点击、改写率、任务完成率；</li>
+<li>RAG 答案正确率、证据支持率、引用采纳率；</li>
+<li>零结果与无答案率；</li>
+<li>p95/p99、超时率、fallback 率；</li>
+<li>每次查询 GPU 时间与成本。</li>
+</ul>
+<p>离线 nDCG 上升不保证线上价值上升。线上指标也可能被 UI 或位置偏差污染，两者必须闭环。</p>
+<h2 id="11-offlineshadowab-与-interleaving">11. Offline、Shadow、A/B 与 Interleaving</h2>
+<img src="/images/go/02-ranking-release-flow.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
+<ul>
+<li><strong>Offline</strong>：快速筛掉明显退化，适合大量实验；</li>
+<li><strong>Shadow</strong>：验证服务容量、候选差异和模型稳定性；</li>
+<li><strong>Canary</strong>：控制故障半径，关注 p99、超时和安全约束；</li>
+<li><strong>A/B</strong>：测真实用户与任务指标；</li>
+<li><strong>Interleaving</strong>：把两套排序交织展示，更敏感比较偏好，但实现和解释更复杂。</li>
+</ul>
+<p>发布必须明确 guardrail：ACL 违规、错误率、p99、成本、关键切片 nDCG 任一越界即自动降级或回滚。</p>
+<p><strong>12. 服务化与容量设计</strong></p>
+<p>Cross-Encoder 排序服务的主要杠杆：</p>
+<ul>
+<li>截断 query 和 document 长度；</li>
+<li>按 token 数做动态 batching，而非只按样本数；</li>
+<li>限制最大 batch 等待，避免低流量时反而延迟高；</li>
+<li>对相同 query-document-version 缓存，但缓存键包含模型版本；</li>
+<li>CPU 轻量模型作为 GPU 故障 fallback；</li>
+<li>设置候选上限、超时和 partial result 语义；</li>
+<li>模型加载、warmup、显存和 OOM 独立监控。</li>
+</ul>
+<p>粗略成本：</p>
+<span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mi>C</mi><mi>o</mi><mi>m</mi><mi>p</mi><mi>u</mi><mi>t</mi><mi>e</mi><mo>∝</mo><mi>Q</mi><mi>P</mi><mi>S</mi><mo>×</mo><mi>C</mi><mi>a</mi><mi>n</mi><mi>d</mi><mi>i</mi><mi>d</mi><mi>a</mi><mi>t</mi><mi>e</mi><mi>s</mi><mo>×</mo><mi>T</mi><mi>o</mi><mi>k</mi><mi>e</mi><mi>n</mi><mi>s</mi><mo>×</mo><mi>M</mi><mi>o</mi><mi>d</mi><mi>e</mi><mi>l</mi><mi>C</mi><mi>o</mi><mi>s</mi><mi>t</mi></mrow><annotation encoding="application/x-tex">Compute \propto QPS\times Candidates\times Tokens\times ModelCost</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.8778em;vertical-align:-0.1944em;"></span><span class="mord mathnormal" style="margin-right:0.0715em;">C</span><span class="mord mathnormal">o</span><span class="mord mathnormal">m</span><span class="mord mathnormal">p</span><span class="mord mathnormal">u</span><span class="mord mathnormal">t</span><span class="mord mathnormal">e</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">∝</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.8778em;vertical-align:-0.1944em;"></span><span class="mord mathnormal" style="margin-right:0.1389em;">QP</span><span class="mord mathnormal" style="margin-right:0.0576em;">S</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:0.7778em;vertical-align:-0.0833em;"></span><span class="mord mathnormal" style="margin-right:0.0715em;">C</span><span class="mord mathnormal">an</span><span class="mord mathnormal">d</span><span class="mord mathnormal">i</span><span class="mord mathnormal">d</span><span class="mord mathnormal">a</span><span class="mord mathnormal">t</span><span class="mord mathnormal">es</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:0.7778em;vertical-align:-0.0833em;"></span><span class="mord mathnormal" style="margin-right:0.1389em;">T</span><span class="mord mathnormal">o</span><span class="mord mathnormal" style="margin-right:0.0315em;">k</span><span class="mord mathnormal">e</span><span class="mord mathnormal">n</span><span class="mord mathnormal">s</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:0.6944em;"></span><span class="mord mathnormal" style="margin-right:0.109em;">M</span><span class="mord mathnormal">o</span><span class="mord mathnormal">d</span><span class="mord mathnormal">e</span><span class="mord mathnormal" style="margin-right:0.0197em;">l</span><span class="mord mathnormal" style="margin-right:0.0715em;">C</span><span class="mord mathnormal">os</span><span class="mord mathnormal">t</span></span></span></span></span>
+<p>把候选从 50 提到 200 可能让 Recall 略升，却让精排成本近四倍。必须看端到端 Pareto 曲线。</p>
+<p><strong>13. 降级设计</strong></p>
+<p>排序服务不是“要么全好，要么报错”。建议降级链：</p>
+<ol>
+<li>主 Cross-Encoder；</li>
+<li>轻量 reranker；</li>
+<li>RRF 或已校准的检索分数；</li>
+<li>单路检索原始名次；</li>
+<li>明确无结果/暂不可用。</li>
+</ol>
+<p>每次响应应记录实际走到哪级。否则主服务长期超时、系统一直 fallback，业务表面可用但质量已经静默下降。</p>
+<p><strong>14. 高频生产事故</strong></p>
+<p><strong>14.1 分数融合后某一路永远胜出</strong></p>
+<p><strong>根因</strong>：不同分数尺度直接加权，或模型升级后分布漂移。<br>
+<strong>处理</strong>：查看分通路 score histogram、名次贡献，先切 RRF 稳住，再重做校准。</p>
+<p><strong>14.2 Reranker 超时但接口仍是 200</strong></p>
+<p>Fallback 吞掉错误，质量下降未告警。应把 <code>ranking_tier</code>、timeout、fallback_reason 写入 trace，并为 fallback rate 建 SLO。</p>
+<p><strong>14.3 离线效果很好，线上热门内容越来越热门</strong></p>
+<p>点击训练产生 position/popularity feedback loop。加入探索流量、偏差校正、时间切分验证与内容多样性约束。</p>
+<p><strong>14.4 Top-K 都是同一文档的相邻 Chunk</strong></p>
+<p>粗粒度去重和 MMR 可改善，但先确认下游是否需要同文档多证据。记录 <code>document_id</code> 与 section path 是前提。</p>
+<p><strong>14.5 新模型只让平均指标上升</strong></p>
+<p>代码查询、非英语、低频租户可能显著退化。上线门槛应包含关键切片不退化约束，而非只看 overall nDCG。</p>
+<p><strong>15. 可观测性设计</strong></p>
+<p>每次排序 trace 建议包含：</p>
+<pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="yaml"><code><span class="line"><span style="color:#85E89D">query_id</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">q_123</span></span>
+<span class="line"><span style="color:#85E89D">retrieval_version</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">hybrid_v7</span></span>
+<span class="line"><span style="color:#85E89D">ranker_version</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">ce_v12</span></span>
+<span class="line"><span style="color:#85E89D">policy_version</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">policy_2026_08</span></span>
+<span class="line"><span style="color:#85E89D">candidate_count</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">180</span></span>
+<span class="line"><span style="color:#85E89D">reranked_count</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">50</span></span>
+<span class="line"><span style="color:#85E89D">ranking_tier</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">primary</span></span>
+<span class="line"><span style="color:#85E89D">latency_ms</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#85E89D">  feature_fetch</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">8</span></span>
+<span class="line"><span style="color:#85E89D">  inference</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">37</span></span>
+<span class="line"><span style="color:#85E89D">  policy</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">2</span></span>
+<span class="line"><span style="color:#85E89D">top_results</span><span style="color:#E1E4E8">:</span></span>
+<span class="line"><span style="color:#E1E4E8">  - </span><span style="color:#85E89D">document_id</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">doc_42</span></span>
+<span class="line"><span style="color:#85E89D">    retrieval_rank</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">17</span></span>
+<span class="line"><span style="color:#85E89D">    final_rank</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">1</span></span>
+<span class="line"><span style="color:#85E89D">    score</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">0.91</span></span>
+<span class="line"><span style="color:#85E89D">    reason_codes</span><span style="color:#E1E4E8">: [</span><span style="color:#9ECBFF">semantic_match</span><span style="color:#E1E4E8">, </span><span style="color:#9ECBFF">current_version</span><span style="color:#E1E4E8">]</span></span></code></pre>
+<p>正文、敏感特征和用户身份应脱敏；但版本、阶段耗时、名次变化和 reason code 必须可诊断。</p>
+<p><strong>16. 上线清单</strong></p>
+<ul class="contains-task-list">
+<li class="task-list-item"><input type="checkbox" disabled> 候选召回与排序责任边界清楚</li>
+<li class="task-list-item"><input type="checkbox" disabled> 分数融合做过标定，或使用可解释的 RRF</li>
+<li class="task-list-item"><input type="checkbox" disabled> 训练标签考虑曝光和位置偏差</li>
+<li class="task-list-item"><input type="checkbox" disabled> 特征满足 point-in-time correctness</li>
+<li class="task-list-item"><input type="checkbox" disabled> 去重/多样性不会破坏多证据完整性</li>
+<li class="task-list-item"><input type="checkbox" disabled> 离线指标覆盖关键业务切片</li>
+<li class="task-list-item"><input type="checkbox" disabled> shadow、canary、A/B 和回滚路径齐备</li>
+<li class="task-list-item"><input type="checkbox" disabled> GPU 容量、batch、超时和 fallback 有 SLO</li>
+<li class="task-list-item"><input type="checkbox" disabled> 每次响应能追踪 ranker/policy 版本与降级层级</li>
+</ul>
+<p><strong>17. 高级工程师面试题</strong></p>
+<blockquote>
+<p>[!question] - 为什么精排不能解决低 Recall？
+精排只能重排已有候选，正确文档不在候选集合中就没有机会。应追踪 gold evidence 在每层的生存率，先解决召回缺口。</p>
+</blockquote>
+<blockquote>
+<p>[!question] - Pointwise、Pairwise、Listwise 怎么选？
+Pointwise 简单且易使用绝对标签；Pairwise 直接学习偏序；Listwise 更贴近 nDCG 等列表指标但训练复杂。选择取决于标签形态、规模、解释要求和线上目标，工程上 GBDT/LambdaMART 仍常用于结构化特征。</p>
+</blockquote>
+<blockquote>
+<p>[!question] - Cross-Encoder 如何控制线上成本？
+先用高召回+轻粗排缩小候选，限制输入长度，按 token 动态 batching，缓存稳定候选，设置超时和多级 fallback，并基于质量-延迟-成本曲线选择候选数。</p>
+</blockquote>
+<blockquote>
+<p>[!question] - 如何判断排序模型学到了位置偏差？
+比较随机或探索流量数据，按历史曝光位分层评估，检查位置特征移除后的变化；可用逆倾向加权、随机化实验或 interleaving 获得更可靠偏好。</p>
+</blockquote>
+<blockquote>
+<p>[!question] - RAG 排序与网页搜索排序有什么不同？
+RAG 的消费者是模型，除单项相关性外还要优化证据互补、可引用性、权威与 token 预算。重复的高分 Chunk 可能对网页展示尚可，却会挤占 Context 并降低生成质量。</p>
+</blockquote>
+<p><strong>18. 延伸阅读</strong></p>
+<ul>
+<li>Khattab &#x26; Zaharia, <a href="https://arxiv.org/abs/2004.12832" rel="noopener noreferrer" target="_blank">ColBERT</a></li>
+<li>Yan et al., <a href="https://arxiv.org/abs/2204.01500" rel="noopener noreferrer" target="_blank">A General Framework for Debiased Learning to Rank</a></li>
+<li>Elastic, <a href="https://www.elastic.co/docs/reference/elasticsearch/rest-apis/reciprocal-rank-fusion" rel="noopener noreferrer" target="_blank">Reciprocal rank fusion</a></li>
+<li>Elastic, <a href="https://www.elastic.co/guide/en/elasticsearch/reference/8.19/re-ranking-overview.html" rel="noopener noreferrer" target="_blank">Reranking overview</a></li>
+</ul>
+<p><strong>19. 与 Memory、Retrieval、Recall、RAG 的对比</strong></p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>概念</th><th>决策对象</th><th>典型输出</th><th>失败后果</th></tr></thead><tbody><tr><td>Memory - Agent 如何记住、更新与遗忘</td><td>哪些状态长期保存及何时更新</td><td>记忆项及其版本</td><td>Agent 稳定记错、越权或过时</td></tr><tr><td>Retrieval - 从大规模信息中找到候选</td><td>去哪里、用什么方式找</td><td>无序或粗排候选</td><td>正确结果未进入候选</td></tr><tr><td>Recall - 召回阶段与 Recall@K 指标</td><td>候选覆盖是否足够</td><td>覆盖指标和缺口</td><td>对漏检没有正确认知</td></tr><tr><td><strong>Ranking</strong></td><td>候选应按什么顺序出现</td><td>有序结果与分数</td><td>正确证据被噪声挤出顶部</td></tr><tr><td>RAG - 从检索到可信生成的完整系统</td><td>如何用外部证据生成回答</td><td>答案、引用和证据链</td><td>无依据、错误引用或不完整答案</td></tr></tbody></table>
+<p>一条清晰的责任链是：<strong>Retrieval 提供“可选集合”，Recall 衡量集合完整度，Ranking 压缩为“最值得看的顺序”，RAG 再把顶部证据装配给模型；Memory 则为其中一部分长期状态提供来源。</strong></p></main><aside class="toc"><p class="toc-title">本页目录</p><ul><li class="toc-d2"><a href="#1-排序不是一个-score-字段">1. 排序不是一个 score 字段</a></li><li class="toc-d2"><a href="#2-相关性分数的来源">2. 相关性分数的来源</a></li><li class="toc-d2"><a href="#3-bm25-与向量分数不能直接相加">3. BM25 与向量分数不能直接相加</a></li><li class="toc-d2"><a href="#4-bi-encoderlate-interaction-与-cross-encoder">4. Bi-Encoder、Late Interaction 与 Cross-Encoder</a></li><li class="toc-d2"><a href="#5-learning-to-rank学的不是分类而是顺序">5. Learning to Rank：学的不是分类，而是顺序</a></li><li class="toc-d2"><a href="#6-特征工程与泄漏">6. 特征工程与泄漏</a></li><li class="toc-d2"><a href="#7-freshnessauthority-与-relevance-的冲突">7. Freshness、Authority 与 Relevance 的冲突</a></li><li class="toc-d2"><a href="#8-去重与多样性">8. 去重与多样性</a></li><li class="toc-d2"><a href="#9-业务规则要与相关性模型分层">9. 业务规则要与相关性模型分层</a></li><li class="toc-d2"><a href="#10-排序评估指标">10. 排序评估指标</a></li><li class="toc-d2"><a href="#11-offlineshadowab-与-interleaving">11. Offline、Shadow、A/B 与 Interleaving</a></li></ul></aside></div><div class="lightbox" id="lightbox" aria-hidden="true"><img alt=""></div><script type="module">var e=document.documentElement,t=document.getElementById(`themeToggle`),n={auto:`🖥️`,light:`☀️`,dark:`🌙`};function r(){var e=localStorage.getItem(`theme`);return e===`light`||e===`dark`?e:`auto`}function i(){var i=r();i===`auto`?e.removeAttribute(`data-theme`):e.setAttribute(`data-theme`,i),t.textContent=n[i]}i(),t.addEventListener(`click`,()=>{var e=[`auto`,`light`,`dark`],t=e[(e.indexOf(r())+1)%3];t===`auto`?localStorage.removeItem(`theme`):localStorage.setItem(`theme`,t),i()}),window.matchMedia(`(prefers-color-scheme: dark)`).addEventListener(`change`,()=>{r()===`auto`&&i()});var a=document.getElementById(`lightbox`),o=a.querySelector(`img`);document.querySelectorAll(`.prose img`).forEach(e=>{e.style.cursor=`zoom-in`,e.addEventListener(`click`,()=>{o.src=e.currentSrc||e.src,o.alt=e.alt,a.classList.add(`open`),a.setAttribute(`aria-hidden`,`false`)})}),a.addEventListener(`click`,()=>{a.classList.remove(`open`),a.setAttribute(`aria-hidden`,`true`)}),document.addEventListener(`keydown`,e=>{e.key===`Escape`&&a.click()});</script></body></html>
