@@ -5,10 +5,11 @@
           document.documentElement.setAttribute('data-theme', s);
         }
       })();
-    </script><link rel="stylesheet" href="/_astro/Base.C6O8tc7V.css"></head><body><header class="topbar"><a href="/" class="brand">HLDay</a><nav><a href="/">专题</a><a href="/posts/">博客</a><a href="https://github.com/hTangle" class="nav-github" aria-label="GitHub">GitHub</a></nav><button class="theme-toggle" id="themeToggle" type="button" title="切换主题（自动/浅色/深色）" aria-label="切换主题">🖥️</button></header><div class="layout"><aside class="booknav"><ul class="nav-tree"><li><p class="nav-group">Go</p><ul><li><p class="nav-subgroup">运行时基础</p><ul><li class><a href="/source-map/">源码环境与目录地图</a></li><li class><a href="/bootstrap/">程序启动流程</a></li></ul></li><li><p class="nav-subgroup">并发编程</p><ul><li class><a href="/gmp/">GMP 调度器</a></li><li class><a href="/netpoll/">网络轮询器</a></li><li class><a href="/timer/">定时器</a></li><li class><a href="/sync-lock/">同步和锁</a></li><li class><a href="/channel/">Channel</a></li><li class><a href="/context/">Context</a></li><li class><a href="/defer-panic/">defer/panic/recover</a></li></ul></li><li><p class="nav-subgroup">内存管理</p><ul><li class><a href="/memory-alloc/">内存分配器</a></li><li class><a href="/gc/">垃圾收集器</a></li><li class><a href="/stack/">栈空间管理</a></li></ul></li><li><p class="nav-subgroup">数据结构</p><ul><li class><a href="/type-metadata/">类型元数据与对象布局</a></li><li class><a href="/iface/">Interface 与动态调用</a></li><li class><a href="/generics/">泛型与字典传递</a></li><li class><a href="/array/">数组</a></li><li class><a href="/slice/">切片</a></li><li class><a href="/swiss-map/">哈希表 (Swiss Table)</a></li><li class><a href="/string/">字符串</a></li></ul></li></ul></li><li><p class="nav-group">Agent 开发</p><ul><li><p class="nav-subgroup">协议与调用</p><ul><li class><a href="/mcp/">MCP</a></li><li class><a href="/tool-call/">Tool Call</a></li><li class><a href="/skill/">Skill</a></li><li class="active"><a href="/memory/">Memory</a></li></ul></li><li><p class="nav-subgroup">检索与排序</p><ul><li class><a href="/rag/">RAG</a></li><li class><a href="/retrieval/">Retrieval</a></li><li class><a href="/recall/">Recall</a></li><li class><a href="/ranking/">Ranking</a></li></ul></li></ul></li></ul></aside><main class="prose"><h1>Memory：Agent 如何记住、更新与遗忘</h1><blockquote>
-<p>[!abstract] 一句话定义
+    </script><link rel="stylesheet" href="/_astro/Base.C6O8tc7V.css"></head><body><header class="topbar"><a href="/" class="brand">HLDay</a><nav><a href="/">专题</a><a href="/posts/">博客</a><a href="https://github.com/hTangle" class="nav-github" aria-label="GitHub">GitHub</a></nav><button class="theme-toggle" id="themeToggle" type="button" title="切换主题（自动/浅色/深色）" aria-label="切换主题">🖥️</button></header><div class="layout"><aside class="booknav"><ul class="nav-tree"><li><p class="nav-group">Go</p><ul><li><p class="nav-subgroup">运行时基础</p><ul><li class><a href="/source-map/">源码环境与目录地图</a></li><li class><a href="/bootstrap/">程序启动流程</a></li></ul></li><li><p class="nav-subgroup">并发编程</p><ul><li class><a href="/gmp/">GMP 调度器</a></li><li class><a href="/netpoll/">网络轮询器</a></li><li class><a href="/timer/">定时器</a></li><li class><a href="/sync-lock/">同步和锁</a></li><li class><a href="/channel/">Channel</a></li><li class><a href="/context/">Context</a></li><li class><a href="/defer-panic/">defer/panic/recover</a></li></ul></li><li><p class="nav-subgroup">内存管理</p><ul><li class><a href="/memory-alloc/">内存分配器</a></li><li class><a href="/gc/">垃圾收集器</a></li><li class><a href="/stack/">栈空间管理</a></li></ul></li><li><p class="nav-subgroup">数据结构</p><ul><li class><a href="/type-metadata/">类型元数据与对象布局</a></li><li class><a href="/iface/">Interface 与动态调用</a></li><li class><a href="/generics/">泛型与字典传递</a></li><li class><a href="/array/">数组</a></li><li class><a href="/slice/">切片</a></li><li class><a href="/swiss-map/">哈希表 (Swiss Table)</a></li><li class><a href="/string/">字符串</a></li></ul></li></ul></li><li><p class="nav-group">Agent 开发</p><ul><li><p class="nav-subgroup">协议与调用</p><ul><li class><a href="/mcp/">MCP</a></li><li class><a href="/tool-call/">Tool Call</a></li><li class><a href="/skill/">Skill</a></li><li class="active"><a href="/memory/">Memory</a></li></ul></li><li><p class="nav-subgroup">检索与排序</p><ul><li class><a href="/rag/">RAG</a></li><li class><a href="/retrieval/">Retrieval</a></li><li class><a href="/recall/">Recall</a></li><li class><a href="/ranking/">Ranking</a></li></ul></li></ul></li></ul></aside><main class="prose"><h1>Memory：Agent 如何记住、更新与遗忘</h1><div class="markdown-alert markdown-alert-note" dir="auto">
+<p class="markdown-alert-title" dir="auto"><svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>NOTE</p>
+<p> 一句话定义
 **Agent Memory 是一套跨轮次保存、组织、更新、检索和遗忘信息的系统机制。**它不是简单保存聊天记录，而是把经历、事实、用户偏好与可复用流程转化为未来任务可安全调用的状态。</p>
-</blockquote>
+</div>
 <img src="/images/go/agent-memory-system.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
 <p>把模型想成一次只拿到一张工作台的工程师：Context Window 是当前桌面，Memory Store 是档案室，Memory Writer 决定什么值得归档，Retrieval - 从大规模信息中找到候选 找档案，Recall - 召回阶段与 Recall@K 指标 衡量有没有漏掉，Ranking - 从候选集合到最优顺序 决定先看什么。==档案越多不等于记忆越好；错误、过时或越权的记忆会让 Agent 稳定地做错事。==</p>
 <h2 id="1-memory-解决的不是上下文不够长这么简单">1. Memory 解决的不是“上下文不够长”这么简单</h2>
@@ -23,7 +24,7 @@
 <li>控制写入噪声与检索成本。</li>
 </ul>
 <img src="/images/go/01-memory-write-read-flow.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
-<h2 id="2-memorycontexthistoryrag-的边界">2. Memory、Context、History、RAG 的边界</h2>
+<p><strong>2. Memory、Context、History、RAG 的边界</strong></p>
 
 
 
@@ -128,7 +129,7 @@
 <p>当用户明确要求“记住”时提高 FutureUse，但仍不能绕过敏感数据策略。</p>
 <p><strong>5.4 提交前校验</strong></p>
 <img src="/images/go/03-memory-write-validation.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
-<h2 id="6-生产级-memory-schema">6. 生产级 Memory Schema</h2>
+<p><strong>6. 生产级 Memory Schema</strong></p>
 <p>只存 <code>text + embedding</code> 很快会遇到治理问题。建议至少包含：</p>
 
 
@@ -239,7 +240,7 @@
 <li>User deletion：用户可查看、纠正和删除；</li>
 <li>Compliance retention：按数据类型执行保留期限。</li>
 </ul>
-<h2 id="9-冲突纠正与事实演进">9. 冲突、纠正与事实演进</h2>
+<p><strong>9. 冲突、纠正与事实演进</strong></p>
 <p>当出现“发布分支是 A”和“发布分支是 B”时，不要立即覆盖：</p>
 <ol>
 <li>比较来源可信度；</li>
@@ -329,34 +330,41 @@
 <li class="task-list-item"><input type="checkbox" disabled> 有索引 lag、越权命中和 stale hit 告警。</li>
 </ul>
 <p><strong>15. 高级工程师面试追问</strong></p>
-<blockquote>
-<p>[!question] - Q1：Memory 与长 Context 的区别？
+<div class="markdown-alert markdown-alert-tip" dir="auto">
+<p class="markdown-alert-title" dir="auto"><svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8 1.5c-2.363 0-4 1.69-4 3.75 0 .984.424 1.625.984 2.304l.214.253c.223.264.47.556.673.848.284.411.537.896.621 1.49a.75.75 0 0 1-1.484.211c-.04-.282-.163-.547-.37-.847a8.456 8.456 0 0 0-.542-.68c-.084-.1-.173-.205-.268-.32C3.201 7.75 2.5 6.766 2.5 5.25 2.5 2.31 4.863 0 8 0s5.5 2.31 5.5 5.25c0 1.516-.701 2.5-1.328 3.259-.095.115-.184.22-.268.319-.207.245-.383.453-.541.681-.208.3-.33.565-.37.847a.751.751 0 0 1-1.485-.212c.084-.593.337-1.078.621-1.489.203-.292.45-.584.673-.848.075-.088.147-.173.213-.253.561-.679.985-1.32.985-2.304 0-2.06-1.637-3.75-4-3.75ZM5.75 12h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1 0-1.5ZM6 15.25a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1-.75-.75Z"></path></svg>TIP</p>
+<p> - Q1：Memory 与长 Context 的区别？
 长 Context 是一次推理的工作区，成本随输入增长且缺乏跨会话治理；Memory 是外部状态系统，有写入选择、索引、版本、权限、过期和删除。生产系统通常从 Memory 检索少量内容装配进 Context。</p>
-</blockquote>
-<blockquote>
-<p>[!question] - Q2：为什么不能把全部聊天记录做向量检索？
+</div>
+<div class="markdown-alert markdown-alert-tip" dir="auto">
+<p class="markdown-alert-title" dir="auto"><svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8 1.5c-2.363 0-4 1.69-4 3.75 0 .984.424 1.625.984 2.304l.214.253c.223.264.47.556.673.848.284.411.537.896.621 1.49a.75.75 0 0 1-1.484.211c-.04-.282-.163-.547-.37-.847a8.456 8.456 0 0 0-.542-.68c-.084-.1-.173-.205-.268-.32C3.201 7.75 2.5 6.766 2.5 5.25 2.5 2.31 4.863 0 8 0s5.5 2.31 5.5 5.25c0 1.516-.701 2.5-1.328 3.259-.095.115-.184.22-.268.319-.207.245-.383.453-.541.681-.208.3-.33.565-.37.847a.751.751 0 0 1-1.485-.212c.084-.593.337-1.078.621-1.489.203-.292.45-.584.673-.848.075-.088.147-.173.213-.253.561-.679.985-1.32.985-2.304 0-2.06-1.637-3.75-4-3.75ZM5.75 12h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1 0-1.5ZM6 15.25a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1-.75-.75Z"></path></svg>TIP</p>
+<p> - Q2：为什么不能把全部聊天记录做向量检索？
 原始记录重复、含噪、含过时指令和敏感数据；片段缺少事实有效时间与作用域。需要抽取、去重、证据、版本和 ACL，原始历史只作为审计来源。</p>
-</blockquote>
-<blockquote>
-<p>[!question] - Q3：Memory 的事实冲突怎么处理？
+</div>
+<div class="markdown-alert markdown-alert-tip" dir="auto">
+<p class="markdown-alert-title" dir="auto"><svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8 1.5c-2.363 0-4 1.69-4 3.75 0 .984.424 1.625.984 2.304l.214.253c.223.264.47.556.673.848.284.411.537.896.621 1.49a.75.75 0 0 1-1.484.211c-.04-.282-.163-.547-.37-.847a8.456 8.456 0 0 0-.542-.68c-.084-.1-.173-.205-.268-.32C3.201 7.75 2.5 6.766 2.5 5.25 2.5 2.31 4.863 0 8 0s5.5 2.31 5.5 5.25c0 1.516-.701 2.5-1.328 3.259-.095.115-.184.22-.268.319-.207.245-.383.453-.541.681-.208.3-.33.565-.37.847a.751.751 0 0 1-1.485-.212c.084-.593.337-1.078.621-1.489.203-.292.45-.584.673-.848.075-.088.147-.173.213-.253.561-.679.985-1.32.985-2.304 0-2.06-1.637-3.75-4-3.75ZM5.75 12h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1 0-1.5ZM6 15.25a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1-.75-.75Z"></path></svg>TIP</p>
+<p> - Q3：Memory 的事实冲突怎么处理？
 保留来源和双时间，按作用域与可信度判断；新事实 supersede 旧事实而非覆盖；无法判断则询问。查询历史时间点时可重建当时有效事实。</p>
-</blockquote>
-<blockquote>
-<p>[!question] - Q4：怎样评估 Memory 系统？
+</div>
+<div class="markdown-alert markdown-alert-tip" dir="auto">
+<p class="markdown-alert-title" dir="auto"><svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8 1.5c-2.363 0-4 1.69-4 3.75 0 .984.424 1.625.984 2.304l.214.253c.223.264.47.556.673.848.284.411.537.896.621 1.49a.75.75 0 0 1-1.484.211c-.04-.282-.163-.547-.37-.847a8.456 8.456 0 0 0-.542-.68c-.084-.1-.173-.205-.268-.32C3.201 7.75 2.5 6.766 2.5 5.25 2.5 2.31 4.863 0 8 0s5.5 2.31 5.5 5.25c0 1.516-.701 2.5-1.328 3.259-.095.115-.184.22-.268.319-.207.245-.383.453-.541.681-.208.3-.33.565-.37.847a.751.751 0 0 1-1.485-.212c.084-.593.337-1.078.621-1.489.203-.292.45-.584.673-.848.075-.088.147-.173.213-.253.561-.679.985-1.32.985-2.304 0-2.06-1.637-3.75-4-3.75ZM5.75 12h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1 0-1.5ZM6 15.25a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1-.75-.75Z"></path></svg>TIP</p>
+<p> - Q4：怎样评估 Memory 系统？
 分解为写入精度、检索 Recall/Ranking、上下文使用正确率和端到端长期任务收益；加入跨租户、删除、冲突、过时和注入测试。只测向量相似度不够。</p>
-</blockquote>
-<blockquote>
-<p>[!question] - Q5：Semantic Memory 与 RAG 文档库有什么区别？
+</div>
+<div class="markdown-alert markdown-alert-tip" dir="auto">
+<p class="markdown-alert-title" dir="auto"><svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8 1.5c-2.363 0-4 1.69-4 3.75 0 .984.424 1.625.984 2.304l.214.253c.223.264.47.556.673.848.284.411.537.896.621 1.49a.75.75 0 0 1-1.484.211c-.04-.282-.163-.547-.37-.847a8.456 8.456 0 0 0-.542-.68c-.084-.1-.173-.205-.268-.32C3.201 7.75 2.5 6.766 2.5 5.25 2.5 2.31 4.863 0 8 0s5.5 2.31 5.5 5.25c0 1.516-.701 2.5-1.328 3.259-.095.115-.184.22-.268.319-.207.245-.383.453-.541.681-.208.3-.33.565-.37.847a.751.751 0 0 1-1.485-.212c.084-.593.337-1.078.621-1.489.203-.292.45-.584.673-.848.075-.088.147-.173.213-.253.561-.679.985-1.32.985-2.304 0-2.06-1.637-3.75-4-3.75ZM5.75 12h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1 0-1.5ZM6 15.25a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1-.75-.75Z"></path></svg>TIP</p>
+<p> - Q5：Semantic Memory 与 RAG 文档库有什么区别？
 Semantic Memory 是从特定主体经历中形成、会演进且受主体作用域约束的事实；RAG 文档库通常是共享的外部知识语料。技术栈可相似，写入权、治理和时间语义不同。</p>
-</blockquote>
-<blockquote>
-<p>[!question] - Q6：如何做到可遗忘？
+</div>
+<div class="markdown-alert markdown-alert-tip" dir="auto">
+<p class="markdown-alert-title" dir="auto"><svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8 1.5c-2.363 0-4 1.69-4 3.75 0 .984.424 1.625.984 2.304l.214.253c.223.264.47.556.673.848.284.411.537.896.621 1.49a.75.75 0 0 1-1.484.211c-.04-.282-.163-.547-.37-.847a8.456 8.456 0 0 0-.542-.68c-.084-.1-.173-.205-.268-.32C3.201 7.75 2.5 6.766 2.5 5.25 2.5 2.31 4.863 0 8 0s5.5 2.31 5.5 5.25c0 1.516-.701 2.5-1.328 3.259-.095.115-.184.22-.268.319-.207.245-.383.453-.541.681-.208.3-.33.565-.37.847a.751.751 0 0 1-1.485-.212c.084-.593.337-1.078.621-1.489.203-.292.45-.584.673-.848.075-.088.147-.173.213-.253.561-.679.985-1.32.985-2.304 0-2.06-1.637-3.75-4-3.75ZM5.75 12h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1 0-1.5ZM6 15.25a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1-.75-.75Z"></path></svg>TIP</p>
+<p> - Q6：如何做到可遗忘？
 建立可追踪派生关系和 tombstone；删除覆盖元数据、索引、缓存、总结和备份策略；读取回源验证 active 状态；用审计证明在约定时间内完成。</p>
-</blockquote>
-<blockquote>
-<p>[!question] - Q7：Memory Writer 用 LLM 还是规则？
+</div>
+<div class="markdown-alert markdown-alert-tip" dir="auto">
+<p class="markdown-alert-title" dir="auto"><svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8 1.5c-2.363 0-4 1.69-4 3.75 0 .984.424 1.625.984 2.304l.214.253c.223.264.47.556.673.848.284.411.537.896.621 1.49a.75.75 0 0 1-1.484.211c-.04-.282-.163-.547-.37-.847a8.456 8.456 0 0 0-.542-.68c-.084-.1-.173-.205-.268-.32C3.201 7.75 2.5 6.766 2.5 5.25 2.5 2.31 4.863 0 8 0s5.5 2.31 5.5 5.25c0 1.516-.701 2.5-1.328 3.259-.095.115-.184.22-.268.319-.207.245-.383.453-.541.681-.208.3-.33.565-.37.847a.751.751 0 0 1-1.485-.212c.084-.593.337-1.078.621-1.489.203-.292.45-.584.673-.848.075-.088.147-.173.213-.253.561-.679.985-1.32.985-2.304 0-2.06-1.637-3.75-4-3.75ZM5.75 12h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1 0-1.5ZM6 15.25a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1-.75-.75Z"></path></svg>TIP</p>
+<p> - Q7：Memory Writer 用 LLM 还是规则？
 组合使用。LLM 做语义抽取和归纳，规则/Schema 做敏感数据、作用域、类型、证据、去重和状态转换；高风险长期规则需要确认。不能让 LLM 单独拥有最终写权限。</p>
-</blockquote>
+</div>
 <p><strong>16. 参考资料</strong></p>
 <ul>
 <li><a href="https://arxiv.org/abs/2304.03442" rel="noopener noreferrer" target="_blank">Generative Agents: Interactive Simulacra of Human Behavior</a></li>
@@ -407,7 +415,8 @@ Semantic Memory 是从特定主体经历中形成、会演进且受主体作用�
 
 
 <table><thead><tr><th>概念</th><th>核心问题</th><th>输入 → 输出</th><th>在 Memory 中的位置</th></tr></thead><tbody><tr><td>Memory</td><td>什么值得跨时间保存、更新和遗忘</td><td>事件 → 受治理的长期状态</td><td>完整生命周期</td></tr><tr><td>Retrieval</td><td>从大集合怎样快速找候选</td><td>Query + Corpus → Candidates</td><td>读取子系统</td></tr><tr><td>Recall</td><td>相关内容有没有漏掉</td><td>结果 + Ground Truth → 覆盖率</td><td>读取评测指标/目标</td></tr><tr><td>Ranking</td><td>候选顺序是否最有用</td><td>Candidates → Ordered Top-K</td><td>检索后的排序</td></tr><tr><td>RAG</td><td>如何用外部证据生成答案</td><td>Query + Evidence → Grounded Answer</td><td>可消费 Memory 的上层架构</td></tr></tbody></table>
-<blockquote>
-<p>[!summary] 最短记忆法
+<div class="markdown-alert markdown-alert-note" dir="auto">
+<p class="markdown-alert-title" dir="auto"><svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>NOTE</p>
+<p> 最短记忆法
 <strong>Memory 是可演进的档案系统；Retrieval 找档案，Recall 检查漏没漏，Ranking 决定先读哪份，RAG 用这些证据回答。</strong></p>
-</blockquote></main><aside class="toc"><p class="toc-title">本页目录</p><ul><li class="toc-d2"><a href="#1-memory-解决的不是上下文不够长这么简单">1. Memory 解决的不是“上下文不够长”这么简单</a></li><li class="toc-d2"><a href="#2-memorycontexthistoryrag-的边界">2. Memory、Context、History、RAG 的边界</a></li><li class="toc-d2"><a href="#3-记忆类型按用途而不是按数据库分类">3. 记忆类型：按用途而不是按数据库分类</a></li><li class="toc-d2"><a href="#4-memory-生命周期">4. Memory 生命周期</a></li><li class="toc-d2"><a href="#5-写入策略什么值得记住">5. 写入策略：什么值得记住</a></li><li class="toc-d2"><a href="#6-生产级-memory-schema">6. 生产级 Memory Schema</a></li><li class="toc-d2"><a href="#7-检索相关不等于应该使用">7. 检索：相关不等于应该使用</a></li><li class="toc-d2"><a href="#8-consolidationreflection-与遗忘">8. Consolidation、Reflection 与遗忘</a></li><li class="toc-d2"><a href="#9-冲突纠正与事实演进">9. 冲突、纠正与事实演进</a></li><li class="toc-d2"><a href="#10-安全隐私与租户隔离">10. 安全、隐私与租户隔离</a></li></ul></aside></div><div class="lightbox" id="lightbox" aria-hidden="true"><img alt=""></div><script type="module">var e=document.documentElement,t=document.getElementById(`themeToggle`),n={auto:`🖥️`,light:`☀️`,dark:`🌙`};function r(){var e=localStorage.getItem(`theme`);return e===`light`||e===`dark`?e:`auto`}function i(){var i=r();i===`auto`?e.removeAttribute(`data-theme`):e.setAttribute(`data-theme`,i),t.textContent=n[i]}i(),t.addEventListener(`click`,()=>{var e=[`auto`,`light`,`dark`],t=e[(e.indexOf(r())+1)%3];t===`auto`?localStorage.removeItem(`theme`):localStorage.setItem(`theme`,t),i()}),window.matchMedia(`(prefers-color-scheme: dark)`).addEventListener(`change`,()=>{r()===`auto`&&i()});var a=document.getElementById(`lightbox`),o=a.querySelector(`img`);document.querySelectorAll(`.prose img`).forEach(e=>{e.style.cursor=`zoom-in`,e.addEventListener(`click`,()=>{o.src=e.currentSrc||e.src,o.alt=e.alt,a.classList.add(`open`),a.setAttribute(`aria-hidden`,`false`)})}),a.addEventListener(`click`,()=>{a.classList.remove(`open`),a.setAttribute(`aria-hidden`,`true`)}),document.addEventListener(`keydown`,e=>{e.key===`Escape`&&a.click()});</script></body></html>
+</div></main><aside class="toc"><p class="toc-title">本页目录</p><ul><li class="toc-d2"><a href="#1-memory-解决的不是上下文不够长这么简单">1. Memory 解决的不是“上下文不够长”这么简单</a></li><li class="toc-d2"><a href="#3-记忆类型按用途而不是按数据库分类">3. 记忆类型：按用途而不是按数据库分类</a></li><li class="toc-d2"><a href="#4-memory-生命周期">4. Memory 生命周期</a></li><li class="toc-d2"><a href="#5-写入策略什么值得记住">5. 写入策略：什么值得记住</a></li><li class="toc-d2"><a href="#7-检索相关不等于应该使用">7. 检索：相关不等于应该使用</a></li><li class="toc-d2"><a href="#8-consolidationreflection-与遗忘">8. Consolidation、Reflection 与遗忘</a></li><li class="toc-d2"><a href="#10-安全隐私与租户隔离">10. 安全、隐私与租户隔离</a></li></ul></aside></div><div class="lightbox" id="lightbox" aria-hidden="true"><img alt=""></div><script type="module">var e=document.documentElement,t=document.getElementById(`themeToggle`),n={auto:`🖥️`,light:`☀️`,dark:`🌙`};function r(){var e=localStorage.getItem(`theme`);return e===`light`||e===`dark`?e:`auto`}function i(){var i=r();i===`auto`?e.removeAttribute(`data-theme`):e.setAttribute(`data-theme`,i),t.textContent=n[i]}i(),t.addEventListener(`click`,()=>{var e=[`auto`,`light`,`dark`],t=e[(e.indexOf(r())+1)%3];t===`auto`?localStorage.removeItem(`theme`):localStorage.setItem(`theme`,t),i()}),window.matchMedia(`(prefers-color-scheme: dark)`).addEventListener(`change`,()=>{r()===`auto`&&i()});var a=document.getElementById(`lightbox`),o=a.querySelector(`img`);document.querySelectorAll(`.prose img`).forEach(e=>{e.style.cursor=`zoom-in`,e.addEventListener(`click`,()=>{o.src=e.currentSrc||e.src,o.alt=e.alt,a.classList.add(`open`),a.setAttribute(`aria-hidden`,`false`)})}),a.addEventListener(`click`,()=>{a.classList.remove(`open`),a.setAttribute(`aria-hidden`,`true`)}),document.addEventListener(`keydown`,e=>{e.key===`Escape`&&a.click()});</script></body></html>

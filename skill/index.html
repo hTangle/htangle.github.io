@@ -5,10 +5,11 @@
           document.documentElement.setAttribute('data-theme', s);
         }
       })();
-    </script><link rel="stylesheet" href="/_astro/Base.C6O8tc7V.css"></head><body><header class="topbar"><a href="/" class="brand">HLDay</a><nav><a href="/">专题</a><a href="/posts/">博客</a><a href="https://github.com/hTangle" class="nav-github" aria-label="GitHub">GitHub</a></nav><button class="theme-toggle" id="themeToggle" type="button" title="切换主题（自动/浅色/深色）" aria-label="切换主题">🖥️</button></header><div class="layout"><aside class="booknav"><ul class="nav-tree"><li><p class="nav-group">Go</p><ul><li><p class="nav-subgroup">运行时基础</p><ul><li class><a href="/source-map/">源码环境与目录地图</a></li><li class><a href="/bootstrap/">程序启动流程</a></li></ul></li><li><p class="nav-subgroup">并发编程</p><ul><li class><a href="/gmp/">GMP 调度器</a></li><li class><a href="/netpoll/">网络轮询器</a></li><li class><a href="/timer/">定时器</a></li><li class><a href="/sync-lock/">同步和锁</a></li><li class><a href="/channel/">Channel</a></li><li class><a href="/context/">Context</a></li><li class><a href="/defer-panic/">defer/panic/recover</a></li></ul></li><li><p class="nav-subgroup">内存管理</p><ul><li class><a href="/memory-alloc/">内存分配器</a></li><li class><a href="/gc/">垃圾收集器</a></li><li class><a href="/stack/">栈空间管理</a></li></ul></li><li><p class="nav-subgroup">数据结构</p><ul><li class><a href="/type-metadata/">类型元数据与对象布局</a></li><li class><a href="/iface/">Interface 与动态调用</a></li><li class><a href="/generics/">泛型与字典传递</a></li><li class><a href="/array/">数组</a></li><li class><a href="/slice/">切片</a></li><li class><a href="/swiss-map/">哈希表 (Swiss Table)</a></li><li class><a href="/string/">字符串</a></li></ul></li></ul></li><li><p class="nav-group">Agent 开发</p><ul><li><p class="nav-subgroup">协议与调用</p><ul><li class><a href="/mcp/">MCP</a></li><li class><a href="/tool-call/">Tool Call</a></li><li class="active"><a href="/skill/">Skill</a></li><li class><a href="/memory/">Memory</a></li></ul></li><li><p class="nav-subgroup">检索与排序</p><ul><li class><a href="/rag/">RAG</a></li><li class><a href="/retrieval/">Retrieval</a></li><li class><a href="/recall/">Recall</a></li><li class><a href="/ranking/">Ranking</a></li></ul></li></ul></li></ul></aside><main class="prose"><h1>Skill：给 Agent 的可复用工作手册</h1><blockquote>
-<p>[!abstract] 一句话定义
+    </script><link rel="stylesheet" href="/_astro/Base.C6O8tc7V.css"></head><body><header class="topbar"><a href="/" class="brand">HLDay</a><nav><a href="/">专题</a><a href="/posts/">博客</a><a href="https://github.com/hTangle" class="nav-github" aria-label="GitHub">GitHub</a></nav><button class="theme-toggle" id="themeToggle" type="button" title="切换主题（自动/浅色/深色）" aria-label="切换主题">🖥️</button></header><div class="layout"><aside class="booknav"><ul class="nav-tree"><li><p class="nav-group">Go</p><ul><li><p class="nav-subgroup">运行时基础</p><ul><li class><a href="/source-map/">源码环境与目录地图</a></li><li class><a href="/bootstrap/">程序启动流程</a></li></ul></li><li><p class="nav-subgroup">并发编程</p><ul><li class><a href="/gmp/">GMP 调度器</a></li><li class><a href="/netpoll/">网络轮询器</a></li><li class><a href="/timer/">定时器</a></li><li class><a href="/sync-lock/">同步和锁</a></li><li class><a href="/channel/">Channel</a></li><li class><a href="/context/">Context</a></li><li class><a href="/defer-panic/">defer/panic/recover</a></li></ul></li><li><p class="nav-subgroup">内存管理</p><ul><li class><a href="/memory-alloc/">内存分配器</a></li><li class><a href="/gc/">垃圾收集器</a></li><li class><a href="/stack/">栈空间管理</a></li></ul></li><li><p class="nav-subgroup">数据结构</p><ul><li class><a href="/type-metadata/">类型元数据与对象布局</a></li><li class><a href="/iface/">Interface 与动态调用</a></li><li class><a href="/generics/">泛型与字典传递</a></li><li class><a href="/array/">数组</a></li><li class><a href="/slice/">切片</a></li><li class><a href="/swiss-map/">哈希表 (Swiss Table)</a></li><li class><a href="/string/">字符串</a></li></ul></li></ul></li><li><p class="nav-group">Agent 开发</p><ul><li><p class="nav-subgroup">协议与调用</p><ul><li class><a href="/mcp/">MCP</a></li><li class><a href="/tool-call/">Tool Call</a></li><li class="active"><a href="/skill/">Skill</a></li><li class><a href="/memory/">Memory</a></li></ul></li><li><p class="nav-subgroup">检索与排序</p><ul><li class><a href="/rag/">RAG</a></li><li class><a href="/retrieval/">Retrieval</a></li><li class><a href="/recall/">Recall</a></li><li class><a href="/ranking/">Ranking</a></li></ul></li></ul></li></ul></aside><main class="prose"><h1>Skill：给 Agent 的可复用工作手册</h1><div class="markdown-alert markdown-alert-note" dir="auto">
+<p class="markdown-alert-title" dir="auto"><svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>NOTE</p>
+<p> 一句话定义
 **Skill 是一组可发现、可复用的任务知识与执行规程，用来告诉 Agent 在某类场景中“应该怎样做”。**它通常把指令、步骤、约束、示例、脚本、模板和参考资料打包在一起，让通用模型获得稳定的领域做事方法。</p>
-</blockquote>
+</div>
 <img src="/images/go/skill-playbook.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
 <p>如果基础模型是一位聪明但刚入职的工程师，那么 Skill 不是给他装上一双“能操作系统的手”，而是递给他一本经过验证的 <strong>SOP 工作手册</strong>：什么时候适用、先检查什么、按什么顺序做、哪些坑不能踩、最终怎样验收。</p>
 <div class="markdown-alert markdown-alert-note" dir="auto">
@@ -73,7 +74,7 @@
 <li><strong>验收</strong>：根据 Skill 定义的完成条件验证结果。</li>
 </ol>
 <p>这里最重要的一点是：**Skill 改变的是 Agent 的决策上下文，并不自动产生外部副作用。**真正读取文件、调用 API、执行测试的仍然是 Tool 和运行时。</p>
-<h2 id="4-渐进式披露别把整本手册一次塞进上下文">4. 渐进式披露：别把整本手册一次塞进上下文</h2>
+<p><strong>4. 渐进式披露：别把整本手册一次塞进上下文</strong></p>
 <p>高质量 Skill 往往采用三层信息密度：</p>
 <img src="/images/go/03-progressive-disclosure.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
 <p>这叫<strong>渐进式披露</strong>。它有三个好处：</p>
@@ -121,7 +122,7 @@
 
 <table><thead><tr><th>概念</th><th>主要内容</th><th>作用范围</th><th>典型变化频率</th></tr></thead><tbody><tr><td>System Prompt</td><td>身份、全局规则、安全边界</td><td>几乎所有任务</td><td>较低</td></tr><tr><td>Skill</td><td>某类任务的流程与领域方法</td><td>匹配任务时加载</td><td>中等，可版本化</td></tr><tr><td>Memory</td><td>用户偏好、历史决策、项目上下文</td><td>相关会话或项目</td><td>随交互累积</td></tr><tr><td>当前 Prompt</td><td>这一次要完成的目标</td><td>当前请求</td><td>每次都变</td></tr></tbody></table>
 <p>简单说：System Prompt 管“始终怎么做”，Skill 管“这类事怎么做”，Memory 管“过去发生过什么”，当前 Prompt 管“现在做什么”。</p>
-<h2 id="6-一个最小但有效的-skill-示例">6. 一个最小但有效的 Skill 示例</h2>
+<p><strong>6. 一个最小但有效的 Skill 示例</strong></p>
 <p>下面是“写技术决策记录”的简化入口：</p>
 <pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="markdown"><code><span class="line"><span style="color:#E1E4E8">---</span></span>
 <span class="line"><span style="color:#85E89D">name</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">adr-writer</span></span>
@@ -189,28 +190,33 @@
 
 <table><thead><tr><th>任务性质</th><th>Skill 应给的自由度</th></tr></thead><tbody><tr><td>创意写作、方案探索</td><td>高：给原则和评价标准</td></tr><tr><td>常规工程实现</td><td>中：给流程、模式和检查项</td></tr><tr><td>发布、迁移、财务、安全操作</td><td>低：给精确命令、审批点和回滚路径</td></tr></tbody></table>
 <p>风险越高、错误代价越大，Skill 越应该明确和确定。</p>
-<h2 id="8-常见失败模式">8. 常见失败模式</h2>
-<blockquote>
-<p>[!failure] 把 Skill 写成百科全书
+<p><strong>8. 常见失败模式</strong></p>
+<div class="markdown-alert markdown-alert-warning" dir="auto">
+<p class="markdown-alert-title" dir="auto"><svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>WARNING</p>
+<p> 把 Skill 写成百科全书
 大量背景知识却没有“遇到什么 → 做什么 → 怎么验证”，读完仍无法执行。</p>
-</blockquote>
-<blockquote>
-<p>[!failure] 把工具能力写进 Skill 并假装已经执行
+</div>
+<div class="markdown-alert markdown-alert-warning" dir="auto">
+<p class="markdown-alert-title" dir="auto"><svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>WARNING</p>
+<p> 把工具能力写进 Skill 并假装已经执行
 Skill 可以要求“搜索代码”，但如果运行时没有搜索工具或权限，它不能凭文字创造能力。</p>
-</blockquote>
-<blockquote>
-<p>[!failure] 触发描述过宽
+</div>
+<div class="markdown-alert markdown-alert-warning" dir="auto">
+<p class="markdown-alert-title" dir="auto"><svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>WARNING</p>
+<p> 触发描述过宽
 “所有编程任务都使用”会导致无关规则挤占上下文，甚至与更具体的 Skill 冲突。</p>
-</blockquote>
-<blockquote>
-<p>[!failure] 依赖隐含环境
+</div>
+<div class="markdown-alert markdown-alert-warning" dir="auto">
+<p class="markdown-alert-title" dir="auto"><svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>WARNING</p>
+<p> 依赖隐含环境
 指令引用了不存在的路径、未安装的命令或私人凭证，却没有检测与降级路径。</p>
-</blockquote>
-<blockquote>
-<p>[!failure] 没有版本与验证
+</div>
+<div class="markdown-alert markdown-alert-warning" dir="auto">
+<p class="markdown-alert-title" dir="auto"><svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>WARNING</p>
+<p> 没有版本与验证
 外部 API、框架或组织流程变化后，旧 Skill 继续给出过时步骤，结果比没有 Skill 更危险。</p>
-</blockquote>
-<h2 id="9-什么时候该创建-skill">9. 什么时候该创建 Skill</h2>
+</div>
+<p><strong>9. 什么时候该创建 Skill</strong></p>
 <p>满足以下两三项时通常值得创建：</p>
 <ul>
 <li>同类任务重复出现；</li>
@@ -221,7 +227,7 @@ Skill 可以要求“搜索代码”，但如果运行时没有搜索工具或�
 <li>希望不同 Agent 或成员产出一致。</li>
 </ul>
 <p>如果只是一个一次性的简单问题，一段清晰 Prompt 往往已经足够。</p>
-<h2 id="10-agent-skills-规范级细节">10. Agent Skills 规范级细节</h2>
+<p><strong>10. Agent Skills 规范级细节</strong></p>
 <p>一个符合公开 Agent Skills 格式的 Skill 至少包含目录和 <code>SKILL.md</code>。面试中若只回答“Skill 就是一段 Prompt”，会漏掉它的<strong>打包、发现和渐进加载</strong>语义。</p>
 <p><strong>10.1 Frontmatter 契约</strong></p>
 
@@ -282,7 +288,7 @@ Skill 可以要求“搜索代码”，但如果运行时没有搜索工具或�
 <li>用户本次请求的授权范围可能小于 Skill 声明范围。</li>
 </ul>
 <p>正确架构是：Skill 提供“期望使用哪些工具”的声明，Policy Engine 根据用户、环境、工具和参数做最终决定。</p>
-<h2 id="11-从-runtime-视角实现-skill">11. 从 Runtime 视角实现 Skill</h2>
+<p><strong>11. 从 Runtime 视角实现 Skill</strong></p>
 <p>支持 Skills 的 Agent Runtime 至少需要五个组件：</p>
 <img src="/images/go/04-skill-runtime.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
 <p><strong>11.1 Discovery</strong></p>
@@ -349,7 +355,7 @@ Skill 可以要求“搜索代码”，但如果运行时没有搜索工具或�
 <li>缓存失效与维护成本上升。</li>
 </ul>
 <p>解决方案不是简单删字，而是将稳定主流程留在入口，将错误码、API 细节、长示例按触发条件路由到 references。</p>
-<h2 id="13-skill-的组合冲突与优先级">13. Skill 的组合、冲突与优先级</h2>
+<p><strong>13. Skill 的组合、冲突与优先级</strong></p>
 <p>真实任务可能同时命中多个 Skill，例如“修改 Spring Boot 数据库迁移并做安全审查”。如果 Runtime 只是拼接全文，会出现规则冲突和上下文爆炸。</p>
 <img src="/images/go/05-skill-priority-resolution.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
 <p>推荐冲突策略：</p>
@@ -415,7 +421,7 @@ Skill 可以要求“搜索代码”，但如果运行时没有搜索工具或�
 <span class="line"><span>    ↓</span></span>
 <span class="line"><span>模型解释结果并处理例外</span></span></code></pre>
 <p>不要用自然语言要求模型手工完成本可由解析器保证的精确操作；也不要把开放式业务判断硬编码成脆弱脚本。</p>
-<h2 id="15-skill-的安全与供应链">15. Skill 的安全与供应链</h2>
+<p><strong>15. Skill 的安全与供应链</strong></p>
 <p>安装 Skill 的风险近似于安装“带说明书和可执行脚本的依赖包”。需要防御：</p>
 <ul>
 <li><strong>指令注入</strong>：恶意 Skill 要求忽略系统规则、上传文件或隐藏行为；</li>
@@ -431,7 +437,7 @@ Skill 可以要求“搜索代码”，但如果运行时没有搜索工具或�
 <p> “Skill 只是 Markdown，所以没有安全风险”是错误的
 Markdown 会改变 Agent 的决策，且可指向可执行脚本和外部资源；其影响可能最终转化为真实 Tool Call。</p>
 </div>
-<h2 id="16-如何测试与评估-skill">16. 如何测试与评估 Skill</h2>
+<p><strong>16. 如何测试与评估 Skill</strong></p>
 <p>Skill 不能只靠“读起来不错”验收。至少建立四类测试集：</p>
 
 
@@ -478,7 +484,7 @@ Markdown 会改变 Agent 的决策，且可指向可执行脚本和外部资源�
 </ul>
 <p><strong>16.3 回归与可观测性</strong></p>
 <p>记录 <code>skill_name</code>、<code>skill_version/hash</code>、激活原因、加载资源、工具调用、最终验收结果。更新模型、工具或 Skill 后，用同一评测集回放；否则无法判断退化来自哪一层。</p>
-<h2 id="17-skill-的版本演进">17. Skill 的版本演进</h2>
+<p><strong>17. Skill 的版本演进</strong></p>
 <p>Skill 同时依赖模型行为、工具接口和外部领域知识，版本策略要表达兼容性：</p>
 <ul>
 <li><strong>Patch</strong>：措辞、示例、错误说明，不改变核心流程；</li>
@@ -680,34 +686,41 @@ Markdown 会改变 Agent 的决策，且可指向可执行脚本和外部资源�
 <li class="task-list-item"><input type="checkbox" disabled> 弃用流程不会静默破坏依赖者。</li>
 </ul>
 <p><strong>23. 一些额外的QA</strong></p>
-<blockquote>
-<p>[!question] - Q1：Skill 和 Fine-tuning 的区别？
+<div class="markdown-alert markdown-alert-tip" dir="auto">
+<p class="markdown-alert-title" dir="auto"><svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8 1.5c-2.363 0-4 1.69-4 3.75 0 .984.424 1.625.984 2.304l.214.253c.223.264.47.556.673.848.284.411.537.896.621 1.49a.75.75 0 0 1-1.484.211c-.04-.282-.163-.547-.37-.847a8.456 8.456 0 0 0-.542-.68c-.084-.1-.173-.205-.268-.32C3.201 7.75 2.5 6.766 2.5 5.25 2.5 2.31 4.863 0 8 0s5.5 2.31 5.5 5.25c0 1.516-.701 2.5-1.328 3.259-.095.115-.184.22-.268.319-.207.245-.383.453-.541.681-.208.3-.33.565-.37.847a.751.751 0 0 1-1.485-.212c.084-.593.337-1.078.621-1.489.203-.292.45-.584.673-.848.075-.088.147-.173.213-.253.561-.679.985-1.32.985-2.304 0-2.06-1.637-3.75-4-3.75ZM5.75 12h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1 0-1.5ZM6 15.25a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1-.75-.75Z"></path></svg>TIP</p>
+<p> - Q1：Skill 和 Fine-tuning 的区别？
 Fine-tuning 把模式写入模型权重，适合大量稳定行为分布；Skill 在推理时加载，适合可审查、频繁变化、项目特定的流程。Skill 更新快、可版本化、可按需启用，但占上下文并依赖指令遵循。两者可组合，而非互斥。</p>
-</blockquote>
-<blockquote>
-<p>[!question] - Q2：为什么 description 是核心接口？
+</div>
+<div class="markdown-alert markdown-alert-tip" dir="auto">
+<p class="markdown-alert-title" dir="auto"><svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8 1.5c-2.363 0-4 1.69-4 3.75 0 .984.424 1.625.984 2.304l.214.253c.223.264.47.556.673.848.284.411.537.896.621 1.49a.75.75 0 0 1-1.484.211c-.04-.282-.163-.547-.37-.847a8.456 8.456 0 0 0-.542-.68c-.084-.1-.173-.205-.268-.32C3.201 7.75 2.5 6.766 2.5 5.25 2.5 2.31 4.863 0 8 0s5.5 2.31 5.5 5.25c0 1.516-.701 2.5-1.328 3.259-.095.115-.184.22-.268.319-.207.245-.383.453-.541.681-.208.3-.33.565-.37.847a.751.751 0 0 1-1.485-.212c.084-.593.337-1.078.621-1.489.203-.292.45-.584.673-.848.075-.088.147-.173.213-.253.561-.679.985-1.32.985-2.304 0-2.06-1.637-3.75-4-3.75ZM5.75 12h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1 0-1.5ZM6 15.25a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1-.75-.75Z"></path></svg>TIP</p>
+<p> - Q2：为什么 description 是核心接口？
 因为渐进披露的第一层只暴露 name 与 description。它同时承担检索文档和路由规则的角色；写得太窄会漏触发，太宽会误触发。需要用正负样本测 precision/recall，而不是凭感觉修改。</p>
-</blockquote>
-<blockquote>
-<p>[!question] - Q3：Skill 能保证 Agent 一定按流程执行吗？
+</div>
+<div class="markdown-alert markdown-alert-tip" dir="auto">
+<p class="markdown-alert-title" dir="auto"><svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8 1.5c-2.363 0-4 1.69-4 3.75 0 .984.424 1.625.984 2.304l.214.253c.223.264.47.556.673.848.284.411.537.896.621 1.49a.75.75 0 0 1-1.484.211c-.04-.282-.163-.547-.37-.847a8.456 8.456 0 0 0-.542-.68c-.084-.1-.173-.205-.268-.32C3.201 7.75 2.5 6.766 2.5 5.25 2.5 2.31 4.863 0 8 0s5.5 2.31 5.5 5.25c0 1.516-.701 2.5-1.328 3.259-.095.115-.184.22-.268.319-.207.245-.383.453-.541.681-.208.3-.33.565-.37.847a.751.751 0 0 1-1.485-.212c.084-.593.337-1.078.621-1.489.203-.292.45-.584.673-.848.075-.088.147-.173.213-.253.561-.679.985-1.32.985-2.304 0-2.06-1.637-3.75-4-3.75ZM5.75 12h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1 0-1.5ZM6 15.25a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1-.75-.75Z"></path></svg>TIP</p>
+<p> - Q3：Skill 能保证 Agent 一定按流程执行吗？
 不能。Skill 是上下文约束，不是类型系统或权限系统。高风险不变量必须由 Runtime、Policy、Schema、沙箱和审批强制；Skill 负责指导与解释。</p>
-</blockquote>
-<blockquote>
-<p>[!question] - Q4：怎样处理多个 Skill 同时适用？
+</div>
+<div class="markdown-alert markdown-alert-tip" dir="auto">
+<p class="markdown-alert-title" dir="auto"><svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8 1.5c-2.363 0-4 1.69-4 3.75 0 .984.424 1.625.984 2.304l.214.253c.223.264.47.556.673.848.284.411.537.896.621 1.49a.75.75 0 0 1-1.484.211c-.04-.282-.163-.547-.37-.847a8.456 8.456 0 0 0-.542-.68c-.084-.1-.173-.205-.268-.32C3.201 7.75 2.5 6.766 2.5 5.25 2.5 2.31 4.863 0 8 0s5.5 2.31 5.5 5.25c0 1.516-.701 2.5-1.328 3.259-.095.115-.184.22-.268.319-.207.245-.383.453-.541.681-.208.3-.33.565-.37.847a.751.751 0 0 1-1.485-.212c.084-.593.337-1.078.621-1.489.203-.292.45-.584.673-.848.075-.088.147-.173.213-.253.561-.679.985-1.32.985-2.304 0-2.06-1.637-3.75-4-3.75ZM5.75 12h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1 0-1.5ZM6 15.25a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1-.75-.75Z"></path></svg>TIP</p>
+<p> - Q4：怎样处理多个 Skill 同时适用？
 先提取目标、约束与依赖，形成执行 DAG；按系统/用户/项目/通用优先级解决冲突；只加载相关章节；同级强约束冲突时显式询问。不要简单按发现顺序拼接。</p>
-</blockquote>
-<blockquote>
-<p>[!question] - Q5：如何证明一个 Skill 有价值？
+</div>
+<div class="markdown-alert markdown-alert-tip" dir="auto">
+<p class="markdown-alert-title" dir="auto"><svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8 1.5c-2.363 0-4 1.69-4 3.75 0 .984.424 1.625.984 2.304l.214.253c.223.264.47.556.673.848.284.411.537.896.621 1.49a.75.75 0 0 1-1.484.211c-.04-.282-.163-.547-.37-.847a8.456 8.456 0 0 0-.542-.68c-.084-.1-.173-.205-.268-.32C3.201 7.75 2.5 6.766 2.5 5.25 2.5 2.31 4.863 0 8 0s5.5 2.31 5.5 5.25c0 1.516-.701 2.5-1.328 3.259-.095.115-.184.22-.268.319-.207.245-.383.453-.541.681-.208.3-.33.565-.37.847a.751.751 0 0 1-1.485-.212c.084-.593.337-1.078.621-1.489.203-.292.45-.584.673-.848.075-.088.147-.173.213-.253.561-.679.985-1.32.985-2.304 0-2.06-1.637-3.75-4-3.75ZM5.75 12h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1 0-1.5ZM6 15.25a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1-.75-.75Z"></path></svg>TIP</p>
+<p> - Q5：如何证明一个 Skill 有价值？
 与无 Skill 基线和旧版本做同集评测，比较触发 precision/recall、任务成功率、安全违规率、人工修改量、tokens、延迟和成本。只有结果质量提升且代价合理，才说明 Skill 有效。</p>
-</blockquote>
-<blockquote>
-<p>[!question] - Q6：Skill、Plugin、Tool 的关系？
+</div>
+<div class="markdown-alert markdown-alert-tip" dir="auto">
+<p class="markdown-alert-title" dir="auto"><svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8 1.5c-2.363 0-4 1.69-4 3.75 0 .984.424 1.625.984 2.304l.214.253c.223.264.47.556.673.848.284.411.537.896.621 1.49a.75.75 0 0 1-1.484.211c-.04-.282-.163-.547-.37-.847a8.456 8.456 0 0 0-.542-.68c-.084-.1-.173-.205-.268-.32C3.201 7.75 2.5 6.766 2.5 5.25 2.5 2.31 4.863 0 8 0s5.5 2.31 5.5 5.25c0 1.516-.701 2.5-1.328 3.259-.095.115-.184.22-.268.319-.207.245-.383.453-.541.681-.208.3-.33.565-.37.847a.751.751 0 0 1-1.485-.212c.084-.593.337-1.078.621-1.489.203-.292.45-.584.673-.848.075-.088.147-.173.213-.253.561-.679.985-1.32.985-2.304 0-2.06-1.637-3.75-4-3.75ZM5.75 12h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1 0-1.5ZM6 15.25a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1-.75-.75Z"></path></svg>TIP</p>
+<p> - Q6：Skill、Plugin、Tool 的关系？
 Skill 是可加载的程序性知识；Plugin 通常是分发和扩展单元，可同时包含 Skills、Tools、MCP Server 或 UI；Tool 是可执行能力。一个 Skill 可以指导使用 Tool，但自身不自动提供 Tool 权限。</p>
-</blockquote>
-<blockquote>
-<p>[!question] - Q7：如何设计企业内部 Skill 治理？
+</div>
+<div class="markdown-alert markdown-alert-tip" dir="auto">
+<p class="markdown-alert-title" dir="auto"><svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8 1.5c-2.363 0-4 1.69-4 3.75 0 .984.424 1.625.984 2.304l.214.253c.223.264.47.556.673.848.284.411.537.896.621 1.49a.75.75 0 0 1-1.484.211c-.04-.282-.163-.547-.37-.847a8.456 8.456 0 0 0-.542-.68c-.084-.1-.173-.205-.268-.32C3.201 7.75 2.5 6.766 2.5 5.25 2.5 2.31 4.863 0 8 0s5.5 2.31 5.5 5.25c0 1.516-.701 2.5-1.328 3.259-.095.115-.184.22-.268.319-.207.245-.383.453-.541.681-.208.3-.33.565-.37.847a.751.751 0 0 1-1.485-.212c.084-.593.337-1.078.621-1.489.203-.292.45-.584.673-.848.075-.088.147-.173.213-.253.561-.679.985-1.32.985-2.304 0-2.06-1.637-3.75-4-3.75ZM5.75 12h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1 0-1.5ZM6 15.25a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1-.75-.75Z"></path></svg>TIP</p>
+<p> - Q7：如何设计企业内部 Skill 治理？
 建立所有权、代码审查、签名与版本固定；区分内置/团队/个人信任级别；静态扫描脚本与指令；按环境限制工具和网络；维护评测集、变更日志、弃用窗口和快速回滚。</p>
-</blockquote>
+</div>
 <p><strong>24. 参考资料</strong></p>
 <ul>
 <li><a href="https://agentskills.io/specification" rel="noopener noreferrer" target="_blank">Agent Skills Specification</a></li>
@@ -766,7 +779,8 @@ Skill 是可加载的程序性知识；Plugin 通常是分发和扩展单元，�
 
 
 <table><thead><tr><th>维度</th><th>Skill</th><th>MCP</th><th>Tool Call</th></tr></thead><tbody><tr><td>本质</td><td><strong>知识与流程包</strong></td><td><strong>能力接入协议</strong></td><td><strong>一次结构化调用请求</strong></td></tr><tr><td>回答的问题</td><td>这类任务应该怎么做</td><td>应用怎样统一连接外部能力</td><td>当前这一步调用什么、参数是什么</td></tr><tr><td>典型内容</td><td>指令、检查单、示例、脚本、模板</td><td>Client/Server、原语、消息、Transport</td><td>工具名、参数、调用 ID、结果</td></tr><tr><td>是否提供新权限</td><td>否，只影响决策</td><td>否，权限仍由 Host/Server 管理</td><td>否，Runtime 决定是否执行</td></tr><tr><td>是否直接产生副作用</td><td>否</td><td>协议本身不产生；Server 实现可能产生</td><td>请求本身不产生；工具执行可能产生</td></tr><tr><td>三者关系</td><td>Skill 可指导 Agent 选择 MCP Server 暴露的工具并安全调用</td><td>MCP 可让工具跨进程、跨系统被统一发现</td><td>Tool Call 是 Agent 落实 Skill 步骤、触发具体 Tool 的瞬间</td></tr></tbody></table>
-<blockquote>
-<p>[!summary] 最短记忆法
+<div class="markdown-alert markdown-alert-note" dir="auto">
+<p class="markdown-alert-title" dir="auto"><svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>NOTE</p>
+<p> 最短记忆法
 <strong>Skill 是“怎么做”的手册，MCP 是“怎么接”的标准，Tool Call 是“现在做哪一步”的结构化请求。</strong></p>
-</blockquote></main><aside class="toc"><p class="toc-title">本页目录</p><ul><li class="toc-d2"><a href="#1-为什么只有-prompt-还不够">1. 为什么只有 Prompt 还不够</a></li><li class="toc-d2"><a href="#2-一个-skill-通常包含什么">2. 一个 Skill 通常包含什么</a></li><li class="toc-d2"><a href="#3-skill-如何在一次任务中生效">3. Skill 如何在一次任务中生效</a></li><li class="toc-d2"><a href="#4-渐进式披露别把整本手册一次塞进上下文">4. 渐进式披露：别把整本手册一次塞进上下文</a></li><li class="toc-d2"><a href="#5-skillsystem-prompt-与-memory-的区别">5. Skill、System Prompt 与 Memory 的区别</a></li><li class="toc-d2"><a href="#6-一个最小但有效的-skill-示例">6. 一个最小但有效的 Skill 示例</a></li><li class="toc-d2"><a href="#7-如何设计高质量-skill">7. 如何设计高质量 Skill</a></li><li class="toc-d2"><a href="#8-常见失败模式">8. 常见失败模式</a></li><li class="toc-d2"><a href="#9-什么时候该创建-skill">9. 什么时候该创建 Skill</a></li><li class="toc-d2"><a href="#10-agent-skills-规范级细节">10. Agent Skills 规范级细节</a></li><li class="toc-d2"><a href="#11-从-runtime-视角实现-skill">11. 从 Runtime 视角实现 Skill</a></li><li class="toc-d2"><a href="#12-skill-是上下文工程不是-prompt-堆砌">12. Skill 是上下文工程，不是 Prompt 堆砌</a></li><li class="toc-d2"><a href="#13-skill-的组合冲突与优先级">13. Skill 的组合、冲突与优先级</a></li><li class="toc-d2"><a href="#14-确定性边界什么时候写指令什么时候写脚本">14. 确定性边界：什么时候写指令，什么时候写脚本</a></li><li class="toc-d2"><a href="#15-skill-的安全与供应链">15. Skill 的安全与供应链</a></li><li class="toc-d2"><a href="#16-如何测试与评估-skill">16. 如何测试与评估 Skill</a></li><li class="toc-d2"><a href="#17-skill-的版本演进">17. Skill 的版本演进</a></li></ul></aside></div><div class="lightbox" id="lightbox" aria-hidden="true"><img alt=""></div><script type="module">var e=document.documentElement,t=document.getElementById(`themeToggle`),n={auto:`🖥️`,light:`☀️`,dark:`🌙`};function r(){var e=localStorage.getItem(`theme`);return e===`light`||e===`dark`?e:`auto`}function i(){var i=r();i===`auto`?e.removeAttribute(`data-theme`):e.setAttribute(`data-theme`,i),t.textContent=n[i]}i(),t.addEventListener(`click`,()=>{var e=[`auto`,`light`,`dark`],t=e[(e.indexOf(r())+1)%3];t===`auto`?localStorage.removeItem(`theme`):localStorage.setItem(`theme`,t),i()}),window.matchMedia(`(prefers-color-scheme: dark)`).addEventListener(`change`,()=>{r()===`auto`&&i()});var a=document.getElementById(`lightbox`),o=a.querySelector(`img`);document.querySelectorAll(`.prose img`).forEach(e=>{e.style.cursor=`zoom-in`,e.addEventListener(`click`,()=>{o.src=e.currentSrc||e.src,o.alt=e.alt,a.classList.add(`open`),a.setAttribute(`aria-hidden`,`false`)})}),a.addEventListener(`click`,()=>{a.classList.remove(`open`),a.setAttribute(`aria-hidden`,`true`)}),document.addEventListener(`keydown`,e=>{e.key===`Escape`&&a.click()});</script></body></html>
+</div></main><aside class="toc"><p class="toc-title">本页目录</p><ul><li class="toc-d2"><a href="#1-为什么只有-prompt-还不够">1. 为什么只有 Prompt 还不够</a></li><li class="toc-d2"><a href="#2-一个-skill-通常包含什么">2. 一个 Skill 通常包含什么</a></li><li class="toc-d2"><a href="#3-skill-如何在一次任务中生效">3. Skill 如何在一次任务中生效</a></li><li class="toc-d2"><a href="#5-skillsystem-prompt-与-memory-的区别">5. Skill、System Prompt 与 Memory 的区别</a></li><li class="toc-d2"><a href="#7-如何设计高质量-skill">7. 如何设计高质量 Skill</a></li><li class="toc-d2"><a href="#12-skill-是上下文工程不是-prompt-堆砌">12. Skill 是上下文工程，不是 Prompt 堆砌</a></li><li class="toc-d2"><a href="#14-确定性边界什么时候写指令什么时候写脚本">14. 确定性边界：什么时候写指令，什么时候写脚本</a></li></ul></aside></div><div class="lightbox" id="lightbox" aria-hidden="true"><img alt=""></div><script type="module">var e=document.documentElement,t=document.getElementById(`themeToggle`),n={auto:`🖥️`,light:`☀️`,dark:`🌙`};function r(){var e=localStorage.getItem(`theme`);return e===`light`||e===`dark`?e:`auto`}function i(){var i=r();i===`auto`?e.removeAttribute(`data-theme`):e.setAttribute(`data-theme`,i),t.textContent=n[i]}i(),t.addEventListener(`click`,()=>{var e=[`auto`,`light`,`dark`],t=e[(e.indexOf(r())+1)%3];t===`auto`?localStorage.removeItem(`theme`):localStorage.setItem(`theme`,t),i()}),window.matchMedia(`(prefers-color-scheme: dark)`).addEventListener(`change`,()=>{r()===`auto`&&i()});var a=document.getElementById(`lightbox`),o=a.querySelector(`img`);document.querySelectorAll(`.prose img`).forEach(e=>{e.style.cursor=`zoom-in`,e.addEventListener(`click`,()=>{o.src=e.currentSrc||e.src,o.alt=e.alt,a.classList.add(`open`),a.setAttribute(`aria-hidden`,`false`)})}),a.addEventListener(`click`,()=>{a.classList.remove(`open`),a.setAttribute(`aria-hidden`,`true`)}),document.addEventListener(`keydown`,e=>{e.key===`Escape`&&a.click()});</script></body></html>

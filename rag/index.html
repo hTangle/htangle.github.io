@@ -5,10 +5,11 @@
           document.documentElement.setAttribute('data-theme', s);
         }
       })();
-    </script><link rel="stylesheet" href="/_astro/Base.C6O8tc7V.css"></head><body><header class="topbar"><a href="/" class="brand">HLDay</a><nav><a href="/">专题</a><a href="/posts/">博客</a><a href="https://github.com/hTangle" class="nav-github" aria-label="GitHub">GitHub</a></nav><button class="theme-toggle" id="themeToggle" type="button" title="切换主题（自动/浅色/深色）" aria-label="切换主题">🖥️</button></header><div class="layout"><aside class="booknav"><ul class="nav-tree"><li><p class="nav-group">Go</p><ul><li><p class="nav-subgroup">运行时基础</p><ul><li class><a href="/source-map/">源码环境与目录地图</a></li><li class><a href="/bootstrap/">程序启动流程</a></li></ul></li><li><p class="nav-subgroup">并发编程</p><ul><li class><a href="/gmp/">GMP 调度器</a></li><li class><a href="/netpoll/">网络轮询器</a></li><li class><a href="/timer/">定时器</a></li><li class><a href="/sync-lock/">同步和锁</a></li><li class><a href="/channel/">Channel</a></li><li class><a href="/context/">Context</a></li><li class><a href="/defer-panic/">defer/panic/recover</a></li></ul></li><li><p class="nav-subgroup">内存管理</p><ul><li class><a href="/memory-alloc/">内存分配器</a></li><li class><a href="/gc/">垃圾收集器</a></li><li class><a href="/stack/">栈空间管理</a></li></ul></li><li><p class="nav-subgroup">数据结构</p><ul><li class><a href="/type-metadata/">类型元数据与对象布局</a></li><li class><a href="/iface/">Interface 与动态调用</a></li><li class><a href="/generics/">泛型与字典传递</a></li><li class><a href="/array/">数组</a></li><li class><a href="/slice/">切片</a></li><li class><a href="/swiss-map/">哈希表 (Swiss Table)</a></li><li class><a href="/string/">字符串</a></li></ul></li></ul></li><li><p class="nav-group">Agent 开发</p><ul><li><p class="nav-subgroup">协议与调用</p><ul><li class><a href="/mcp/">MCP</a></li><li class><a href="/tool-call/">Tool Call</a></li><li class><a href="/skill/">Skill</a></li><li class><a href="/memory/">Memory</a></li></ul></li><li><p class="nav-subgroup">检索与排序</p><ul><li class="active"><a href="/rag/">RAG</a></li><li class><a href="/retrieval/">Retrieval</a></li><li class><a href="/recall/">Recall</a></li><li class><a href="/ranking/">Ranking</a></li></ul></li></ul></li></ul></aside><main class="prose"><h1>RAG：从检索到可信生成的完整系统</h1><blockquote>
-<p>[!abstract] 一句话定义
+    </script><link rel="stylesheet" href="/_astro/Base.C6O8tc7V.css"></head><body><header class="topbar"><a href="/" class="brand">HLDay</a><nav><a href="/">专题</a><a href="/posts/">博客</a><a href="https://github.com/hTangle" class="nav-github" aria-label="GitHub">GitHub</a></nav><button class="theme-toggle" id="themeToggle" type="button" title="切换主题（自动/浅色/深色）" aria-label="切换主题">🖥️</button></header><div class="layout"><aside class="booknav"><ul class="nav-tree"><li><p class="nav-group">Go</p><ul><li><p class="nav-subgroup">运行时基础</p><ul><li class><a href="/source-map/">源码环境与目录地图</a></li><li class><a href="/bootstrap/">程序启动流程</a></li></ul></li><li><p class="nav-subgroup">并发编程</p><ul><li class><a href="/gmp/">GMP 调度器</a></li><li class><a href="/netpoll/">网络轮询器</a></li><li class><a href="/timer/">定时器</a></li><li class><a href="/sync-lock/">同步和锁</a></li><li class><a href="/channel/">Channel</a></li><li class><a href="/context/">Context</a></li><li class><a href="/defer-panic/">defer/panic/recover</a></li></ul></li><li><p class="nav-subgroup">内存管理</p><ul><li class><a href="/memory-alloc/">内存分配器</a></li><li class><a href="/gc/">垃圾收集器</a></li><li class><a href="/stack/">栈空间管理</a></li></ul></li><li><p class="nav-subgroup">数据结构</p><ul><li class><a href="/type-metadata/">类型元数据与对象布局</a></li><li class><a href="/iface/">Interface 与动态调用</a></li><li class><a href="/generics/">泛型与字典传递</a></li><li class><a href="/array/">数组</a></li><li class><a href="/slice/">切片</a></li><li class><a href="/swiss-map/">哈希表 (Swiss Table)</a></li><li class><a href="/string/">字符串</a></li></ul></li></ul></li><li><p class="nav-group">Agent 开发</p><ul><li><p class="nav-subgroup">协议与调用</p><ul><li class><a href="/mcp/">MCP</a></li><li class><a href="/tool-call/">Tool Call</a></li><li class><a href="/skill/">Skill</a></li><li class><a href="/memory/">Memory</a></li></ul></li><li><p class="nav-subgroup">检索与排序</p><ul><li class="active"><a href="/rag/">RAG</a></li><li class><a href="/retrieval/">Retrieval</a></li><li class><a href="/recall/">Recall</a></li><li class><a href="/ranking/">Ranking</a></li></ul></li></ul></li></ul></aside><main class="prose"><h1>RAG：从检索到可信生成的完整系统</h1><div class="markdown-alert markdown-alert-note" dir="auto">
+<p class="markdown-alert-title" dir="auto"><svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>NOTE</p>
+<p> 一句话定义
 **RAG（Retrieval-Augmented Generation）是在生成时检索外部证据，将证据连同问题交给模型，并对答案与来源进行约束、评估和追踪的系统架构。**它不是“向量数据库 + Prompt”的同义词。</p>
-</blockquote>
+</div>
 <img src="/images/go/rag-system.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
 <p>RAG 的价值是把模型参数之外、持续变化或受权限控制的知识引入当前回答。它降低了“所有知识都必须重新训练进模型”的压力，但不会自动消除幻觉：检索可能漏，排序可能错，Context 可能装坏，模型也可能忽略证据。</p>
 <h2 id="1-从概率视角理解-rag">1. 从概率视角理解 RAG</h2>
@@ -19,7 +20,7 @@
 <li><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>p</mi><mi>θ</mi></msub><mo stretchy="false">(</mo><mi>y</mi><mi mathvariant="normal">∣</mi><mi>x</mi><mo separator="true">,</mo><mi>z</mi><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">p_\theta(y|x,z)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord"><span class="mord mathnormal">p</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3361em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight" style="margin-right:0.0278em;">θ</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mopen">(</span><span class="mord mathnormal" style="margin-right:0.0359em;">y</span><span class="mord">∣</span><span class="mord mathnormal">x</span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal" style="margin-right:0.044em;">z</span><span class="mclose">)</span></span></span></span>：Generator 在问题与文档条件下生成答案的概率。</li>
 </ul>
 <p>工程上不一定真的联合训练，但这个表达揭示了两类误差来源：<strong>证据分布错</strong>与<strong>基于证据生成错</strong>。</p>
-<h2 id="2-naive-rag-与-production-rag">2. Naive RAG 与 Production RAG</h2>
+<p><strong>2. Naive RAG 与 Production RAG</strong></p>
 
 
 
@@ -99,7 +100,7 @@
 <span class="line"><span style="color:#85E89D">indexed_at</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">2026-08-10T08:01:02Z</span></span>
 <span class="line"><span style="color:#85E89D">content_hash</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">sha256:...</span></span></code></pre>
 <p>幂等键、content hash 和版本字段使系统能够跳过未变化内容、追踪错误版本、执行定点删除并重放失败任务。</p>
-<h2 id="5-chunking以可被检索且可被回答为单位">5. Chunking：以“可被检索且可被回答”为单位</h2>
+<p><strong>5. Chunking：以“可被检索且可被回答”为单位</strong></p>
 <p>固定长度只是基线。选 Chunk 策略要同时考虑：</p>
 <ul>
 <li>检索：片段是否有独立语义、标题是否保留；</li>
@@ -152,7 +153,7 @@
 <li>记录每段证据到最终 Prompt 的映射。</li>
 </ul>
 <p>“Lost in the middle”意味着长 Context 中部信息可能更难被利用。不要因窗口很长就塞入全部候选；应排序、结构化，并在必要时分阶段总结。</p>
-<h2 id="9-prompt-约束拒答与不确定性">9. Prompt 约束、拒答与不确定性</h2>
+<p><strong>9. Prompt 约束、拒答与不确定性</strong></p>
 <p>一个可靠 RAG Prompt 至少表达：</p>
 <ul>
 <li>仅依据给定证据回答事实性部分；</li>
@@ -163,7 +164,7 @@
 <li>输出遵守结构化 schema。</li>
 </ul>
 <p>但 Prompt 只是软约束。高风险场景还需生成后验证：逐句判断支持证据、校验引用 ID、检查禁止内容与权限，再决定返回、重试或拒答。</p>
-<h2 id="10-citation有链接不等于有依据">10. Citation：有链接不等于有依据</h2>
+<p><strong>10. Citation：有链接不等于有依据</strong></p>
 <p>引用质量可拆成：</p>
 <ul>
 <li><strong>Citation correctness</strong>：引用内容是否真的支持该陈述；</li>
@@ -173,7 +174,7 @@
 <li><strong>Provenance</strong>：源、版本、解析产物和 Chunk 是否可回溯。</li>
 </ul>
 <p>不要让模型自由生成 URL。使用内部 <code>source_id</code>，生成后由应用层映射到经过权限校验的链接。否则模型可能给出看似合理但不存在或越权的地址。</p>
-<h2 id="11-adaptivecorrective-与-agentic-rag">11. Adaptive、Corrective 与 Agentic RAG</h2>
+<p><strong>11. Adaptive、Corrective 与 Agentic RAG</strong></p>
 <p>不是每个问题都需要检索，也不是第一次检索就一定足够。</p>
 <p><strong>Adaptive Retrieval</strong></p>
 <p>先判断问题是否需要外部知识：寒暄、纯创作可不检索；实时事实、企业数据必须检索。</p>
@@ -189,7 +190,7 @@
 <li>重复查询检测与缓存。</li>
 </ul>
 <img src="/images/go/02-agentic-rag-state-machine.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
-<h2 id="12-ragfine-tuninglong-context-与-memory">12. RAG、Fine-tuning、Long Context 与 Memory</h2>
+<p><strong>12. RAG、Fine-tuning、Long Context 与 Memory</strong></p>
 
 
 
@@ -289,7 +290,7 @@
 
 <table><thead><tr><th>层</th><th>代表指标</th></tr></thead><tbody><tr><td>数据</td><td>parse success、index lag、ACL accuracy、delete lag</td></tr><tr><td>Retrieval</td><td>Recall@K、Hit@K、zero-result rate</td></tr><tr><td>Ranking</td><td>nDCG@K、MRR、gold evidence rank</td></tr><tr><td>Context</td><td>context precision/recall、redundancy、token use</td></tr><tr><td>Generation</td><td>correctness、faithfulness、completeness、abstention</td></tr><tr><td>Citation</td><td>correctness、completeness、validity</td></tr><tr><td>任务</td><td>解决率、人工升级率、用户改写率、时延、成本</td></tr></tbody></table>
 <p>推荐为每个测试样例保存：问题、用户权限、期望证据集合、可接受答案要点、必须拒答条件和时间有效性。只用字符串匹配答案会误判同义表达，也无法识别无依据的“碰巧答对”。</p>
-<h2 id="15-faithfulness-与-correctness-不相同">15. Faithfulness 与 Correctness 不相同</h2>
+<p><strong>15. Faithfulness 与 Correctness 不相同</strong></p>
 <ul>
 <li><strong>Correctness</strong>：答案是否符合真实世界；</li>
 <li><strong>Faithfulness/Groundedness</strong>：答案是否被给定证据支持。</li>
@@ -391,30 +392,36 @@
 <li class="task-list-item"><input type="checkbox" disabled> 低证据场景允许拒答，不强行生成</li>
 </ul>
 <p><strong>22. 高级工程师面试题</strong></p>
-<blockquote>
-<p>[!question] - RAG 为什么不能消除幻觉？
+<div class="markdown-alert markdown-alert-tip" dir="auto">
+<p class="markdown-alert-title" dir="auto"><svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8 1.5c-2.363 0-4 1.69-4 3.75 0 .984.424 1.625.984 2.304l.214.253c.223.264.47.556.673.848.284.411.537.896.621 1.49a.75.75 0 0 1-1.484.211c-.04-.282-.163-.547-.37-.847a8.456 8.456 0 0 0-.542-.68c-.084-.1-.173-.205-.268-.32C3.201 7.75 2.5 6.766 2.5 5.25 2.5 2.31 4.863 0 8 0s5.5 2.31 5.5 5.25c0 1.516-.701 2.5-1.328 3.259-.095.115-.184.22-.268.319-.207.245-.383.453-.541.681-.208.3-.33.565-.37.847a.751.751 0 0 1-1.485-.212c.084-.593.337-1.078.621-1.489.203-.292.45-.584.673-.848.075-.088.147-.173.213-.253.561-.679.985-1.32.985-2.304 0-2.06-1.637-3.75-4-3.75ZM5.75 12h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1 0-1.5ZM6 15.25a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1-.75-.75Z"></path></svg>TIP</p>
+<p> - RAG 为什么不能消除幻觉？
 检索可能漏检或返回错误/过时内容，排序和 Context 可能丢掉正确证据，模型也可能忽略或错误综合证据。RAG 只提供 grounding 机会，需要引用约束、生成后支持度验证和拒答机制。</p>
-</blockquote>
-<blockquote>
-<p>[!question] - 如何定位 RAG 质量下降？
+</div>
+<div class="markdown-alert markdown-alert-tip" dir="auto">
+<p class="markdown-alert-title" dir="auto"><svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8 1.5c-2.363 0-4 1.69-4 3.75 0 .984.424 1.625.984 2.304l.214.253c.223.264.47.556.673.848.284.411.537.896.621 1.49a.75.75 0 0 1-1.484.211c-.04-.282-.163-.547-.37-.847a8.456 8.456 0 0 0-.542-.68c-.084-.1-.173-.205-.268-.32C3.201 7.75 2.5 6.766 2.5 5.25 2.5 2.31 4.863 0 8 0s5.5 2.31 5.5 5.25c0 1.516-.701 2.5-1.328 3.259-.095.115-.184.22-.268.319-.207.245-.383.453-.541.681-.208.3-.33.565-.37.847a.751.751 0 0 1-1.485-.212c.084-.593.337-1.078.621-1.489.203-.292.45-.584.673-.848.075-.088.147-.173.213-.253.561-.679.985-1.32.985-2.304 0-2.06-1.637-3.75-4-3.75ZM5.75 12h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1 0-1.5ZM6 15.25a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1-.75-.75Z"></path></svg>TIP</p>
+<p> - 如何定位 RAG 质量下降？
 用已知 evidence 的评估集逐层追踪：数据是否入索引、Recall 是否命中、gold rank 是否下降、Context 是否保留、生成是否忠实。再按版本、语言、租户、意图切片，避免只看端到端总分。</p>
-</blockquote>
-<blockquote>
-<p>[!question] - RAG 和 Fine-tuning 如何选择？
+</div>
+<div class="markdown-alert markdown-alert-tip" dir="auto">
+<p class="markdown-alert-title" dir="auto"><svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8 1.5c-2.363 0-4 1.69-4 3.75 0 .984.424 1.625.984 2.304l.214.253c.223.264.47.556.673.848.284.411.537.896.621 1.49a.75.75 0 0 1-1.484.211c-.04-.282-.163-.547-.37-.847a8.456 8.456 0 0 0-.542-.68c-.084-.1-.173-.205-.268-.32C3.201 7.75 2.5 6.766 2.5 5.25 2.5 2.31 4.863 0 8 0s5.5 2.31 5.5 5.25c0 1.516-.701 2.5-1.328 3.259-.095.115-.184.22-.268.319-.207.245-.383.453-.541.681-.208.3-.33.565-.37.847a.751.751 0 0 1-1.485-.212c.084-.593.337-1.078.621-1.489.203-.292.45-.584.673-.848.075-.088.147-.173.213-.253.561-.679.985-1.32.985-2.304 0-2.06-1.637-3.75-4-3.75ZM5.75 12h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1 0-1.5ZM6 15.25a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1-.75-.75Z"></path></svg>TIP</p>
+<p> - RAG 和 Fine-tuning 如何选择？
 需要频繁更新、权限控制和引用的事实优先 RAG；稳定行为、风格、格式和领域模式可 fine-tune。二者经常组合，不能用 fine-tuning 代替实时知识治理。</p>
-</blockquote>
-<blockquote>
-<p>[!question] - 如何设计企业多租户 RAG？
+</div>
+<div class="markdown-alert markdown-alert-tip" dir="auto">
+<p class="markdown-alert-title" dir="auto"><svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8 1.5c-2.363 0-4 1.69-4 3.75 0 .984.424 1.625.984 2.304l.214.253c.223.264.47.556.673.848.284.411.537.896.621 1.49a.75.75 0 0 1-1.484.211c-.04-.282-.163-.547-.37-.847a8.456 8.456 0 0 0-.542-.68c-.084-.1-.173-.205-.268-.32C3.201 7.75 2.5 6.766 2.5 5.25 2.5 2.31 4.863 0 8 0s5.5 2.31 5.5 5.25c0 1.516-.701 2.5-1.328 3.259-.095.115-.184.22-.268.319-.207.245-.383.453-.541.681-.208.3-.33.565-.37.847a.751.751 0 0 1-1.485-.212c.084-.593.337-1.078.621-1.489.203-.292.45-.584.673-.848.075-.088.147-.173.213-.253.561-.679.985-1.32.985-2.304 0-2.06-1.637-3.75-4-3.75ZM5.75 12h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1 0-1.5ZM6 15.25a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1-.75-.75Z"></path></svg>TIP</p>
+<p> - 如何设计企业多租户 RAG？
 可信身份生成过滤条件；索引层尽早过滤，返回前复核；缓存键绑定权限版本；引用点击再次授权；所有 trace 带作用域但正文脱敏；安全服务不可用时 fail closed；用跨租户 canary 文档做阻断测试。</p>
-</blockquote>
-<blockquote>
-<p>[!question] - 为什么 Context 不是越长越好？
+</div>
+<div class="markdown-alert markdown-alert-tip" dir="auto">
+<p class="markdown-alert-title" dir="auto"><svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8 1.5c-2.363 0-4 1.69-4 3.75 0 .984.424 1.625.984 2.304l.214.253c.223.264.47.556.673.848.284.411.537.896.621 1.49a.75.75 0 0 1-1.484.211c-.04-.282-.163-.547-.37-.847a8.456 8.456 0 0 0-.542-.68c-.084-.1-.173-.205-.268-.32C3.201 7.75 2.5 6.766 2.5 5.25 2.5 2.31 4.863 0 8 0s5.5 2.31 5.5 5.25c0 1.516-.701 2.5-1.328 3.259-.095.115-.184.22-.268.319-.207.245-.383.453-.541.681-.208.3-.33.565-.37.847a.751.751 0 0 1-1.485-.212c.084-.593.337-1.078.621-1.489.203-.292.45-.584.673-.848.075-.088.147-.173.213-.253.561-.679.985-1.32.985-2.304 0-2.06-1.637-3.75-4-3.75ZM5.75 12h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1 0-1.5ZM6 15.25a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1-.75-.75Z"></path></svg>TIP</p>
+<p> - 为什么 Context 不是越长越好？
 更长会增加成本、延迟、冲突和注意力稀释，重复内容还会放大错误。应在 token 预算下优化相关、互补、权威和可引用性，并追踪 gold evidence 是否真正被模型使用。</p>
-</blockquote>
-<blockquote>
-<p>[!question] - 你会怎样无损升级 embedding 和 chunker？
+</div>
+<div class="markdown-alert markdown-alert-tip" dir="auto">
+<p class="markdown-alert-title" dir="auto"><svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8 1.5c-2.363 0-4 1.69-4 3.75 0 .984.424 1.625.984 2.304l.214.253c.223.264.47.556.673.848.284.411.537.896.621 1.49a.75.75 0 0 1-1.484.211c-.04-.282-.163-.547-.37-.847a8.456 8.456 0 0 0-.542-.68c-.084-.1-.173-.205-.268-.32C3.201 7.75 2.5 6.766 2.5 5.25 2.5 2.31 4.863 0 8 0s5.5 2.31 5.5 5.25c0 1.516-.701 2.5-1.328 3.259-.095.115-.184.22-.268.319-.207.245-.383.453-.541.681-.208.3-.33.565-.37.847a.751.751 0 0 1-1.485-.212c.084-.593.337-1.078.621-1.489.203-.292.45-.584.673-.848.075-.088.147-.173.213-.253.561-.679.985-1.32.985-2.304 0-2.06-1.637-3.75-4-3.75ZM5.75 12h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1 0-1.5ZM6 15.25a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1-.75-.75Z"></path></svg>TIP</p>
+<p> - 你会怎样无损升级 embedding 和 chunker？
 建新版本索引，全量 backfill，增量双写，shadow 对比 Retrieval 与端到端答案，金丝雀切 alias；release manifest 绑定 parser/chunker/embedding/index/ranker，旧索引保留到回滚窗口结束。</p>
-</blockquote>
+</div>
 <p><strong>23. 延伸阅读</strong></p>
 <ul>
 <li>Lewis et al., <a href="https://arxiv.org/abs/2005.11401" rel="noopener noreferrer" target="_blank">Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks</a></li>
@@ -465,4 +472,4 @@
 
 
 <table><thead><tr><th>概念</th><th>系统角色</th><th>核心输入/输出</th><th>最关键的工程风险</th></tr></thead><tbody><tr><td>Memory - Agent 如何记住、更新与遗忘</td><td>跨时间状态层</td><td>经历/事实 → 可复用记忆</td><td>记错、过时、冲突、隐私</td></tr><tr><td>Retrieval - 从大规模信息中找到候选</td><td>候选生成层</td><td>Query → 候选文档</td><td>漏检、索引延迟、ACL</td></tr><tr><td>Recall - 召回阶段与 Recall@K 指标</td><td>目标与度量层</td><td>候选 + qrels → 覆盖指标</td><td>分母不完整、总体均值掩盖切片</td></tr><tr><td>Ranking - 从候选集合到最优顺序</td><td>候选压缩与排序层</td><td>候选 → 有序证据</td><td>偏差、超时、分数失标、重复</td></tr><tr><td><strong>RAG</strong></td><td>端到端知识增强生成架构</td><td>问题 + 外部证据 → 回答 + 引用</td><td>无依据、错误引用、越权、不可归因</td></tr></tbody></table>
-<p>把五者放到一条链路中：<strong>Memory 管理跨时状态；Retrieval 从记忆或知识库拿候选；Recall 判断候选是否覆盖正确证据；Ranking 在预算内把最好证据放前面；RAG 负责将这些证据安全地转化为可验证回答。</strong></p></main><aside class="toc"><p class="toc-title">本页目录</p><ul><li class="toc-d2"><a href="#1-从概率视角理解-rag">1. 从概率视角理解 RAG</a></li><li class="toc-d2"><a href="#2-naive-rag-与-production-rag">2. Naive RAG 与 Production RAG</a></li><li class="toc-d2"><a href="#3-完整架构数据面查询面与控制面">3. 完整架构：数据面、查询面与控制面</a></li><li class="toc-d2"><a href="#4-数据接入垃圾进垃圾出">4. 数据接入：垃圾进，垃圾出</a></li><li class="toc-d2"><a href="#5-chunking以可被检索且可被回答为单位">5. Chunking：以“可被检索且可被回答”为单位</a></li><li class="toc-d2"><a href="#6-retrieval混合多路和路由">6. Retrieval：混合、多路和路由</a></li><li class="toc-d2"><a href="#7-ranking相关性之外还要考虑证据价值">7. Ranking：相关性之外还要考虑证据价值</a></li><li class="toc-d2"><a href="#8-context-engineering把证据变成模型可用输入">8. Context Engineering：把证据变成模型可用输入</a></li><li class="toc-d2"><a href="#9-prompt-约束拒答与不确定性">9. Prompt 约束、拒答与不确定性</a></li><li class="toc-d2"><a href="#10-citation有链接不等于有依据">10. Citation：有链接不等于有依据</a></li><li class="toc-d2"><a href="#11-adaptivecorrective-与-agentic-rag">11. Adaptive、Corrective 与 Agentic RAG</a></li><li class="toc-d2"><a href="#12-ragfine-tuninglong-context-与-memory">12. RAG、Fine-tuning、Long Context 与 Memory</a></li><li class="toc-d2"><a href="#13-安全检索文档也是不可信输入">13. 安全：检索文档也是不可信输入</a></li><li class="toc-d2"><a href="#14-端到端评估必须分层归因">14. 端到端评估：必须分层归因</a></li><li class="toc-d2"><a href="#15-faithfulness-与-correctness-不相同">15. Faithfulness 与 Correctness 不相同</a></li></ul></aside></div><div class="lightbox" id="lightbox" aria-hidden="true"><img alt=""></div><script type="module">var e=document.documentElement,t=document.getElementById(`themeToggle`),n={auto:`🖥️`,light:`☀️`,dark:`🌙`};function r(){var e=localStorage.getItem(`theme`);return e===`light`||e===`dark`?e:`auto`}function i(){var i=r();i===`auto`?e.removeAttribute(`data-theme`):e.setAttribute(`data-theme`,i),t.textContent=n[i]}i(),t.addEventListener(`click`,()=>{var e=[`auto`,`light`,`dark`],t=e[(e.indexOf(r())+1)%3];t===`auto`?localStorage.removeItem(`theme`):localStorage.setItem(`theme`,t),i()}),window.matchMedia(`(prefers-color-scheme: dark)`).addEventListener(`change`,()=>{r()===`auto`&&i()});var a=document.getElementById(`lightbox`),o=a.querySelector(`img`);document.querySelectorAll(`.prose img`).forEach(e=>{e.style.cursor=`zoom-in`,e.addEventListener(`click`,()=>{o.src=e.currentSrc||e.src,o.alt=e.alt,a.classList.add(`open`),a.setAttribute(`aria-hidden`,`false`)})}),a.addEventListener(`click`,()=>{a.classList.remove(`open`),a.setAttribute(`aria-hidden`,`true`)}),document.addEventListener(`keydown`,e=>{e.key===`Escape`&&a.click()});</script></body></html>
+<p>把五者放到一条链路中：<strong>Memory 管理跨时状态；Retrieval 从记忆或知识库拿候选；Recall 判断候选是否覆盖正确证据；Ranking 在预算内把最好证据放前面；RAG 负责将这些证据安全地转化为可验证回答。</strong></p></main><aside class="toc"><p class="toc-title">本页目录</p><ul><li class="toc-d2"><a href="#1-从概率视角理解-rag">1. 从概率视角理解 RAG</a></li><li class="toc-d2"><a href="#3-完整架构数据面查询面与控制面">3. 完整架构：数据面、查询面与控制面</a></li><li class="toc-d2"><a href="#4-数据接入垃圾进垃圾出">4. 数据接入：垃圾进，垃圾出</a></li><li class="toc-d2"><a href="#6-retrieval混合多路和路由">6. Retrieval：混合、多路和路由</a></li><li class="toc-d2"><a href="#7-ranking相关性之外还要考虑证据价值">7. Ranking：相关性之外还要考虑证据价值</a></li><li class="toc-d2"><a href="#8-context-engineering把证据变成模型可用输入">8. Context Engineering：把证据变成模型可用输入</a></li><li class="toc-d2"><a href="#13-安全检索文档也是不可信输入">13. 安全：检索文档也是不可信输入</a></li><li class="toc-d2"><a href="#14-端到端评估必须分层归因">14. 端到端评估：必须分层归因</a></li></ul></aside></div><div class="lightbox" id="lightbox" aria-hidden="true"><img alt=""></div><script type="module">var e=document.documentElement,t=document.getElementById(`themeToggle`),n={auto:`🖥️`,light:`☀️`,dark:`🌙`};function r(){var e=localStorage.getItem(`theme`);return e===`light`||e===`dark`?e:`auto`}function i(){var i=r();i===`auto`?e.removeAttribute(`data-theme`):e.setAttribute(`data-theme`,i),t.textContent=n[i]}i(),t.addEventListener(`click`,()=>{var e=[`auto`,`light`,`dark`],t=e[(e.indexOf(r())+1)%3];t===`auto`?localStorage.removeItem(`theme`):localStorage.setItem(`theme`,t),i()}),window.matchMedia(`(prefers-color-scheme: dark)`).addEventListener(`change`,()=>{r()===`auto`&&i()});var a=document.getElementById(`lightbox`),o=a.querySelector(`img`);document.querySelectorAll(`.prose img`).forEach(e=>{e.style.cursor=`zoom-in`,e.addEventListener(`click`,()=>{o.src=e.currentSrc||e.src,o.alt=e.alt,a.classList.add(`open`),a.setAttribute(`aria-hidden`,`false`)})}),a.addEventListener(`click`,()=>{a.classList.remove(`open`),a.setAttribute(`aria-hidden`,`true`)}),document.addEventListener(`keydown`,e=>{e.key===`Escape`&&a.click()});</script></body></html>

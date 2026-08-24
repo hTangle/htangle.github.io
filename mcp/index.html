@@ -5,10 +5,11 @@
           document.documentElement.setAttribute('data-theme', s);
         }
       })();
-    </script><link rel="stylesheet" href="/_astro/Base.C6O8tc7V.css"></head><body><header class="topbar"><a href="/" class="brand">HLDay</a><nav><a href="/">专题</a><a href="/posts/">博客</a><a href="https://github.com/hTangle" class="nav-github" aria-label="GitHub">GitHub</a></nav><button class="theme-toggle" id="themeToggle" type="button" title="切换主题（自动/浅色/深色）" aria-label="切换主题">🖥️</button></header><div class="layout"><aside class="booknav"><ul class="nav-tree"><li><p class="nav-group">Go</p><ul><li><p class="nav-subgroup">运行时基础</p><ul><li class><a href="/source-map/">源码环境与目录地图</a></li><li class><a href="/bootstrap/">程序启动流程</a></li></ul></li><li><p class="nav-subgroup">并发编程</p><ul><li class><a href="/gmp/">GMP 调度器</a></li><li class><a href="/netpoll/">网络轮询器</a></li><li class><a href="/timer/">定时器</a></li><li class><a href="/sync-lock/">同步和锁</a></li><li class><a href="/channel/">Channel</a></li><li class><a href="/context/">Context</a></li><li class><a href="/defer-panic/">defer/panic/recover</a></li></ul></li><li><p class="nav-subgroup">内存管理</p><ul><li class><a href="/memory-alloc/">内存分配器</a></li><li class><a href="/gc/">垃圾收集器</a></li><li class><a href="/stack/">栈空间管理</a></li></ul></li><li><p class="nav-subgroup">数据结构</p><ul><li class><a href="/type-metadata/">类型元数据与对象布局</a></li><li class><a href="/iface/">Interface 与动态调用</a></li><li class><a href="/generics/">泛型与字典传递</a></li><li class><a href="/array/">数组</a></li><li class><a href="/slice/">切片</a></li><li class><a href="/swiss-map/">哈希表 (Swiss Table)</a></li><li class><a href="/string/">字符串</a></li></ul></li></ul></li><li><p class="nav-group">Agent 开发</p><ul><li><p class="nav-subgroup">协议与调用</p><ul><li class="active"><a href="/mcp/">MCP</a></li><li class><a href="/tool-call/">Tool Call</a></li><li class><a href="/skill/">Skill</a></li><li class><a href="/memory/">Memory</a></li></ul></li><li><p class="nav-subgroup">检索与排序</p><ul><li class><a href="/rag/">RAG</a></li><li class><a href="/retrieval/">Retrieval</a></li><li class><a href="/recall/">Recall</a></li><li class><a href="/ranking/">Ranking</a></li></ul></li></ul></li></ul></aside><main class="prose"><h1>MCP：连接模型与外部世界的标准协议</h1><blockquote>
-<p>[!abstract] 一句话定义
+    </script><link rel="stylesheet" href="/_astro/Base.C6O8tc7V.css"></head><body><header class="topbar"><a href="/" class="brand">HLDay</a><nav><a href="/">专题</a><a href="/posts/">博客</a><a href="https://github.com/hTangle" class="nav-github" aria-label="GitHub">GitHub</a></nav><button class="theme-toggle" id="themeToggle" type="button" title="切换主题（自动/浅色/深色）" aria-label="切换主题">🖥️</button></header><div class="layout"><aside class="booknav"><ul class="nav-tree"><li><p class="nav-group">Go</p><ul><li><p class="nav-subgroup">运行时基础</p><ul><li class><a href="/source-map/">源码环境与目录地图</a></li><li class><a href="/bootstrap/">程序启动流程</a></li></ul></li><li><p class="nav-subgroup">并发编程</p><ul><li class><a href="/gmp/">GMP 调度器</a></li><li class><a href="/netpoll/">网络轮询器</a></li><li class><a href="/timer/">定时器</a></li><li class><a href="/sync-lock/">同步和锁</a></li><li class><a href="/channel/">Channel</a></li><li class><a href="/context/">Context</a></li><li class><a href="/defer-panic/">defer/panic/recover</a></li></ul></li><li><p class="nav-subgroup">内存管理</p><ul><li class><a href="/memory-alloc/">内存分配器</a></li><li class><a href="/gc/">垃圾收集器</a></li><li class><a href="/stack/">栈空间管理</a></li></ul></li><li><p class="nav-subgroup">数据结构</p><ul><li class><a href="/type-metadata/">类型元数据与对象布局</a></li><li class><a href="/iface/">Interface 与动态调用</a></li><li class><a href="/generics/">泛型与字典传递</a></li><li class><a href="/array/">数组</a></li><li class><a href="/slice/">切片</a></li><li class><a href="/swiss-map/">哈希表 (Swiss Table)</a></li><li class><a href="/string/">字符串</a></li></ul></li></ul></li><li><p class="nav-group">Agent 开发</p><ul><li><p class="nav-subgroup">协议与调用</p><ul><li class="active"><a href="/mcp/">MCP</a></li><li class><a href="/tool-call/">Tool Call</a></li><li class><a href="/skill/">Skill</a></li><li class><a href="/memory/">Memory</a></li></ul></li><li><p class="nav-subgroup">检索与排序</p><ul><li class><a href="/rag/">RAG</a></li><li class><a href="/retrieval/">Retrieval</a></li><li class><a href="/recall/">Recall</a></li><li class><a href="/ranking/">Ranking</a></li></ul></li></ul></li></ul></aside><main class="prose"><h1>MCP：连接模型与外部世界的标准协议</h1><div class="markdown-alert markdown-alert-note" dir="auto">
+<p class="markdown-alert-title" dir="auto"><svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>NOTE</p>
+<p> 一句话定义
 **MCP（Model Context Protocol，模型上下文协议）是一套让 AI 应用以统一方式发现、读取和调用外部能力的客户端—服务器协议。**它解决的不是“模型会不会思考”，而是“模型应用怎样用同一种接口接入文件、数据库、搜索、业务系统等不同能力”。</p>
-</blockquote>
+</div>
 <img src="/images/go/mcp-architecture.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
 <p>把 AI 应用想成一台笔记本电脑：每个外部系统原本都有不同插头，接一个系统就要写一套适配代码。MCP 更像 <strong>USB-C 标准</strong>——它规定连接、握手、能力发现、请求与响应的共同语言。设备仍由各自厂商实现，MCP 只让“怎么接”变得一致。</p>
 <h2 id="1-mcp-到底解决什么问题">1. MCP 到底解决什么问题</h2>
@@ -102,7 +103,7 @@ MCP Server 是协议边界；真正的数据或动作可能位于文件系统、
 <li><strong>Streamable HTTP</strong>：通过 HTTP 支持远程服务与流式响应；适合集中部署、跨网络访问、统一鉴权与审计。</li>
 </ul>
 <p>因此，MCP 不是“只能跑本地”的协议，也不是某个固定网络服务。Transport 决定消息怎么运送，协议决定消息表达什么。</p>
-<h2 id="6-能力发现为何重要">6. 能力发现为何重要</h2>
+<p><strong>6. 能力发现为何重要</strong></p>
 <p>传统工具集成常把工具列表写死在应用代码里。MCP 允许 Client 在运行时询问 Server：</p>
 <img src="/images/go/04-capability-discovery.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
 <p>这使工具可以独立升级，但也带来一个工程要求：**描述与 Schema 必须稳定、精确、可理解。**如果两个工具描述含糊，模型就可能选错；如果 Schema 太宽松，错误会延迟到真实执行阶段。</p>
@@ -121,7 +122,7 @@ MCP Server 是协议边界；真正的数据或动作可能位于文件系统、
 <p>[!danger] 最常见的误解
 “接入了 MCP”只表示双方能按共同协议通信，不表示 Server 是可信的，也不表示工具可以跳过审批直接执行。</p>
 </blockquote>
-<h2 id="8-什么时候值得使用-mcp">8. 什么时候值得使用 MCP</h2>
+<p><strong>8. 什么时候值得使用 MCP</strong></p>
 <p>适合：</p>
 <ul>
 <li>同一能力要被多个 AI Host 使用；</li>
@@ -137,23 +138,27 @@ MCP Server 是协议边界；真正的数据或动作可能位于文件系统、
 </ul>
 <p>此时普通函数调用或内部 Tool API 可能更直接。</p>
 <h2 id="9-常见误区">9. 常见误区</h2>
-<blockquote>
-<p>[!faq] - MCP 是一个 Agent 框架吗？
+<div class="markdown-alert markdown-alert-tip" dir="auto">
+<p class="markdown-alert-title" dir="auto"><svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8 1.5c-2.363 0-4 1.69-4 3.75 0 .984.424 1.625.984 2.304l.214.253c.223.264.47.556.673.848.284.411.537.896.621 1.49a.75.75 0 0 1-1.484.211c-.04-.282-.163-.547-.37-.847a8.456 8.456 0 0 0-.542-.68c-.084-.1-.173-.205-.268-.32C3.201 7.75 2.5 6.766 2.5 5.25 2.5 2.31 4.863 0 8 0s5.5 2.31 5.5 5.25c0 1.516-.701 2.5-1.328 3.259-.095.115-.184.22-.268.319-.207.245-.383.453-.541.681-.208.3-.33.565-.37.847a.751.751 0 0 1-1.485-.212c.084-.593.337-1.078.621-1.489.203-.292.45-.584.673-.848.075-.088.147-.173.213-.253.561-.679.985-1.32.985-2.304 0-2.06-1.637-3.75-4-3.75ZM5.75 12h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1 0-1.5ZM6 15.25a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1-.75-.75Z"></path></svg>TIP</p>
+<p> - MCP 是一个 Agent 框架吗？
 不是。它不规定 Agent 怎样规划、记忆或反思，只规定应用与能力提供方怎样交换上下文和调用能力。</p>
-</blockquote>
-<blockquote>
-<p>[!faq] - MCP Server 自己一定包含大模型吗？
+</div>
+<div class="markdown-alert markdown-alert-tip" dir="auto">
+<p class="markdown-alert-title" dir="auto"><svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8 1.5c-2.363 0-4 1.69-4 3.75 0 .984.424 1.625.984 2.304l.214.253c.223.264.47.556.673.848.284.411.537.896.621 1.49a.75.75 0 0 1-1.484.211c-.04-.282-.163-.547-.37-.847a8.456 8.456 0 0 0-.542-.68c-.084-.1-.173-.205-.268-.32C3.201 7.75 2.5 6.766 2.5 5.25 2.5 2.31 4.863 0 8 0s5.5 2.31 5.5 5.25c0 1.516-.701 2.5-1.328 3.259-.095.115-.184.22-.268.319-.207.245-.383.453-.541.681-.208.3-.33.565-.37.847a.751.751 0 0 1-1.485-.212c.084-.593.337-1.078.621-1.489.203-.292.45-.584.673-.848.075-.088.147-.173.213-.253.561-.679.985-1.32.985-2.304 0-2.06-1.637-3.75-4-3.75ZM5.75 12h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1 0-1.5ZM6 15.25a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1-.75-.75Z"></path></svg>TIP</p>
+<p> - MCP Server 自己一定包含大模型吗？
 不一定。多数 Server 只是把外部系统包装成协议能力，本身可以完全不运行模型。</p>
-</blockquote>
-<blockquote>
-<p>[!faq] - MCP Tool 和普通 Tool 是两种完全不同的东西吗？
+</div>
+<div class="markdown-alert markdown-alert-tip" dir="auto">
+<p class="markdown-alert-title" dir="auto"><svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8 1.5c-2.363 0-4 1.69-4 3.75 0 .984.424 1.625.984 2.304l.214.253c.223.264.47.556.673.848.284.411.537.896.621 1.49a.75.75 0 0 1-1.484.211c-.04-.282-.163-.547-.37-.847a8.456 8.456 0 0 0-.542-.68c-.084-.1-.173-.205-.268-.32C3.201 7.75 2.5 6.766 2.5 5.25 2.5 2.31 4.863 0 8 0s5.5 2.31 5.5 5.25c0 1.516-.701 2.5-1.328 3.259-.095.115-.184.22-.268.319-.207.245-.383.453-.541.681-.208.3-.33.565-.37.847a.751.751 0 0 1-1.485-.212c.084-.593.337-1.078.621-1.489.203-.292.45-.584.673-.848.075-.088.147-.173.213-.253.561-.679.985-1.32.985-2.304 0-2.06-1.637-3.75-4-3.75ZM5.75 12h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1 0-1.5ZM6 15.25a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1-.75-.75Z"></path></svg>TIP</p>
+<p> - MCP Tool 和普通 Tool 是两种完全不同的东西吗？
 语义上都表示可调用能力；区别在于 MCP Tool 通过 MCP 的发现、Schema 和调用消息暴露，普通 Tool 可能只是进程内函数或框架私有接口。</p>
-</blockquote>
-<blockquote>
-<p>[!faq] - 模型会直接连接 MCP Server 吗？
+</div>
+<div class="markdown-alert markdown-alert-tip" dir="auto">
+<p class="markdown-alert-title" dir="auto"><svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8 1.5c-2.363 0-4 1.69-4 3.75 0 .984.424 1.625.984 2.304l.214.253c.223.264.47.556.673.848.284.411.537.896.621 1.49a.75.75 0 0 1-1.484.211c-.04-.282-.163-.547-.37-.847a8.456 8.456 0 0 0-.542-.68c-.084-.1-.173-.205-.268-.32C3.201 7.75 2.5 6.766 2.5 5.25 2.5 2.31 4.863 0 8 0s5.5 2.31 5.5 5.25c0 1.516-.701 2.5-1.328 3.259-.095.115-.184.22-.268.319-.207.245-.383.453-.541.681-.208.3-.33.565-.37.847a.751.751 0 0 1-1.485-.212c.084-.593.337-1.078.621-1.489.203-.292.45-.584.673-.848.075-.088.147-.173.213-.253.561-.679.985-1.32.985-2.304 0-2.06-1.637-3.75-4-3.75ZM5.75 12h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1 0-1.5ZM6 15.25a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1-.75-.75Z"></path></svg>TIP</p>
+<p> - 模型会直接连接 MCP Server 吗？
 通常不会。Host/Client 才负责连接、权限与真实 I/O；模型看到的是整理后的工具描述、上下文与调用结果。</p>
-</blockquote>
-<h2 id="10-协议层深挖requestresponse-与-notification">10. 协议层深挖：Request、Response 与 Notification</h2>
+</div>
+<p><strong>10. 协议层深挖：Request、Response 与 Notification</strong></p>
 <p>截至 2026-08，MCP 当前正式协议修订版是 <code>2025-11-25</code>。它以 JSON-RPC 2.0 为消息基础，但面试时不能只回答“就是 JSON-RPC”：JSON-RPC 解决消息相关性，MCP 在其上定义了生命周期、能力、领域方法和安全语义。</p>
 
 
@@ -202,7 +207,7 @@ MCP Server 是协议边界；真正的数据或动作可能位于文件系统、
 <li>取消信号。</li>
 </ul>
 <p>Server 声明 <code>listChanged</code> 后才应发送对应列表变化通知；Client 收到后重新拉取并更新缓存。==Capability 是契约，Notification 是契约允许后的事件。==</p>
-<h2 id="11-初始化状态机与能力协商">11. 初始化状态机与能力协商</h2>
+<p><strong>11. 初始化状态机与能力协商</strong></p>
 <p>MCP 连接不是“连上就调用”，而是一个严格状态机：</p>
 <img src="/images/go/05-initialization-state-machine.png" alt="" loading="lazy" width="500" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
 <p><code>initialize</code> 至少交换：</p>
@@ -220,7 +225,7 @@ MCP Server 是协议边界；真正的数据或动作可能位于文件系统、
 <li><strong>版本与能力都进入连接缓存键</strong>，避免复用错误结果；</li>
 <li><strong>Server instructions 与 Tool annotations 都视为不可信输入</strong>，不能覆盖 Host 安全规则。</li>
 </ol>
-<h2 id="12-mcp-是双向协议不只是server-给模型工具">12. MCP 是双向协议，不只是“Server 给模型工具”</h2>
+<p><strong>12. MCP 是双向协议，不只是“Server 给模型工具”</strong></p>
 <p>基础介绍容易只讲 Server Features。完整心智模型还包括 Client 向 Server 提供的能力：</p>
 <img src="/images/go/06-bidirectional-capabilities.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
 <p><strong>12.1 Roots</strong></p>
@@ -233,7 +238,7 @@ MCP Server 是协议边界；真正的数据或动作可能位于文件系统、
 <p><code>2025-11-25</code> 引入实验性 Tasks，用于长耗时、可轮询、可延迟取结果的请求。典型状态是：</p>
 <img src="/images/go/07-task-state-machine.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
 <p>面试时应强调：Tasks 不是把所有同步 Tool Call 自动变成异步任务。双方先协商 task capability，具体 Tool 还可声明 <code>required</code>、<code>optional</code> 或 <code>forbidden</code>；同时要处理 TTL、任务 ID 授权、轮询退避和结果清理。</p>
-<h2 id="13-toolresourceprompt-的高级建模">13. Tool、Resource、Prompt 的高级建模</h2>
+<p><strong>13. Tool、Resource、Prompt 的高级建模</strong></p>
 <p>三类原语的差异不只在“动词/名词”：</p>
 
 
@@ -288,7 +293,7 @@ MCP Server 是协议边界；真正的数据或动作可能位于文件系统、
 <p><strong>13.2 Tool 的输入与输出 Schema</strong></p>
 <p>生产级 Tool 不只定义 <code>inputSchema</code>，还应在适用时定义 <code>outputSchema</code> 并返回 <code>structuredContent</code>。结构化输出可让 Host 做二次校验、UI 渲染和下游组合。为兼容旧 Client，Server 可能还需返回序列化后的 text content。</p>
 <p>Tool annotations（例如只读、破坏性、幂等倾向）只能帮助 UI 与调度，<strong>不能当作安全证明</strong>。真正权限必须在执行路径验证。</p>
-<h2 id="14-transport-与生产级会话设计">14. Transport 与生产级会话设计</h2>
+<p><strong>14. Transport 与生产级会话设计</strong></p>
 <p><strong>14.1 stdio 的真实边界</strong></p>
 <p>stdio 适合本地进程：Client 启动 Server，stdout 只能输出合法协议消息，日志走 stderr。其风险不是互联网攻击面，而是本地进程继承了过多环境变量、文件权限或网络权限。</p>
 <p><strong>14.2 Streamable HTTP 的状态模型</strong></p>
@@ -303,7 +308,7 @@ MCP Server 是协议边界；真正的数据或动作可能位于文件系统、
 </ul>
 <p><strong>14.3 断线重连不是简单重放</strong></p>
 <p>只读请求可重新发起；有副作用 Tool 的请求若在“Server 已执行、响应丢失”处断线，客户端无法仅凭超时判断是否执行。解决思路与分布式系统一致：业务幂等键、状态查询、去重存储和补偿动作，而不是寄希望于传输层提供 exactly-once。</p>
-<h2 id="15-authorization-与威胁模型">15. Authorization 与威胁模型</h2>
+<p><strong>15. Authorization 与威胁模型</strong></p>
 <p>HTTP MCP 的授权框架把受保护 MCP Server 视为 OAuth Resource Server，MCP Client 是 OAuth Client，Authorization Server 负责发 token。高级回答应覆盖：</p>
 <img src="/images/go/08-authorization-flow.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
 <p>关键安全结论：</p>
@@ -468,10 +473,11 @@ MCP Server 是协议边界；真正的数据或动作可能位于文件系统、
 <li>远程链路是否被代理、TLS、Origin、WAF 拦截；</li>
 <li>用 request ID 对齐 Client 与 Server 日志。</li>
 </ol>
-<blockquote>
-<p>[!bug] 高频事故：stdout 污染
+<div class="markdown-alert markdown-alert-important" dir="auto">
+<p class="markdown-alert-title" dir="auto"><svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M0 1.75C0 .784.784 0 1.75 0h12.5C15.216 0 16 .784 16 1.75v9.5A1.75 1.75 0 0 1 14.25 13H8.06l-2.573 2.573A1.458 1.458 0 0 1 3 14.543V13H1.75A1.75 1.75 0 0 1 0 11.25Zm1.75-.25a.25.25 0 0 0-.25.25v9.5c0 .138.112.25.25.25h2a.75.75 0 0 1 .75.75v2.19l2.72-2.72a.749.749 0 0 1 .53-.22h6.5a.25.25 0 0 0 .25-.25v-9.5a.25.25 0 0 0-.25-.25Zm7 2.25v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 9a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>IMPORTANT</p>
+<p> 高频事故：stdout 污染
 Python/Node 依赖在启动时输出一行提示，Client 把它当 JSON-RPC 解析，表现为“初始化随机失败”。修复是日志统一走 stderr，并在 CI 做协议流纯净性测试。</p>
-</blockquote>
+</div>
 <p><strong>18.2 调用偶发重复执行</strong></p>
 <p>典型链路：Tool 已完成写操作 → 响应在代理层丢失 → Client 超时重试 → 重复创建。排查时不要只看 Client timeout；用业务幂等键、MCP request ID 与下游 transaction ID 串联日志。</p>
 <p>修复优先级：</p>
@@ -574,34 +580,41 @@ Python/Node 依赖在启动时输出一行提示，Client 把它当 JSON-RPC 解
 <li class="task-list-item"><input type="checkbox" disabled> 有灰度、回滚、故障演练和 On-call Runbook。</li>
 </ul>
 <p><strong>20. 一些额外的QA</strong></p>
-<blockquote>
-<p>[!question] - Q1：MCP 与 REST API 的本质区别是什么？
+<div class="markdown-alert markdown-alert-tip" dir="auto">
+<p class="markdown-alert-title" dir="auto"><svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8 1.5c-2.363 0-4 1.69-4 3.75 0 .984.424 1.625.984 2.304l.214.253c.223.264.47.556.673.848.284.411.537.896.621 1.49a.75.75 0 0 1-1.484.211c-.04-.282-.163-.547-.37-.847a8.456 8.456 0 0 0-.542-.68c-.084-.1-.173-.205-.268-.32C3.201 7.75 2.5 6.766 2.5 5.25 2.5 2.31 4.863 0 8 0s5.5 2.31 5.5 5.25c0 1.516-.701 2.5-1.328 3.259-.095.115-.184.22-.268.319-.207.245-.383.453-.541.681-.208.3-.33.565-.37.847a.751.751 0 0 1-1.485-.212c.084-.593.337-1.078.621-1.489.203-.292.45-.584.673-.848.075-.088.147-.173.213-.253.561-.679.985-1.32.985-2.304 0-2.06-1.637-3.75-4-3.75ZM5.75 12h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1 0-1.5ZM6 15.25a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1-.75-.75Z"></path></svg>TIP</p>
+<p> - Q1：MCP 与 REST API 的本质区别是什么？
 REST 主要规范资源型 HTTP 接口；MCP 是面向 AI Host 的有状态能力协议，包含初始化、能力发现、双向请求、通知、上下文原语与多种 Transport。MCP Server 背后仍可调用 REST。若只有一个固定服务和明确调用方，REST 更简单；若要让多个 AI Host 动态发现并统一使用能力，MCP 更有价值。</p>
-</blockquote>
-<blockquote>
-<p>[!question] - Q2：为什么 MCP 不能替代 Agent Framework？
+</div>
+<div class="markdown-alert markdown-alert-tip" dir="auto">
+<p class="markdown-alert-title" dir="auto"><svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8 1.5c-2.363 0-4 1.69-4 3.75 0 .984.424 1.625.984 2.304l.214.253c.223.264.47.556.673.848.284.411.537.896.621 1.49a.75.75 0 0 1-1.484.211c-.04-.282-.163-.547-.37-.847a8.456 8.456 0 0 0-.542-.68c-.084-.1-.173-.205-.268-.32C3.201 7.75 2.5 6.766 2.5 5.25 2.5 2.31 4.863 0 8 0s5.5 2.31 5.5 5.25c0 1.516-.701 2.5-1.328 3.259-.095.115-.184.22-.268.319-.207.245-.383.453-.541.681-.208.3-.33.565-.37.847a.751.751 0 0 1-1.485-.212c.084-.593.337-1.078.621-1.489.203-.292.45-.584.673-.848.075-.088.147-.173.213-.253.561-.679.985-1.32.985-2.304 0-2.06-1.637-3.75-4-3.75ZM5.75 12h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1 0-1.5ZM6 15.25a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1-.75-.75Z"></path></svg>TIP</p>
+<p> - Q2：为什么 MCP 不能替代 Agent Framework？
 MCP 不负责计划、记忆、停止条件、模型选择和多 Agent 协作。它提供能力与上下文的标准边界；Agent Framework 决定何时使用这些能力以及如何形成执行循环。</p>
-</blockquote>
-<blockquote>
-<p>[!question] - Q3：如何做多租户 MCP Server？
+</div>
+<div class="markdown-alert markdown-alert-tip" dir="auto">
+<p class="markdown-alert-title" dir="auto"><svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8 1.5c-2.363 0-4 1.69-4 3.75 0 .984.424 1.625.984 2.304l.214.253c.223.264.47.556.673.848.284.411.537.896.621 1.49a.75.75 0 0 1-1.484.211c-.04-.282-.163-.547-.37-.847a8.456 8.456 0 0 0-.542-.68c-.084-.1-.173-.205-.268-.32C3.201 7.75 2.5 6.766 2.5 5.25 2.5 2.31 4.863 0 8 0s5.5 2.31 5.5 5.25c0 1.516-.701 2.5-1.328 3.259-.095.115-.184.22-.268.319-.207.245-.383.453-.541.681-.208.3-.33.565-.37.847a.751.751 0 0 1-1.485-.212c.084-.593.337-1.078.621-1.489.203-.292.45-.584.673-.848.075-.088.147-.173.213-.253.561-.679.985-1.32.985-2.304 0-2.06-1.637-3.75-4-3.75ZM5.75 12h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1 0-1.5ZM6 15.25a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1-.75-.75Z"></path></svg>TIP</p>
+<p> - Q3：如何做多租户 MCP Server？
 身份必须来自经过验证的请求凭证，而不是模型参数；工具列表、Resource、缓存和限流都以 tenant/user/scope 分区；下游凭证独立交换；审计保留 request/session 关联；任何连接级状态都不能成为跨租户身份来源。</p>
-</blockquote>
-<blockquote>
-<p>[!question] - Q4：如何处理 tools/list 很大导致上下文昂贵？
+</div>
+<div class="markdown-alert markdown-alert-tip" dir="auto">
+<p class="markdown-alert-title" dir="auto"><svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8 1.5c-2.363 0-4 1.69-4 3.75 0 .984.424 1.625.984 2.304l.214.253c.223.264.47.556.673.848.284.411.537.896.621 1.49a.75.75 0 0 1-1.484.211c-.04-.282-.163-.547-.37-.847a8.456 8.456 0 0 0-.542-.68c-.084-.1-.173-.205-.268-.32C3.201 7.75 2.5 6.766 2.5 5.25 2.5 2.31 4.863 0 8 0s5.5 2.31 5.5 5.25c0 1.516-.701 2.5-1.328 3.259-.095.115-.184.22-.268.319-.207.245-.383.453-.541.681-.208.3-.33.565-.37.847a.751.751 0 0 1-1.485-.212c.084-.593.337-1.078.621-1.489.203-.292.45-.584.673-.848.075-.088.147-.173.213-.253.561-.679.985-1.32.985-2.304 0-2.06-1.637-3.75-4-3.75ZM5.75 12h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1 0-1.5ZM6 15.25a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1-.75-.75Z"></path></svg>TIP</p>
+<p> - Q4：如何处理 tools/list 很大导致上下文昂贵？
 先按权限和任务域裁剪，再做分层发现或工具搜索；Schema 保持短而精确、排序稳定；缓存清单但响应 list_changed；用离线 eval 评估召回率与误选率，而不是简单把几百个工具全塞给模型。</p>
-</blockquote>
-<blockquote>
-<p>[!question] - Q5：一次 tools/call 超时，能否直接重试？
+</div>
+<div class="markdown-alert markdown-alert-tip" dir="auto">
+<p class="markdown-alert-title" dir="auto"><svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8 1.5c-2.363 0-4 1.69-4 3.75 0 .984.424 1.625.984 2.304l.214.253c.223.264.47.556.673.848.284.411.537.896.621 1.49a.75.75 0 0 1-1.484.211c-.04-.282-.163-.547-.37-.847a8.456 8.456 0 0 0-.542-.68c-.084-.1-.173-.205-.268-.32C3.201 7.75 2.5 6.766 2.5 5.25 2.5 2.31 4.863 0 8 0s5.5 2.31 5.5 5.25c0 1.516-.701 2.5-1.328 3.259-.095.115-.184.22-.268.319-.207.245-.383.453-.541.681-.208.3-.33.565-.37.847a.751.751 0 0 1-1.485-.212c.084-.593.337-1.078.621-1.489.203-.292.45-.584.673-.848.075-.088.147-.173.213-.253.561-.679.985-1.32.985-2.304 0-2.06-1.637-3.75-4-3.75ZM5.75 12h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1 0-1.5ZM6 15.25a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1-.75-.75Z"></path></svg>TIP</p>
+<p> - Q5：一次 tools/call 超时，能否直接重试？
 先区分只读、幂等写和非幂等写。非幂等动作可能已经生效但响应丢失，应使用业务幂等键或查询状态；只有明确可重试的暂时性错误才指数退避，并设置次数和总预算。</p>
-</blockquote>
-<blockquote>
-<p>[!question] - Q6：Capability negotiation 和 API versioning 各解决什么？
+</div>
+<div class="markdown-alert markdown-alert-tip" dir="auto">
+<p class="markdown-alert-title" dir="auto"><svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8 1.5c-2.363 0-4 1.69-4 3.75 0 .984.424 1.625.984 2.304l.214.253c.223.264.47.556.673.848.284.411.537.896.621 1.49a.75.75 0 0 1-1.484.211c-.04-.282-.163-.547-.37-.847a8.456 8.456 0 0 0-.542-.68c-.084-.1-.173-.205-.268-.32C3.201 7.75 2.5 6.766 2.5 5.25 2.5 2.31 4.863 0 8 0s5.5 2.31 5.5 5.25c0 1.516-.701 2.5-1.328 3.259-.095.115-.184.22-.268.319-.207.245-.383.453-.541.681-.208.3-.33.565-.37.847a.751.751 0 0 1-1.485-.212c.084-.593.337-1.078.621-1.489.203-.292.45-.584.673-.848.075-.088.147-.173.213-.253.561-.679.985-1.32.985-2.304 0-2.06-1.637-3.75-4-3.75ZM5.75 12h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1 0-1.5ZM6 15.25a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1-.75-.75Z"></path></svg>TIP</p>
+<p> - Q6：Capability negotiation 和 API versioning 各解决什么？
 协议版本描述消息契约的共同基线；Capability 描述该连接上双方实际支持的可选功能。相同协议版本的两个实现仍可能拥有不同能力，因此两者都必须检查。</p>
-</blockquote>
-<blockquote>
-<p>[!question] - Q7：MCP 最危险的安全误区是什么？
+</div>
+<div class="markdown-alert markdown-alert-tip" dir="auto">
+<p class="markdown-alert-title" dir="auto"><svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8 1.5c-2.363 0-4 1.69-4 3.75 0 .984.424 1.625.984 2.304l.214.253c.223.264.47.556.673.848.284.411.537.896.621 1.49a.75.75 0 0 1-1.484.211c-.04-.282-.163-.547-.37-.847a8.456 8.456 0 0 0-.542-.68c-.084-.1-.173-.205-.268-.32C3.201 7.75 2.5 6.766 2.5 5.25 2.5 2.31 4.863 0 8 0s5.5 2.31 5.5 5.25c0 1.516-.701 2.5-1.328 3.259-.095.115-.184.22-.268.319-.207.245-.383.453-.541.681-.208.3-.33.565-.37.847a.751.751 0 0 1-1.485-.212c.084-.593.337-1.078.621-1.489.203-.292.45-.584.673-.848.075-.088.147-.173.213-.253.561-.679.985-1.32.985-2.304 0-2.06-1.637-3.75-4-3.75ZM5.75 12h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1 0-1.5ZM6 15.25a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1-.75-.75Z"></path></svg>TIP</p>
+<p> - Q7：MCP 最危险的安全误区是什么？
 把“协议兼容”误认为“服务可信”。Server 描述、Tool annotation 和返回内容都可能恶意；Host 仍需建立来源信任、沙箱、最小权限、用户确认、token audience 校验与提示注入隔离。</p>
-</blockquote>
+</div>
 <p><strong>21. 参考资料</strong></p>
 <ul>
 <li><a href="https://modelcontextprotocol.io/specification/2025-11-25" rel="noopener noreferrer" target="_blank">MCP 2025-11-25 规范总览</a></li>
@@ -660,7 +673,8 @@ MCP 不负责计划、记忆、停止条件、模型选择和多 Agent 协作。
 
 
 <table><thead><tr><th>维度</th><th>MCP</th><th>Skill</th><th>Tool Call</th></tr></thead><tbody><tr><td>本质</td><td>跨进程/跨系统的<strong>标准协议与集成边界</strong></td><td>注入给 Agent 的<strong>可复用知识与工作流程</strong></td><td>模型在某一时刻发出的<strong>一次结构化调用请求</strong></td></tr><tr><td>解决的问题</td><td>不同 Host 如何统一接入外部能力</td><td>Agent 应该按什么方法、规范和步骤做事</td><td>这一步要调用哪个工具、传什么参数</td></tr><tr><td>是否直接执行动作</td><td>协议本身不执行；Server 的实现执行</td><td>不执行，只指导模型与运行时</td><td>调用请求本身不执行；Runtime/Tool 执行</td></tr><tr><td>生命周期</td><td>连接建立到关闭，可持续多轮</td><td>被发现、加载并在任务期间影响行为</td><td>单次请求 → 执行 → 单次结果</td></tr><tr><td>典型载体</td><td>JSON-RPC 消息、Schema、Transport</td><td><code>SKILL.md</code>、脚本、模板、参考资料</td><td><code>tool_name + arguments + call_id</code></td></tr><tr><td>三者关系</td><td>MCP 可以<strong>暴露 Tool</strong>，承载 Tool Call 的远程执行</td><td>Skill 可以指导 Agent <strong>何时、怎样调用 Tool</strong></td><td>Tool Call 是把计划变成实际外部操作的那一次握手</td></tr></tbody></table>
-<blockquote>
-<p>[!summary] 最短记忆法
+<div class="markdown-alert markdown-alert-note" dir="auto">
+<p class="markdown-alert-title" dir="auto"><svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>NOTE</p>
+<p> 最短记忆法
 <strong>MCP 是插座标准，Skill 是操作手册，Tool Call 是按下某个按钮的一次动作请求。</strong></p>
-</blockquote></main><aside class="toc"><p class="toc-title">本页目录</p><ul><li class="toc-d2"><a href="#1-mcp-到底解决什么问题">1. MCP 到底解决什么问题</a></li><li class="toc-d2"><a href="#2-三个核心角色hostclientserver">2. 三个核心角色：Host、Client、Server</a></li><li class="toc-d2"><a href="#3-server-暴露的三类核心原语">3. Server 暴露的三类核心原语</a></li><li class="toc-d2"><a href="#4-一次完整-mcp-会话怎样发生">4. 一次完整 MCP 会话怎样发生</a></li><li class="toc-d2"><a href="#5-transport消息怎样从-client-到-server">5. Transport：消息怎样从 Client 到 Server</a></li><li class="toc-d2"><a href="#6-能力发现为何重要">6. 能力发现为何重要</a></li><li class="toc-d2"><a href="#7-安全边界标准连接不等于自动可信">7. 安全边界：标准连接不等于自动可信</a></li><li class="toc-d2"><a href="#8-什么时候值得使用-mcp">8. 什么时候值得使用 MCP</a></li><li class="toc-d2"><a href="#9-常见误区">9. 常见误区</a></li><li class="toc-d2"><a href="#10-协议层深挖requestresponse-与-notification">10. 协议层深挖：Request、Response 与 Notification</a></li><li class="toc-d2"><a href="#11-初始化状态机与能力协商">11. 初始化状态机与能力协商</a></li><li class="toc-d2"><a href="#12-mcp-是双向协议不只是server-给模型工具">12. MCP 是双向协议，不只是“Server 给模型工具”</a></li><li class="toc-d2"><a href="#13-toolresourceprompt-的高级建模">13. Tool、Resource、Prompt 的高级建模</a></li><li class="toc-d2"><a href="#14-transport-与生产级会话设计">14. Transport 与生产级会话设计</a></li><li class="toc-d2"><a href="#15-authorization-与威胁模型">15. Authorization 与威胁模型</a></li></ul></aside></div><div class="lightbox" id="lightbox" aria-hidden="true"><img alt=""></div><script type="module">var e=document.documentElement,t=document.getElementById(`themeToggle`),n={auto:`🖥️`,light:`☀️`,dark:`🌙`};function r(){var e=localStorage.getItem(`theme`);return e===`light`||e===`dark`?e:`auto`}function i(){var i=r();i===`auto`?e.removeAttribute(`data-theme`):e.setAttribute(`data-theme`,i),t.textContent=n[i]}i(),t.addEventListener(`click`,()=>{var e=[`auto`,`light`,`dark`],t=e[(e.indexOf(r())+1)%3];t===`auto`?localStorage.removeItem(`theme`):localStorage.setItem(`theme`,t),i()}),window.matchMedia(`(prefers-color-scheme: dark)`).addEventListener(`change`,()=>{r()===`auto`&&i()});var a=document.getElementById(`lightbox`),o=a.querySelector(`img`);document.querySelectorAll(`.prose img`).forEach(e=>{e.style.cursor=`zoom-in`,e.addEventListener(`click`,()=>{o.src=e.currentSrc||e.src,o.alt=e.alt,a.classList.add(`open`),a.setAttribute(`aria-hidden`,`false`)})}),a.addEventListener(`click`,()=>{a.classList.remove(`open`),a.setAttribute(`aria-hidden`,`true`)}),document.addEventListener(`keydown`,e=>{e.key===`Escape`&&a.click()});</script></body></html>
+</div></main><aside class="toc"><p class="toc-title">本页目录</p><ul><li class="toc-d2"><a href="#1-mcp-到底解决什么问题">1. MCP 到底解决什么问题</a></li><li class="toc-d2"><a href="#2-三个核心角色hostclientserver">2. 三个核心角色：Host、Client、Server</a></li><li class="toc-d2"><a href="#3-server-暴露的三类核心原语">3. Server 暴露的三类核心原语</a></li><li class="toc-d2"><a href="#4-一次完整-mcp-会话怎样发生">4. 一次完整 MCP 会话怎样发生</a></li><li class="toc-d2"><a href="#5-transport消息怎样从-client-到-server">5. Transport：消息怎样从 Client 到 Server</a></li><li class="toc-d2"><a href="#7-安全边界标准连接不等于自动可信">7. 安全边界：标准连接不等于自动可信</a></li><li class="toc-d2"><a href="#9-常见误区">9. 常见误区</a></li></ul></aside></div><div class="lightbox" id="lightbox" aria-hidden="true"><img alt=""></div><script type="module">var e=document.documentElement,t=document.getElementById(`themeToggle`),n={auto:`🖥️`,light:`☀️`,dark:`🌙`};function r(){var e=localStorage.getItem(`theme`);return e===`light`||e===`dark`?e:`auto`}function i(){var i=r();i===`auto`?e.removeAttribute(`data-theme`):e.setAttribute(`data-theme`,i),t.textContent=n[i]}i(),t.addEventListener(`click`,()=>{var e=[`auto`,`light`,`dark`],t=e[(e.indexOf(r())+1)%3];t===`auto`?localStorage.removeItem(`theme`):localStorage.setItem(`theme`,t),i()}),window.matchMedia(`(prefers-color-scheme: dark)`).addEventListener(`change`,()=>{r()===`auto`&&i()});var a=document.getElementById(`lightbox`),o=a.querySelector(`img`);document.querySelectorAll(`.prose img`).forEach(e=>{e.style.cursor=`zoom-in`,e.addEventListener(`click`,()=>{o.src=e.currentSrc||e.src,o.alt=e.alt,a.classList.add(`open`),a.setAttribute(`aria-hidden`,`false`)})}),a.addEventListener(`click`,()=>{a.classList.remove(`open`),a.setAttribute(`aria-hidden`,`true`)}),document.addEventListener(`keydown`,e=>{e.key===`Escape`&&a.click()});</script></body></html>

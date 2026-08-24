@@ -5,10 +5,11 @@
           document.documentElement.setAttribute('data-theme', s);
         }
       })();
-    </script><link rel="stylesheet" href="/_astro/Base.C6O8tc7V.css"></head><body><header class="topbar"><a href="/" class="brand">HLDay</a><nav><a href="/">专题</a><a href="/posts/">博客</a><a href="https://github.com/hTangle" class="nav-github" aria-label="GitHub">GitHub</a></nav><button class="theme-toggle" id="themeToggle" type="button" title="切换主题（自动/浅色/深色）" aria-label="切换主题">🖥️</button></header><div class="layout"><aside class="booknav"><ul class="nav-tree"><li><p class="nav-group">Go</p><ul><li><p class="nav-subgroup">运行时基础</p><ul><li class><a href="/source-map/">源码环境与目录地图</a></li><li class><a href="/bootstrap/">程序启动流程</a></li></ul></li><li><p class="nav-subgroup">并发编程</p><ul><li class><a href="/gmp/">GMP 调度器</a></li><li class><a href="/netpoll/">网络轮询器</a></li><li class><a href="/timer/">定时器</a></li><li class><a href="/sync-lock/">同步和锁</a></li><li class><a href="/channel/">Channel</a></li><li class><a href="/context/">Context</a></li><li class><a href="/defer-panic/">defer/panic/recover</a></li></ul></li><li><p class="nav-subgroup">内存管理</p><ul><li class><a href="/memory-alloc/">内存分配器</a></li><li class><a href="/gc/">垃圾收集器</a></li><li class><a href="/stack/">栈空间管理</a></li></ul></li><li><p class="nav-subgroup">数据结构</p><ul><li class><a href="/type-metadata/">类型元数据与对象布局</a></li><li class><a href="/iface/">Interface 与动态调用</a></li><li class><a href="/generics/">泛型与字典传递</a></li><li class><a href="/array/">数组</a></li><li class><a href="/slice/">切片</a></li><li class><a href="/swiss-map/">哈希表 (Swiss Table)</a></li><li class><a href="/string/">字符串</a></li></ul></li></ul></li><li><p class="nav-group">Agent 开发</p><ul><li><p class="nav-subgroup">协议与调用</p><ul><li class><a href="/mcp/">MCP</a></li><li class="active"><a href="/tool-call/">Tool Call</a></li><li class><a href="/skill/">Skill</a></li><li class><a href="/memory/">Memory</a></li></ul></li><li><p class="nav-subgroup">检索与排序</p><ul><li class><a href="/rag/">RAG</a></li><li class><a href="/retrieval/">Retrieval</a></li><li class><a href="/recall/">Recall</a></li><li class><a href="/ranking/">Ranking</a></li></ul></li></ul></li></ul></aside><main class="prose"><h1>Tool Call：模型调用工具的一次结构化握手</h1><blockquote>
-<p>[!abstract] 一句话定义
+    </script><link rel="stylesheet" href="/_astro/Base.C6O8tc7V.css"></head><body><header class="topbar"><a href="/" class="brand">HLDay</a><nav><a href="/">专题</a><a href="/posts/">博客</a><a href="https://github.com/hTangle" class="nav-github" aria-label="GitHub">GitHub</a></nav><button class="theme-toggle" id="themeToggle" type="button" title="切换主题（自动/浅色/深色）" aria-label="切换主题">🖥️</button></header><div class="layout"><aside class="booknav"><ul class="nav-tree"><li><p class="nav-group">Go</p><ul><li><p class="nav-subgroup">运行时基础</p><ul><li class><a href="/source-map/">源码环境与目录地图</a></li><li class><a href="/bootstrap/">程序启动流程</a></li></ul></li><li><p class="nav-subgroup">并发编程</p><ul><li class><a href="/gmp/">GMP 调度器</a></li><li class><a href="/netpoll/">网络轮询器</a></li><li class><a href="/timer/">定时器</a></li><li class><a href="/sync-lock/">同步和锁</a></li><li class><a href="/channel/">Channel</a></li><li class><a href="/context/">Context</a></li><li class><a href="/defer-panic/">defer/panic/recover</a></li></ul></li><li><p class="nav-subgroup">内存管理</p><ul><li class><a href="/memory-alloc/">内存分配器</a></li><li class><a href="/gc/">垃圾收集器</a></li><li class><a href="/stack/">栈空间管理</a></li></ul></li><li><p class="nav-subgroup">数据结构</p><ul><li class><a href="/type-metadata/">类型元数据与对象布局</a></li><li class><a href="/iface/">Interface 与动态调用</a></li><li class><a href="/generics/">泛型与字典传递</a></li><li class><a href="/array/">数组</a></li><li class><a href="/slice/">切片</a></li><li class><a href="/swiss-map/">哈希表 (Swiss Table)</a></li><li class><a href="/string/">字符串</a></li></ul></li></ul></li><li><p class="nav-group">Agent 开发</p><ul><li><p class="nav-subgroup">协议与调用</p><ul><li class><a href="/mcp/">MCP</a></li><li class="active"><a href="/tool-call/">Tool Call</a></li><li class><a href="/skill/">Skill</a></li><li class><a href="/memory/">Memory</a></li></ul></li><li><p class="nav-subgroup">检索与排序</p><ul><li class><a href="/rag/">RAG</a></li><li class><a href="/retrieval/">Retrieval</a></li><li class><a href="/recall/">Recall</a></li><li class><a href="/ranking/">Ranking</a></li></ul></li></ul></li></ul></aside><main class="prose"><h1>Tool Call：模型调用工具的一次结构化握手</h1><div class="markdown-alert markdown-alert-note" dir="auto">
+<p class="markdown-alert-title" dir="auto"><svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>NOTE</p>
+<p> 一句话定义
 **Tool Call 是模型根据已知工具定义，生成的一次“调用哪个工具、传入什么参数”的结构化请求。**模型负责提出调用意图，宿主运行时负责校验和执行，工具结果再返回给模型继续推理。</p>
-</blockquote>
+</div>
 <img src="/images/go/tool-call-loop.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
 <p>把模型想成餐厅里的顾客：菜单是 Tool Definition，顾客填写的点菜单是 Tool Call，厨房真正做菜是 Tool Execution，端回来的菜和小票是 Tool Result。==写下“来一份牛排”不等于牛排已经做好==。</p>
 <h2 id="1-最重要的边界调用请求不等于执行">1. 最重要的边界：调用请求不等于执行</h2>
@@ -74,7 +75,7 @@
 <p>这个模式常被概括为：</p>
 <span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mi>T</mi><mi>h</mi><mi>o</mi><mi>u</mi><mi>g</mi><mi>h</mi><mi>t</mi><mi mathvariant="normal">/</mi><mi>D</mi><mi>e</mi><mi>c</mi><mi>i</mi><mi>s</mi><mi>i</mi><mi>o</mi><mi>n</mi><mo>→</mo><mi>A</mi><mi>c</mi><mi>t</mi><mi>i</mi><mi>o</mi><mi>n</mi><mo>→</mo><mi>O</mi><mi>b</mi><mi>s</mi><mi>e</mi><mi>r</mi><mi>v</mi><mi>a</mi><mi>t</mi><mi>i</mi><mi>o</mi><mi>n</mi><mo>→</mo><mi>N</mi><mi>e</mi><mi>x</mi><mi>t</mi><mtext> </mtext><mi>D</mi><mi>e</mi><mi>c</mi><mi>i</mi><mi>s</mi><mi>i</mi><mi>o</mi><mi>n</mi></mrow><annotation encoding="application/x-tex">Thought/Decision \rightarrow Action \rightarrow Observation \rightarrow Next\ Decision</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.1389em;">T</span><span class="mord mathnormal">h</span><span class="mord mathnormal">o</span><span class="mord mathnormal" style="margin-right:0.0359em;">ug</span><span class="mord mathnormal">h</span><span class="mord mathnormal">t</span><span class="mord">/</span><span class="mord mathnormal" style="margin-right:0.0278em;">D</span><span class="mord mathnormal">ec</span><span class="mord mathnormal">i</span><span class="mord mathnormal">s</span><span class="mord mathnormal">i</span><span class="mord mathnormal">o</span><span class="mord mathnormal">n</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">→</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord mathnormal">A</span><span class="mord mathnormal">c</span><span class="mord mathnormal">t</span><span class="mord mathnormal">i</span><span class="mord mathnormal">o</span><span class="mord mathnormal">n</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">→</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.6944em;"></span><span class="mord mathnormal" style="margin-right:0.0278em;">O</span><span class="mord mathnormal">b</span><span class="mord mathnormal" style="margin-right:0.0278em;">ser</span><span class="mord mathnormal" style="margin-right:0.0359em;">v</span><span class="mord mathnormal">a</span><span class="mord mathnormal">t</span><span class="mord mathnormal">i</span><span class="mord mathnormal">o</span><span class="mord mathnormal">n</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">→</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.109em;">N</span><span class="mord mathnormal">e</span><span class="mord mathnormal">x</span><span class="mord mathnormal">t</span><span class="mspace"> </span><span class="mord mathnormal" style="margin-right:0.0278em;">D</span><span class="mord mathnormal">ec</span><span class="mord mathnormal">i</span><span class="mord mathnormal">s</span><span class="mord mathnormal">i</span><span class="mord mathnormal">o</span><span class="mord mathnormal">n</span></span></span></span></span>
 <p>其中 Tool Call 对应 Action 的结构化表达，Tool Result 对应 Observation。</p>
-<h2 id="4-为什么要结构化而不是让模型输出一段命令">4. 为什么要“结构化”，而不是让模型输出一段命令</h2>
+<p><strong>4. 为什么要“结构化”，而不是让模型输出一段命令</strong></p>
 <p>假设模型只输出：</p>
 <pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="text"><code><span class="line"><span>帮我查一下上海明天的天气</span></span></code></pre>
 <p>程序还要猜它想用哪个 API、城市和日期分别是什么。结构化 Tool Call 带来：</p>
@@ -109,7 +110,7 @@
 </ul>
 <p><strong>5.4 返回值也要稳定</strong></p>
 <p>Tool Result 应区分：成功、业务拒绝、参数错误、权限错误、暂时性故障。只返回一段模糊字符串，会让模型难以决定重试、换工具还是询问用户。</p>
-<h2 id="6-串行并行与依赖关系">6. 串行、并行与依赖关系</h2>
+<p><strong>6. 串行、并行与依赖关系</strong></p>
 <p>一次模型响应可能提出多个 Tool Call。是否并行，取决于调用之间有没有数据或副作用依赖。</p>
 <img src="/images/go/03-parallel-dependency.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
 <p>并行前至少确认：</p>
@@ -183,23 +184,27 @@
 <li class="task-list-item"><input type="checkbox" disabled> 日志是否能按 <code>call_id</code> 追踪且不会泄露敏感数据？</li>
 </ul>
 <h2 id="10-常见误区">10. 常见误区</h2>
-<blockquote>
-<p>[!faq] - Tool Call 是模型直接调用函数吗？
+<div class="markdown-alert markdown-alert-tip" dir="auto">
+<p class="markdown-alert-title" dir="auto"><svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8 1.5c-2.363 0-4 1.69-4 3.75 0 .984.424 1.625.984 2.304l.214.253c.223.264.47.556.673.848.284.411.537.896.621 1.49a.75.75 0 0 1-1.484.211c-.04-.282-.163-.547-.37-.847a8.456 8.456 0 0 0-.542-.68c-.084-.1-.173-.205-.268-.32C3.201 7.75 2.5 6.766 2.5 5.25 2.5 2.31 4.863 0 8 0s5.5 2.31 5.5 5.25c0 1.516-.701 2.5-1.328 3.259-.095.115-.184.22-.268.319-.207.245-.383.453-.541.681-.208.3-.33.565-.37.847a.751.751 0 0 1-1.485-.212c.084-.593.337-1.078.621-1.489.203-.292.45-.584.673-.848.075-.088.147-.173.213-.253.561-.679.985-1.32.985-2.304 0-2.06-1.637-3.75-4-3.75ZM5.75 12h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1 0-1.5ZM6 15.25a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1-.75-.75Z"></path></svg>TIP</p>
+<p> - Tool Call 是模型直接调用函数吗？
 不是。模型输出调用意图，Host/Runtime 解析并执行函数。这个中间层正是权限和安全控制点。</p>
-</blockquote>
-<blockquote>
-<p>[!faq] - Function Calling 与 Tool Calling 有区别吗？
+</div>
+<div class="markdown-alert markdown-alert-tip" dir="auto">
+<p class="markdown-alert-title" dir="auto"><svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8 1.5c-2.363 0-4 1.69-4 3.75 0 .984.424 1.625.984 2.304l.214.253c.223.264.47.556.673.848.284.411.537.896.621 1.49a.75.75 0 0 1-1.484.211c-.04-.282-.163-.547-.37-.847a8.456 8.456 0 0 0-.542-.68c-.084-.1-.173-.205-.268-.32C3.201 7.75 2.5 6.766 2.5 5.25 2.5 2.31 4.863 0 8 0s5.5 2.31 5.5 5.25c0 1.516-.701 2.5-1.328 3.259-.095.115-.184.22-.268.319-.207.245-.383.453-.541.681-.208.3-.33.565-.37.847a.751.751 0 0 1-1.485-.212c.084-.593.337-1.078.621-1.489.203-.292.45-.584.673-.848.075-.088.147-.173.213-.253.561-.679.985-1.32.985-2.304 0-2.06-1.637-3.75-4-3.75ZM5.75 12h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1 0-1.5ZM6 15.25a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1-.75-.75Z"></path></svg>TIP</p>
+<p> - Function Calling 与 Tool Calling 有区别吗？
 Function Calling 常被视为 Tool Calling 的早期或子集叫法。现代“Tool”可以不只是进程内函数，还可能是搜索、代码执行、浏览器或经 MCP 暴露的远程能力。</p>
-</blockquote>
-<blockquote>
-<p>[!faq] - Schema 合法就能直接执行吗？
+</div>
+<div class="markdown-alert markdown-alert-tip" dir="auto">
+<p class="markdown-alert-title" dir="auto"><svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8 1.5c-2.363 0-4 1.69-4 3.75 0 .984.424 1.625.984 2.304l.214.253c.223.264.47.556.673.848.284.411.537.896.621 1.49a.75.75 0 0 1-1.484.211c-.04-.282-.163-.547-.37-.847a8.456 8.456 0 0 0-.542-.68c-.084-.1-.173-.205-.268-.32C3.201 7.75 2.5 6.766 2.5 5.25 2.5 2.31 4.863 0 8 0s5.5 2.31 5.5 5.25c0 1.516-.701 2.5-1.328 3.259-.095.115-.184.22-.268.319-.207.245-.383.453-.541.681-.208.3-.33.565-.37.847a.751.751 0 0 1-1.485-.212c.084-.593.337-1.078.621-1.489.203-.292.45-.584.673-.848.075-.088.147-.173.213-.253.561-.679.985-1.32.985-2.304 0-2.06-1.637-3.75-4-3.75ZM5.75 12h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1 0-1.5ZM6 15.25a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1-.75-.75Z"></path></svg>TIP</p>
+<p> - Schema 合法就能直接执行吗？
 不能。Schema 只验证结构，还必须验证用户权限、业务状态、资源归属、风险等级和预算。</p>
-</blockquote>
-<blockquote>
-<p>[!faq] - 工具结果应该直接展示给用户吗？
+</div>
+<div class="markdown-alert markdown-alert-tip" dir="auto">
+<p class="markdown-alert-title" dir="auto"><svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8 1.5c-2.363 0-4 1.69-4 3.75 0 .984.424 1.625.984 2.304l.214.253c.223.264.47.556.673.848.284.411.537.896.621 1.49a.75.75 0 0 1-1.484.211c-.04-.282-.163-.547-.37-.847a8.456 8.456 0 0 0-.542-.68c-.084-.1-.173-.205-.268-.32C3.201 7.75 2.5 6.766 2.5 5.25 2.5 2.31 4.863 0 8 0s5.5 2.31 5.5 5.25c0 1.516-.701 2.5-1.328 3.259-.095.115-.184.22-.268.319-.207.245-.383.453-.541.681-.208.3-.33.565-.37.847a.751.751 0 0 1-1.485-.212c.084-.593.337-1.078.621-1.489.203-.292.45-.584.673-.848.075-.088.147-.173.213-.253.561-.679.985-1.32.985-2.304 0-2.06-1.637-3.75-4-3.75ZM5.75 12h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1 0-1.5ZM6 15.25a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1-.75-.75Z"></path></svg>TIP</p>
+<p> - 工具结果应该直接展示给用户吗？
 不一定。结果可能是供模型继续推理的结构化数据，也可能含不可信内容或内部字段，需要过滤、解释和格式化。</p>
-</blockquote>
-<h2 id="11-从概率生成到结构化调用">11. 从概率生成到结构化调用</h2>
+</div>
+<p><strong>11. 从概率生成到结构化调用</strong></p>
 <p>模型并没有在内部“运行函数”。它仍在根据上下文预测输出，只是 API 将某类输出表示为特殊的 Tool Call item。Tool Schema、描述、系统指令和用户目标共同影响：</p>
 <span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mi>P</mi><mo stretchy="false">(</mo><mi>t</mi><mi>o</mi><mi>o</mi><mi>l</mi><mo separator="true">,</mo><mi>a</mi><mi>r</mi><mi>g</mi><mi>u</mi><mi>m</mi><mi>e</mi><mi>n</mi><mi>t</mi><mi>s</mi><mo>∣</mo><mi>u</mi><mi>s</mi><mi>e</mi><mi>r</mi><mo separator="true">,</mo><mi>c</mi><mi>o</mi><mi>n</mi><mi>t</mi><mi>e</mi><mi>x</mi><mi>t</mi><mo separator="true">,</mo><mi>t</mi><mi>o</mi><mi>o</mi><mi>l</mi><mtext> </mtext><mi>d</mi><mi>e</mi><mi>f</mi><mi>i</mi><mi>n</mi><mi>i</mi><mi>t</mi><mi>i</mi><mi>o</mi><mi>n</mi><mi>s</mi><mo separator="true">,</mo><mi>p</mi><mi>o</mi><mi>l</mi><mi>i</mi><mi>c</mi><mi>y</mi><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">P(tool, arguments \mid user, context, tool\ definitions, policy)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.1389em;">P</span><span class="mopen">(</span><span class="mord mathnormal">t</span><span class="mord mathnormal">oo</span><span class="mord mathnormal" style="margin-right:0.0197em;">l</span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal">a</span><span class="mord mathnormal" style="margin-right:0.0278em;">r</span><span class="mord mathnormal" style="margin-right:0.0359em;">g</span><span class="mord mathnormal">u</span><span class="mord mathnormal">m</span><span class="mord mathnormal">e</span><span class="mord mathnormal">n</span><span class="mord mathnormal">t</span><span class="mord mathnormal">s</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">∣</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal">u</span><span class="mord mathnormal" style="margin-right:0.0278em;">ser</span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal">co</span><span class="mord mathnormal">n</span><span class="mord mathnormal">t</span><span class="mord mathnormal">e</span><span class="mord mathnormal">x</span><span class="mord mathnormal">t</span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal">t</span><span class="mord mathnormal">oo</span><span class="mord mathnormal" style="margin-right:0.0197em;">l</span><span class="mspace"> </span><span class="mord mathnormal">d</span><span class="mord mathnormal">e</span><span class="mord mathnormal" style="margin-right:0.1076em;">f</span><span class="mord mathnormal">ini</span><span class="mord mathnormal">t</span><span class="mord mathnormal">i</span><span class="mord mathnormal">o</span><span class="mord mathnormal">n</span><span class="mord mathnormal">s</span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal">p</span><span class="mord mathnormal">o</span><span class="mord mathnormal" style="margin-right:0.0197em;">l</span><span class="mord mathnormal">i</span><span class="mord mathnormal" style="margin-right:0.0359em;">cy</span><span class="mclose">)</span></span></span></span></span>
 <p>这意味着 Tool Calling 有两类正确性：</p>
@@ -240,7 +245,7 @@ Function Calling 常被视为 Tool Calling 的早期或子集叫法。现代“T
 <li>对失败的重试次数和 backoff。</li>
 </ul>
 <p>否则一个错误描述的 Tool 可能诱发无限“调用失败 → 模型重试 → 再失败”。</p>
-<h2 id="13-tool-choice-与工具路由">13. Tool Choice 与工具路由</h2>
+<p><strong>13. Tool Choice 与工具路由</strong></p>
 <p>常见控制模式：</p>
 
 
@@ -294,7 +299,7 @@ Function Calling 常被视为 Tool Calling 的早期或子集叫法。现代“T
 <li><code>get_order</code>、<code>cancel_order</code>、<code>refund_order</code> 更清楚，但候选数量增加。</li>
 </ul>
 <p>一般按副作用、权限、事务边界和用户意图拆分，而不是机械地“一张表一个 CRUD Tool”。读写、高低风险和不同审批策略应优先分开。</p>
-<h2 id="14-并行-tool-calls先构建-dag">14. 并行 Tool Calls：先构建 DAG</h2>
+<p><strong>14. 并行 Tool Calls：先构建 DAG</strong></p>
 <p>模型同一轮返回多个 Tool Call 只表示“这些调用被一起提出”，不等于它们业务上可并行。Orchestrator 应构建依赖图：</p>
 <img src="/images/go/06-tool-call-dag.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
 <p>可并行条件：</p>
@@ -308,7 +313,7 @@ Function Calling 常被视为 Tool Calling 的早期或子集叫法。现代“T
 <li>并发结果是否全部回送模型，还是先程序化聚合。</li>
 </ul>
 <p>若每个结果都会改变下一步语义决策，串行多轮通常更可靠；若只是对多个城市查天气，可安全 fan-out/fan-in。</p>
-<h2 id="15-分布式系统语义不存在免费的-exactly-once">15. 分布式系统语义：不存在免费的 Exactly Once</h2>
+<p><strong>15. 分布式系统语义：不存在免费的 Exactly Once</strong></p>
 <p>考虑支付工具：服务端已经扣款，但响应在网络中丢失。Runtime 只看到 timeout，无法知道“没执行”还是“已执行但没收到”。因此 Tool Calling 继承分布式系统经典问题。</p>
 <p><strong>15.1 幂等键</strong></p>
 <pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="json"><code><span class="line"><span style="color:#E1E4E8">{</span></span>
@@ -364,7 +369,7 @@ Function Calling 常被视为 Tool Calling 的早期或子集叫法。现代“T
 
 
 <table><thead><tr><th>失败</th><th align="right">是否自动重试</th><th>条件</th></tr></thead><tbody><tr><td>网络连接失败且未送达</td><td align="right">可</td><td>有总预算与退避</td></tr><tr><td>429 / 503</td><td align="right">可</td><td>尊重 Retry-After，加入抖动</td></tr><tr><td>参数校验失败</td><td align="right">否</td><td>交给模型修正或询问用户</td></tr><tr><td>权限不足</td><td align="right">否</td><td>走授权流程，不循环调用</td></tr><tr><td>非幂等调用超时</td><td align="right">默认否</td><td>先按业务键查询状态</td></tr><tr><td>明确业务拒绝</td><td align="right">否</td><td>解释或选择其他方案</td></tr></tbody></table>
-<h2 id="16-错误分类与自愈">16. 错误分类与自愈</h2>
+<p><strong>16. 错误分类与自愈</strong></p>
 <p>建议定义机器可读错误信封：</p>
 <pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="json"><code><span class="line"><span style="color:#E1E4E8">{</span></span>
 <span class="line"><span style="color:#79B8FF">  "ok"</span><span style="color:#E1E4E8">: </span><span style="color:#79B8FF">false</span><span style="color:#E1E4E8">,</span></span>
@@ -381,7 +386,7 @@ Function Calling 常被视为 Tool Calling 的早期或子集叫法。现代“T
 <span class="line"><span style="color:#E1E4E8">}</span></span></code></pre>
 <p><code>message</code> 给人和模型理解，<code>category/code/retryable</code> 给 Runtime 做确定性决策。模型不应自行决定所有重试；能用错误分类决定的，应由 Orchestrator 执行。</p>
 <p>同时要防“错误结果伪成功”：HTTP 200 里可能是业务失败；MCP 中 JSON-RPC 调用成功也可能返回 <code>isError=true</code> 的 Tool Result。Transport success、protocol success 和 business success 是三层不同状态。</p>
-<h2 id="17-安全模型参数污染与间接提示注入">17. 安全模型：参数污染与间接提示注入</h2>
+<p><strong>17. 安全模型：参数污染与间接提示注入</strong></p>
 <p>Tool Call 的数据流常跨越多个信任域：</p>
 <img src="/images/go/08-tool-security-boundary.png" alt="" loading="lazy" width="900" style="max-width:100%;height:auto;border-radius:8px;border:1px solid var(--border);">
 <p><strong>17.1 间接提示注入</strong></p>
@@ -398,7 +403,7 @@ Function Calling 常被视为 Tool Calling 的早期或子集叫法。现代“T
 <p>模型可能有能力调用高权限 Tool，却代表低权限用户执行动作。Tool 实现不能信任 <code>user_id</code> 参数；调用者身份必须来自 Host 的认证上下文，并在服务端做资源级授权。</p>
 <p><strong>17.3 TOCTOU</strong></p>
 <p>用户确认“删除草稿 A”后，执行前对象可能已变化。确认界面应绑定规范化参数、资源版本或内容哈希；执行时检查版本，避免确认对象与执行对象不一致。</p>
-<h2 id="18-结果管理与上下文压缩">18. 结果管理与上下文压缩</h2>
+<p><strong>18. 结果管理与上下文压缩</strong></p>
 <p>工具可能返回数 MB 日志或上千条搜索结果。全部塞回模型会增加成本并稀释注意力。推荐分层：</p>
 <ol>
 <li>Tool 保存完整原始结果并返回 <code>artifact_id</code>；</li>
@@ -521,7 +526,7 @@ Function Calling 常被视为 Tool Calling 的早期或子集叫法。现代“T
 <span class="line"><span style="color:#85E89D">input_schema_hash</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">sha256:...</span></span>
 <span class="line"><span style="color:#85E89D">output_schema_hash</span><span style="color:#E1E4E8">: </span><span style="color:#9ECBFF">sha256:...</span></span></code></pre>
 <p>这样 Orchestrator 可以确定性执行策略，而不是从自然语言 description 猜测风险等级。</p>
-<h2 id="21-超时重试熔断与容量基线">21. 超时、重试、熔断与容量基线</h2>
+<p><strong>21. 超时、重试、熔断与容量基线</strong></p>
 <p><strong>21.1 Deadline 要逐层递减</strong></p>
 <p>如果用户请求总预算是 30 秒，不能给每个下游都配置 30 秒：</p>
 <pre class="astro-code github-dark" style="background-color:#24292e;color:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="text"><code><span class="line"><span>用户请求 deadline：30s</span></span>
@@ -738,38 +743,46 @@ Function Calling 常被视为 Tool Calling 的早期或子集叫法。现代“T
 <li class="task-list-item"><input type="checkbox" disabled> 有 shadow、canary、自动回滚和事故 Runbook。</li>
 </ul>
 <p><strong>26. 一些额外的QA</strong></p>
-<blockquote>
-<p>[!question] - Q1：Tool Call 和函数调用最大的区别？
+<div class="markdown-alert markdown-alert-tip" dir="auto">
+<p class="markdown-alert-title" dir="auto"><svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8 1.5c-2.363 0-4 1.69-4 3.75 0 .984.424 1.625.984 2.304l.214.253c.223.264.47.556.673.848.284.411.537.896.621 1.49a.75.75 0 0 1-1.484.211c-.04-.282-.163-.547-.37-.847a8.456 8.456 0 0 0-.542-.68c-.084-.1-.173-.205-.268-.32C3.201 7.75 2.5 6.766 2.5 5.25 2.5 2.31 4.863 0 8 0s5.5 2.31 5.5 5.25c0 1.516-.701 2.5-1.328 3.259-.095.115-.184.22-.268.319-.207.245-.383.453-.541.681-.208.3-.33.565-.37.847a.751.751 0 0 1-1.485-.212c.084-.593.337-1.078.621-1.489.203-.292.45-.584.673-.848.075-.088.147-.173.213-.253.561-.679.985-1.32.985-2.304 0-2.06-1.637-3.75-4-3.75ZM5.75 12h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1 0-1.5ZM6 15.25a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1-.75-.75Z"></path></svg>TIP</p>
+<p> - Q1：Tool Call 和函数调用最大的区别？
 普通函数调用由确定性程序直接控制；Tool Call 是模型生成的调用建议，需要 Runtime 解析、校验、授权、执行并回传结果。它是概率决策与确定性系统之间的边界。</p>
-</blockquote>
-<blockquote>
-<p>[!question] - Q2：<code>strict: true</code> 后还需要校验吗？
+</div>
+<div class="markdown-alert markdown-alert-tip" dir="auto">
+<p class="markdown-alert-title" dir="auto"><svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8 1.5c-2.363 0-4 1.69-4 3.75 0 .984.424 1.625.984 2.304l.214.253c.223.264.47.556.673.848.284.411.537.896.621 1.49a.75.75 0 0 1-1.484.211c-.04-.282-.163-.547-.37-.847a8.456 8.456 0 0 0-.542-.68c-.084-.1-.173-.205-.268-.32C3.201 7.75 2.5 6.766 2.5 5.25 2.5 2.31 4.863 0 8 0s5.5 2.31 5.5 5.25c0 1.516-.701 2.5-1.328 3.259-.095.115-.184.22-.268.319-.207.245-.383.453-.541.681-.208.3-.33.565-.37.847a.751.751 0 0 1-1.485-.212c.084-.593.337-1.078.621-1.489.203-.292.45-.584.673-.848.075-.088.147-.173.213-.253.561-.679.985-1.32.985-2.304 0-2.06-1.637-3.75-4-3.75ZM5.75 12h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1 0-1.5ZM6 15.25a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1-.75-.75Z"></path></svg>TIP</p>
+<p><code>strict: true</code> 后还需要校验吗？
 需要。Strict 主要保证支持范围内的结构符合 Schema，不保证值真实、资源属于用户、动作符合业务状态或本次授权。执行端仍要做 Schema、业务和 AuthZ 三层校验。</p>
-</blockquote>
-<blockquote>
-<p>[!question] - Q3：怎样防止模型重复扣款？
+</div>
+<div class="markdown-alert markdown-alert-tip" dir="auto">
+<p class="markdown-alert-title" dir="auto"><svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8 1.5c-2.363 0-4 1.69-4 3.75 0 .984.424 1.625.984 2.304l.214.253c.223.264.47.556.673.848.284.411.537.896.621 1.49a.75.75 0 0 1-1.484.211c-.04-.282-.163-.547-.37-.847a8.456 8.456 0 0 0-.542-.68c-.084-.1-.173-.205-.268-.32C3.201 7.75 2.5 6.766 2.5 5.25 2.5 2.31 4.863 0 8 0s5.5 2.31 5.5 5.25c0 1.516-.701 2.5-1.328 3.259-.095.115-.184.22-.268.319-.207.245-.383.453-.541.681-.208.3-.33.565-.37.847a.751.751 0 0 1-1.485-.212c.084-.593.337-1.078.621-1.489.203-.292.45-.584.673-.848.075-.088.147-.173.213-.253.561-.679.985-1.32.985-2.304 0-2.06-1.637-3.75-4-3.75ZM5.75 12h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1 0-1.5ZM6 15.25a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1-.75-.75Z"></path></svg>TIP</p>
+<p> - Q3：怎样防止模型重复扣款？
 运行时限制重复调用；支付接口使用稳定业务幂等键并服务端去重；超时先查询状态；工作流持久化；必要时补偿或人工介入。不能只提示模型“不要重复”。</p>
-</blockquote>
-<blockquote>
-<p>[!question] - Q4：多个 Tool Call 如何决定并行？
+</div>
+<div class="markdown-alert markdown-alert-tip" dir="auto">
+<p class="markdown-alert-title" dir="auto"><svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8 1.5c-2.363 0-4 1.69-4 3.75 0 .984.424 1.625.984 2.304l.214.253c.223.264.47.556.673.848.284.411.537.896.621 1.49a.75.75 0 0 1-1.484.211c-.04-.282-.163-.547-.37-.847a8.456 8.456 0 0 0-.542-.68c-.084-.1-.173-.205-.268-.32C3.201 7.75 2.5 6.766 2.5 5.25 2.5 2.31 4.863 0 8 0s5.5 2.31 5.5 5.25c0 1.516-.701 2.5-1.328 3.259-.095.115-.184.22-.268.319-.207.245-.383.453-.541.681-.208.3-.33.565-.37.847a.751.751 0 0 1-1.485-.212c.084-.593.337-1.078.621-1.489.203-.292.45-.584.673-.848.075-.088.147-.173.213-.253.561-.679.985-1.32.985-2.304 0-2.06-1.637-3.75-4-3.75ZM5.75 12h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1 0-1.5ZM6 15.25a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1-.75-.75Z"></path></svg>TIP</p>
+<p> - Q4：多个 Tool Call 如何决定并行？
 根据数据依赖、写冲突和业务顺序构建 DAG；只有无依赖、无共享写入、配额允许的节点并行。用 call_id 关联结果，处理部分失败和取消传播。</p>
-</blockquote>
-<blockquote>
-<p>[!question] - Q5：Tool Result 为什么也是不可信输入？
+</div>
+<div class="markdown-alert markdown-alert-tip" dir="auto">
+<p class="markdown-alert-title" dir="auto"><svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8 1.5c-2.363 0-4 1.69-4 3.75 0 .984.424 1.625.984 2.304l.214.253c.223.264.47.556.673.848.284.411.537.896.621 1.49a.75.75 0 0 1-1.484.211c-.04-.282-.163-.547-.37-.847a8.456 8.456 0 0 0-.542-.68c-.084-.1-.173-.205-.268-.32C3.201 7.75 2.5 6.766 2.5 5.25 2.5 2.31 4.863 0 8 0s5.5 2.31 5.5 5.25c0 1.516-.701 2.5-1.328 3.259-.095.115-.184.22-.268.319-.207.245-.383.453-.541.681-.208.3-.33.565-.37.847a.751.751 0 0 1-1.485-.212c.084-.593.337-1.078.621-1.489.203-.292.45-.584.673-.848.075-.088.147-.173.213-.253.561-.679.985-1.32.985-2.304 0-2.06-1.637-3.75-4-3.75ZM5.75 12h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1 0-1.5ZM6 15.25a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1-.75-.75Z"></path></svg>TIP</p>
+<p> - Q5：Tool Result 为什么也是不可信输入？
 它可能来自网页、文件或第三方 Server，包含错误数据或提示注入。模型消费前要保留来源、限制大小、必要时净化；结果中的文字不能改变系统权限和审批策略。</p>
-</blockquote>
-<blockquote>
-<p>[!question] - Q6：何时让模型决定重试，何时由 Runtime 决定？
+</div>
+<div class="markdown-alert markdown-alert-tip" dir="auto">
+<p class="markdown-alert-title" dir="auto"><svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8 1.5c-2.363 0-4 1.69-4 3.75 0 .984.424 1.625.984 2.304l.214.253c.223.264.47.556.673.848.284.411.537.896.621 1.49a.75.75 0 0 1-1.484.211c-.04-.282-.163-.547-.37-.847a8.456 8.456 0 0 0-.542-.68c-.084-.1-.173-.205-.268-.32C3.201 7.75 2.5 6.766 2.5 5.25 2.5 2.31 4.863 0 8 0s5.5 2.31 5.5 5.25c0 1.516-.701 2.5-1.328 3.259-.095.115-.184.22-.268.319-.207.245-.383.453-.541.681-.208.3-.33.565-.37.847a.751.751 0 0 1-1.485-.212c.084-.593.337-1.078.621-1.489.203-.292.45-.584.673-.848.075-.088.147-.173.213-.253.561-.679.985-1.32.985-2.304 0-2.06-1.637-3.75-4-3.75ZM5.75 12h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1 0-1.5ZM6 15.25a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1-.75-.75Z"></path></svg>TIP</p>
+<p> - Q6：何时让模型决定重试，何时由 Runtime 决定？
 429、503、网络抖动等可机器分类的暂时故障由 Runtime 有界退避；参数语义错误、需要换工具或补充信息时交回模型；权限和不可逆业务拒绝直接停止或走显式流程。</p>
-</blockquote>
-<blockquote>
-<p>[!question] - Q7：如何设计一个高质量 Tool API？
+</div>
+<div class="markdown-alert markdown-alert-tip" dir="auto">
+<p class="markdown-alert-title" dir="auto"><svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8 1.5c-2.363 0-4 1.69-4 3.75 0 .984.424 1.625.984 2.304l.214.253c.223.264.47.556.673.848.284.411.537.896.621 1.49a.75.75 0 0 1-1.484.211c-.04-.282-.163-.547-.37-.847a8.456 8.456 0 0 0-.542-.68c-.084-.1-.173-.205-.268-.32C3.201 7.75 2.5 6.766 2.5 5.25 2.5 2.31 4.863 0 8 0s5.5 2.31 5.5 5.25c0 1.516-.701 2.5-1.328 3.259-.095.115-.184.22-.268.319-.207.245-.383.453-.541.681-.208.3-.33.565-.37.847a.751.751 0 0 1-1.485-.212c.084-.593.337-1.078.621-1.489.203-.292.45-.584.673-.848.075-.088.147-.173.213-.253.561-.679.985-1.32.985-2.304 0-2.06-1.637-3.75-4-3.75ZM5.75 12h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1 0-1.5ZM6 15.25a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1-.75-.75Z"></path></svg>TIP</p>
+<p> - Q7：如何设计一个高质量 Tool API？
 单一清晰职责、读写与风险边界明确、严格输入/输出 Schema、稳定错误码、幂等与超时语义、最小权限、可取消、可观测、版本兼容，并用真实任务 eval 验证工具选择和参数准确率。</p>
-</blockquote>
-<blockquote>
-<p>[!question] - Q8：MCP Tool Call 与本地 Function Call 的 Orchestrator 有何不同？
+</div>
+<div class="markdown-alert markdown-alert-tip" dir="auto">
+<p class="markdown-alert-title" dir="auto"><svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8 1.5c-2.363 0-4 1.69-4 3.75 0 .984.424 1.625.984 2.304l.214.253c.223.264.47.556.673.848.284.411.537.896.621 1.49a.75.75 0 0 1-1.484.211c-.04-.282-.163-.547-.37-.847a8.456 8.456 0 0 0-.542-.68c-.084-.1-.173-.205-.268-.32C3.201 7.75 2.5 6.766 2.5 5.25 2.5 2.31 4.863 0 8 0s5.5 2.31 5.5 5.25c0 1.516-.701 2.5-1.328 3.259-.095.115-.184.22-.268.319-.207.245-.383.453-.541.681-.208.3-.33.565-.37.847a.751.751 0 0 1-1.485-.212c.084-.593.337-1.078.621-1.489.203-.292.45-.584.673-.848.075-.088.147-.173.213-.253.561-.679.985-1.32.985-2.304 0-2.06-1.637-3.75-4-3.75ZM5.75 12h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1 0-1.5ZM6 15.25a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1-.75-.75Z"></path></svg>TIP</p>
+<p> - Q8：MCP Tool Call 与本地 Function Call 的 Orchestrator 有何不同？
 上层循环类似，但 MCP 多了协议初始化、能力发现、Transport/session、远端授权和协议/执行双层错误；本地函数延迟低、类型可直接共享，但耦合与复用边界更强。</p>
-</blockquote>
+</div>
 <p><strong>27. 参考资料</strong></p>
 <ul>
 <li><a href="https://developers.openai.com/api/docs/guides/function-calling" rel="noopener noreferrer" target="_blank">OpenAI Function Calling Guide</a></li>
@@ -828,7 +841,8 @@ Function Calling 常被视为 Tool Calling 的早期或子集叫法。现代“T
 
 
 <table><thead><tr><th>维度</th><th>Tool Call</th><th>MCP</th><th>Skill</th></tr></thead><tbody><tr><td>本质</td><td><strong>一次调用实例/结构化意图</strong></td><td><strong>连接和暴露能力的标准协议</strong></td><td><strong>可复用的任务知识与流程</strong></td></tr><tr><td>粒度</td><td>最细：一次请求与一次结果</td><td>中等：一条连接上的发现和多次交互</td><td>较高：覆盖一类任务的完整做法</td></tr><tr><td>核心字段/载体</td><td>name、arguments、call_id、result</td><td>Client/Server、JSON-RPC、Schema、Transport</td><td><code>SKILL.md</code>、references、scripts、templates</td></tr><tr><td>谁负责真实执行</td><td>Runtime 调度具体 Tool</td><td>Server 实现背后的工具或系统</td><td>Skill 不执行，只指导 Agent/Runtime</td></tr><tr><td>主要风险</td><td>错工具、错参数、越权、副作用、重试重复</td><td>恶意 Server、权限扩散、数据泄露、网络边界</td><td>过时流程、误触发、规则冲突、上下文污染</td></tr><tr><td>三者关系</td><td>Tool Call 可以调用一个本地 Tool，也可以经 MCP 调用远程 Tool</td><td>MCP 为 Tool 的发现与调用提供标准通道</td><td>Skill 决定在什么条件下调用什么 Tool，以及如何验证结果</td></tr></tbody></table>
-<blockquote>
-<p>[!summary] 最短记忆法
+<div class="markdown-alert markdown-alert-note" dir="auto">
+<p class="markdown-alert-title" dir="auto"><svg class="octicon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>NOTE</p>
+<p> 最短记忆法
 <strong>Tool Call 是一张点菜单，MCP 是餐厅与厨房之间的标准传菜系统，Skill 是员工按场景执行的服务手册。</strong></p>
-</blockquote></main><aside class="toc"><p class="toc-title">本页目录</p><ul><li class="toc-d2"><a href="#1-最重要的边界调用请求不等于执行">1. 最重要的边界：调用请求不等于执行</a></li><li class="toc-d2"><a href="#2-tool-definition-与-tool-call-不是一回事">2. Tool Definition 与 Tool Call 不是一回事</a></li><li class="toc-d2"><a href="#3-一次完整-tool-calling-循环">3. 一次完整 Tool Calling 循环</a></li><li class="toc-d2"><a href="#4-为什么要结构化而不是让模型输出一段命令">4. 为什么要“结构化”，而不是让模型输出一段命令</a></li><li class="toc-d2"><a href="#5-工具描述决定模型能否选对">5. 工具描述决定模型能否选对</a></li><li class="toc-d2"><a href="#6-串行并行与依赖关系">6. 串行、并行与依赖关系</a></li><li class="toc-d2"><a href="#7-副作用幂等与重试">7. 副作用、幂等与重试</a></li><li class="toc-d2"><a href="#8-错误应该怎样返回给模型">8. 错误应该怎样返回给模型</a></li><li class="toc-d2"><a href="#10-常见误区">10. 常见误区</a></li><li class="toc-d2"><a href="#11-从概率生成到结构化调用">11. 从概率生成到结构化调用</a></li><li class="toc-d2"><a href="#12-orchestrator-状态机">12. Orchestrator 状态机</a></li><li class="toc-d2"><a href="#13-tool-choice-与工具路由">13. Tool Choice 与工具路由</a></li><li class="toc-d2"><a href="#14-并行-tool-calls先构建-dag">14. 并行 Tool Calls：先构建 DAG</a></li><li class="toc-d2"><a href="#15-分布式系统语义不存在免费的-exactly-once">15. 分布式系统语义：不存在免费的 Exactly Once</a></li><li class="toc-d2"><a href="#16-错误分类与自愈">16. 错误分类与自愈</a></li><li class="toc-d2"><a href="#17-安全模型参数污染与间接提示注入">17. 安全模型：参数污染与间接提示注入</a></li><li class="toc-d2"><a href="#18-结果管理与上下文压缩">18. 结果管理与上下文压缩</a></li><li class="toc-d2"><a href="#21-超时重试熔断与容量基线">21. 超时、重试、熔断与容量基线</a></li></ul></aside></div><div class="lightbox" id="lightbox" aria-hidden="true"><img alt=""></div><script type="module">var e=document.documentElement,t=document.getElementById(`themeToggle`),n={auto:`🖥️`,light:`☀️`,dark:`🌙`};function r(){var e=localStorage.getItem(`theme`);return e===`light`||e===`dark`?e:`auto`}function i(){var i=r();i===`auto`?e.removeAttribute(`data-theme`):e.setAttribute(`data-theme`,i),t.textContent=n[i]}i(),t.addEventListener(`click`,()=>{var e=[`auto`,`light`,`dark`],t=e[(e.indexOf(r())+1)%3];t===`auto`?localStorage.removeItem(`theme`):localStorage.setItem(`theme`,t),i()}),window.matchMedia(`(prefers-color-scheme: dark)`).addEventListener(`change`,()=>{r()===`auto`&&i()});var a=document.getElementById(`lightbox`),o=a.querySelector(`img`);document.querySelectorAll(`.prose img`).forEach(e=>{e.style.cursor=`zoom-in`,e.addEventListener(`click`,()=>{o.src=e.currentSrc||e.src,o.alt=e.alt,a.classList.add(`open`),a.setAttribute(`aria-hidden`,`false`)})}),a.addEventListener(`click`,()=>{a.classList.remove(`open`),a.setAttribute(`aria-hidden`,`true`)}),document.addEventListener(`keydown`,e=>{e.key===`Escape`&&a.click()});</script></body></html>
+</div></main><aside class="toc"><p class="toc-title">本页目录</p><ul><li class="toc-d2"><a href="#1-最重要的边界调用请求不等于执行">1. 最重要的边界：调用请求不等于执行</a></li><li class="toc-d2"><a href="#2-tool-definition-与-tool-call-不是一回事">2. Tool Definition 与 Tool Call 不是一回事</a></li><li class="toc-d2"><a href="#3-一次完整-tool-calling-循环">3. 一次完整 Tool Calling 循环</a></li><li class="toc-d2"><a href="#5-工具描述决定模型能否选对">5. 工具描述决定模型能否选对</a></li><li class="toc-d2"><a href="#7-副作用幂等与重试">7. 副作用、幂等与重试</a></li><li class="toc-d2"><a href="#8-错误应该怎样返回给模型">8. 错误应该怎样返回给模型</a></li><li class="toc-d2"><a href="#10-常见误区">10. 常见误区</a></li><li class="toc-d2"><a href="#12-orchestrator-状态机">12. Orchestrator 状态机</a></li></ul></aside></div><div class="lightbox" id="lightbox" aria-hidden="true"><img alt=""></div><script type="module">var e=document.documentElement,t=document.getElementById(`themeToggle`),n={auto:`🖥️`,light:`☀️`,dark:`🌙`};function r(){var e=localStorage.getItem(`theme`);return e===`light`||e===`dark`?e:`auto`}function i(){var i=r();i===`auto`?e.removeAttribute(`data-theme`):e.setAttribute(`data-theme`,i),t.textContent=n[i]}i(),t.addEventListener(`click`,()=>{var e=[`auto`,`light`,`dark`],t=e[(e.indexOf(r())+1)%3];t===`auto`?localStorage.removeItem(`theme`):localStorage.setItem(`theme`,t),i()}),window.matchMedia(`(prefers-color-scheme: dark)`).addEventListener(`change`,()=>{r()===`auto`&&i()});var a=document.getElementById(`lightbox`),o=a.querySelector(`img`);document.querySelectorAll(`.prose img`).forEach(e=>{e.style.cursor=`zoom-in`,e.addEventListener(`click`,()=>{o.src=e.currentSrc||e.src,o.alt=e.alt,a.classList.add(`open`),a.setAttribute(`aria-hidden`,`false`)})}),a.addEventListener(`click`,()=>{a.classList.remove(`open`),a.setAttribute(`aria-hidden`,`true`)}),document.addEventListener(`keydown`,e=>{e.key===`Escape`&&a.click()});</script></body></html>
